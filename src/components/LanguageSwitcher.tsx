@@ -1,21 +1,23 @@
-import { useState } from "react";
 import { Globe, ChevronDown } from "lucide-react";
-
-const languages = [
-  { code: "en", name: "English", flag: "🇬🇧" },
-  { code: "es", name: "Español", flag: "🇪🇸" },
-  { code: "pt", name: "Português", flag: "🇧🇷" },
-  { code: "id", name: "Bahasa Indonesia", flag: "🇮🇩" },
-  { code: "ar", name: "العربية", flag: "🇸🇦" },
-  { code: "zh", name: "中文", flag: "🇨🇳" },
-];
+import { useLanguage } from "@/i18n/LanguageContext";
+import { useState, useRef, useEffect } from "react";
 
 const LanguageSwitcher = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedLang, setSelectedLang] = useState(languages[0]);
+  const { language, setLanguage, languages } = useLanguage();
+  const selectedLang = languages.find((l) => l.code === language) || languages[0];
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 glass px-3 py-2 rounded-lg hover:bg-muted/80 transition-colors"
@@ -27,29 +29,23 @@ const LanguageSwitcher = () => {
       </button>
 
       {isOpen && (
-        <>
-          <div 
-            className="fixed inset-0 z-40" 
-            onClick={() => setIsOpen(false)} 
-          />
-          <div className="absolute right-0 mt-2 w-48 glass rounded-xl overflow-hidden z-50 animate-scale-in">
-            {languages.map((lang) => (
-              <button
-                key={lang.code}
-                onClick={() => {
-                  setSelectedLang(lang);
-                  setIsOpen(false);
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/50 transition-colors ${
-                  selectedLang.code === lang.code ? "bg-primary/10 text-primary" : "text-foreground"
-                }`}
-              >
-                <span className="text-lg">{lang.flag}</span>
-                <span className="text-sm font-medium">{lang.name}</span>
-              </button>
-            ))}
-          </div>
-        </>
+        <div className="absolute right-0 mt-2 w-48 glass rounded-xl overflow-hidden z-50 animate-scale-in">
+          {languages.map((lang) => (
+            <button
+              key={lang.code}
+              onClick={() => {
+                setLanguage(lang.code);
+                setIsOpen(false);
+              }}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/50 transition-colors ${
+                language === lang.code ? "bg-primary/10 text-primary" : "text-foreground"
+              }`}
+            >
+              <span className="text-lg">{lang.flag}</span>
+              <span className="text-sm font-medium">{lang.name}</span>
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
