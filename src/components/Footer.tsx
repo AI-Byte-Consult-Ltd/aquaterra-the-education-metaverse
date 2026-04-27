@@ -69,9 +69,11 @@ const Footer = () => {
               <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
                 <span className="font-display font-bold text-primary-foreground text-lg">A</span>
               </div>
-              <span className="font-display font-bold text-xl text-foreground">Aquaterra</span>
+              <span className="font-display font-bold text-xl text-foreground">AquaTerra World</span>
             </div>
-            <p className="text-muted-foreground text-sm mb-6">{t("ft_brand_desc")}</p>
+            <p className="text-muted-foreground text-sm mb-6">
+              The Education Metaverse powered by NICS AI. Learn, teach, and grow in immersive digital worlds.
+            </p>
             <LanguageSwitcher />
           </div>
 
@@ -92,7 +94,9 @@ const Footer = () => {
 
       <div className="border-t border-border">
         <div className="container py-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-muted-foreground text-sm">{t("ft_copyright")}</p>
+          <p className="text-muted-foreground text-sm">
+            © Platon BG Ltd 2025-2026. All rights reserved.
+          </p>
           <div className="flex items-center gap-6">
             <a href="#" className="text-muted-foreground hover:text-primary transition-colors text-sm">Twitter</a>
             <a href="#" className="text-muted-foreground hover:text-primary transition-colors text-sm">Discord</a>
