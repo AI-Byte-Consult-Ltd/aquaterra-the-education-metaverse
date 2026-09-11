@@ -328,8 +328,15 @@ const LandMap = () => {
                   <stop offset="50%" stopColor="hsl(var(--gradient-mid))" />
                   <stop offset="100%" stopColor="hsl(var(--gradient-end))" />
                 </linearGradient>
+                {/* Tiled once, repeated by the renderer -- not one node per cell -- so the
+                    full 640x640 grid always reads as a grid of squares, even zoomed out
+                    to where individual PARCELS rects would be sub-pixel. */}
+                <pattern id="gridTile" width={CELL} height={CELL} patternUnits="userSpaceOnUse">
+                  <rect x={GAP / 2} y={GAP / 2} width={CELL - GAP} height={CELL - GAP} rx={2} fill="hsl(var(--muted))" stroke="hsl(var(--border))" strokeWidth={0.75} />
+                </pattern>
               </defs>
               <rect x={0} y={0} width={worldW} height={worldH} fill="url(#water)" />
+              <rect x={0} y={0} width={worldW} height={worldH} fill="url(#gridTile)" />
               <line
                 x1={bridge.x1} y1={bridge.y1} x2={bridge.x2} y2={bridge.y2}
                 stroke="hsl(var(--muted-foreground))" strokeWidth={3} strokeDasharray="3 7" opacity={0.5}
@@ -366,7 +373,11 @@ const LandMap = () => {
               )}
             </svg>
 
-            <div className="absolute bottom-3 right-3 flex flex-col gap-1.5">
+            <div
+              className="absolute bottom-3 right-3 flex flex-col gap-1.5"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
               <Button size="icon" variant="glass" onClick={() => zoomBy(1.25)} title={t.zoomIn}>
                 <ZoomIn className="w-4 h-4" />
               </Button>
