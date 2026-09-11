@@ -54,6 +54,7 @@ const STR = {
     fieldPrice: "Indicative price",
     fieldWaterfront: "Waterfront",
     fieldApartments: "Apartments inside",
+    fieldResource: "Resource",
     fieldHydroYield: "HYDRO yield",
     priceNA: "Not for sale",
     yes: "Yes",
@@ -92,6 +93,7 @@ const STR = {
     fieldPrice: "Ориентировочная цена",
     fieldWaterfront: "У воды",
     fieldApartments: "Апартаментов внутри",
+    fieldResource: "Ресурс",
     fieldHydroYield: "Добыча HYDRO",
     priceNA: "Не продаётся",
     yes: "Да",
@@ -382,6 +384,7 @@ function ParcelDetails({ parcel, t, lang }: { parcel: Parcel; t: (typeof STR)["e
         {row(t.fieldSize, `${parcel.sizeM2} m²`)}
         {row(t.fieldWaterfront, parcel.waterfront ? t.yes : t.no)}
         {parcel.apartments && row(t.fieldApartments, parcel.apartments)}
+        {parcel.resourceType && row(t.fieldResource, parcel.resourceType)}
         {parcel.hydroYield && row(t.fieldHydroYield, `${parcel.hydroYield} ${t.hydroPerDay}`)}
         {row(t.fieldPrice, parcel.priceRaverse ? `${parcel.priceRaverse} ${t.raverse}` : t.priceNA)}
       </div>
