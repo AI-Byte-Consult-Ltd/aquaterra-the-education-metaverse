@@ -2,11 +2,15 @@
 //
 // This is a small illustrative prototype, NOT the real production grid.
 // Per the official docs (info.aquaterra.world), the real world is 640x640
-// = 409,600 LANDs (coords X/Y: -128..511), ~50,000 already minted, traded
+// = 409,600 LANDs (coords X/Y: -100..539), ~50,000 already minted, traded
 // on EbisusBay / Crypto.com NFT, priced in $RAVERSE (38B supply, Cronos).
 // See WORLD_FACTS below for the numbers surfaced on the page. This
 // prototype grid itself carries no per-parcel pricing -- it's a planning
-// layout, not a storefront.
+// layout, not a storefront. The pannable world now spans the full 640x640
+// official extent: the four hand-authored continents below sit in one
+// corner of it, and a scattered "Open Waters" archipelago (see WLD in
+// CONTINENTS) fills the rest of the grid so every one of the 640x640
+// cells is a real, selectable square rather than empty canvas.
 //
 // Fresh (continent, gx, gy) coordinate system here — deterministic, unlike
 // the old Rainbowland prototype's plotID (a keccak hash of the viewport
@@ -20,8 +24,8 @@ export const WORLD_FACTS = {
   totalLands: 409_600,
   mintedLands: 50_000,
   gridSize: 640,
-  coordMin: -128,
-  coordMax: 511,
+  coordMin: -100,
+  coordMax: 539,
   token: "RAVERSE",
   tokenSupply: "38B",
   chain: "Cronos",
@@ -40,6 +44,14 @@ const RESOURCE_MATERIALS = ["Platinum", "Gold", "Cobalt", "Rare Earth", "Emerald
 export interface LocalizedText {
   en: string;
   ru: string;
+}
+
+// On-parcel assets, Upland-style: things an owner has built/parked here.
+// Illustrative/simulated, deterministic from the parcel's seed -- not read
+// from any real inventory contract yet.
+export interface ParcelAsset {
+  icon: "house" | "vehicle" | "workshop" | "dock";
+  label: LocalizedText;
 }
 
 export interface District {
@@ -97,6 +109,12 @@ export interface Parcel {
   buildingName?: string;
   placeName?: LocalizedText;
   resourceType?: string;
+  // Upland-style ownership/economy layer -- simulated pending real
+  // marketplace + wallet integration (see ownerFor/rewardFor/tollFor).
+  owner: string | null;
+  assets: ParcelAsset[];
+  dailyReward: number; // RAVERSE/day this parcel earns its owner, passively
+  tollFee: number; // RAVERSE a visitor pays to cross an owned parcel
 }
 
 export const CONTINENTS: ContinentSpec[] = [
@@ -242,6 +260,36 @@ export const CONTINENTS: ContinentSpec[] = [
       },
     ],
   },
+  {
+    // The rest of the official 640x640 grid, outside the four named
+    // continents: a sparse frontier archipelago so every cell on the map
+    // is real land or open sea, never empty canvas. worldOffset [0,0] and
+    // cols/rows = the full grid size means gx/gy below already *are* world
+    // coordinates; scatterIslands is steered away from the other four
+    // continents' footprints (see the WLD branch in buildWorld).
+    id: "WLD",
+    name: "Open Waters",
+    seed: 8080,
+    cols: 640,
+    rows: 640,
+    worldOffset: [0, 0],
+    center: [320, 320],
+    radius: [320, 320],
+    archipelago: { count: 3200, minSpacing: 6 },
+    blurb: {
+      en: "The uncharted frontier of the grid — thousands of isolated claims scattered far from the founding continents.",
+      ru: "Неизведанные земли сетки — тысячи разрозненных участков вдали от основных континентов.",
+    },
+    districts: [
+      {
+        id: "open-waters",
+        name: "Open Waters",
+        anchor: [320, 320],
+        baseType: "resource",
+        blurb: { en: "An isolated frontier claim, far from the founding continents.", ru: "Отдалённый участок вдали от основных континентов." },
+      },
+    ],
+  },
 ];
 
 // Towers: fixed 2x2 blocks forced onto the Celebrity district, Meridian.
@@ -318,7 +366,10 @@ function carveRivers(land: Set<string>, rivers: RiverSpec[] | undefined, cols: n
 // Scatters `count` small, separated islands (1-3 cells each) across the
 // continent's whole cols x rows box -- an archipelago instead of one
 // coastline. Deterministic: same seed always places the same islands.
-function scatterIslands(continent: ContinentSpec): Set<string> {
+// `exclude`, when given, steers new island centers (and their extra cells)
+// away from cells it flags -- used to keep the world-spanning WLD scatter
+// off the four named continents' footprints.
+function scatterIslands(continent: ContinentSpec, exclude?: (x: number, y: number) => boolean): Set<string> {
   const { count, minSpacing } = continent.archipelago!;
   const land = new Set<string>();
   const centers: [number, number][] = [];
@@ -330,6 +381,7 @@ function scatterIslands(continent: ContinentSpec): Set<string> {
     tries++;
     const cx = Math.floor(hashCell(continent.seed, tries, 11) * continent.cols);
     const cy = Math.floor(hashCell(continent.seed, tries, 97) * continent.rows);
+    if (exclude?.(cx, cy)) continue;
     if (centers.some(([ex, ey]) => (cx - ex) ** 2 + (cy - ey) ** 2 < minSpacing2)) continue;
     centers.push([cx, cy]);
 
@@ -340,7 +392,7 @@ function scatterIslands(continent: ContinentSpec): Set<string> {
       const [dx, dy] = dirs[Math.floor(hashCell(continent.seed, cx + i * 131, cy + i * 197) * dirs.length)];
       const nx = cx + dx;
       const ny = cy + dy;
-      if (nx >= 0 && nx < continent.cols && ny >= 0 && ny < continent.rows) land.add(`${nx},${ny}`);
+      if (nx >= 0 && nx < continent.cols && ny >= 0 && ny < continent.rows && !exclude?.(nx, ny)) land.add(`${nx},${ny}`);
     }
   }
   return land;
@@ -352,15 +404,87 @@ function resourceTypeFor(type: ParcelType, seed: number, gx: number, gy: number)
   return RESOURCE_MATERIALS[Math.floor(roll * RESOURCE_MATERIALS.length)];
 }
 
+// Wild (WLD) cells have no curated district, so they roll their own type
+// instead of inheriting one baseType from a district -- keeps the frontier
+// varied rather than one uniform resource field.
+const WILD_TYPE_ROLLS: [number, ParcelType][] = [
+  [0.45, "residential"],
+  [0.75, "resource"],
+  [0.95, "commercial"],
+  [1.01, "landmark"],
+];
+function wildTypeFor(seed: number, gx: number, gy: number): ParcelType {
+  const roll = hashCell(seed + 3, gx, gy);
+  for (const [ceiling, type] of WILD_TYPE_ROLLS) if (roll < ceiling) return type;
+  return "residential";
+}
+
+// Ownership/economy layer -- Upland-style (passive daily reward + a toll
+// to cross owned land), but entirely simulated/deterministic for now: no
+// wallet or marketplace read backs any of this yet.
+function ownerFor(status: ParcelStatus, type: ParcelType, seed: number, gx: number, gy: number): string | null {
+  if (status === "reserved") {
+    if (type === "education") return "NICS AI Foundation";
+    if (type === "tower" || type === "landmark") return "Aquaterra Foundation";
+  }
+  const roll = hashCell(seed + 5, gx, gy);
+  if (roll < 0.72) return null; // unclaimed
+  const a = Math.floor(hashCell(seed + 6, gx, gy) * 0xfffff).toString(16).padStart(5, "0");
+  const b = Math.floor(hashCell(seed + 7, gx, gy) * 0xffff).toString(16).padStart(4, "0");
+  return `0x${a}…${b}`;
+}
+
+const ASSET_ROLLS: Array<{ types: ParcelType[]; threshold: number; asset: ParcelAsset }> = [
+  { types: ["residential"], threshold: 0.4, asset: { icon: "house", label: { en: "House", ru: "Дом" } } },
+  { types: ["commercial"], threshold: 0.6, asset: { icon: "workshop", label: { en: "Workshop", ru: "Мастерская" } } },
+  { types: ["resource"], threshold: 0.65, asset: { icon: "dock", label: { en: "Dock", ru: "Причал" } } },
+];
+function assetsFor(owner: string | null, type: ParcelType, seed: number, gx: number, gy: number): ParcelAsset[] {
+  if (!owner) return [];
+  const roll = hashCell(seed + 8, gx, gy);
+  const assets: ParcelAsset[] = [];
+  for (const r of ASSET_ROLLS) if (r.types.includes(type) && roll > r.threshold) assets.push(r.asset);
+  if (roll > 0.8) assets.push({ icon: "vehicle", label: { en: "Vehicle", ru: "Транспорт" } });
+  return assets;
+}
+
+const REWARD_BASE: Record<ParcelType, number> = { residential: 4, commercial: 9, resource: 14, tower: 22, education: 0, landmark: 0 };
+function rewardFor(type: ParcelType, waterfront: boolean, seed: number, gx: number, gy: number): number {
+  const base = REWARD_BASE[type];
+  if (base === 0) return 0;
+  const variance = 0.85 + hashCell(seed + 9, gx, gy) * 0.3;
+  return Math.round(base * (waterfront ? 1.3 : 1) * variance * 10) / 10;
+}
+
+const TOLL_BASE: Record<ParcelType, number> = { residential: 0.5, commercial: 1.2, resource: 1.5, tower: 2.5, education: 0, landmark: 0 };
+function tollFor(owner: string | null, type: ParcelType, waterfront: boolean, seed: number, gx: number, gy: number): number {
+  if (!owner) return 0;
+  const base = TOLL_BASE[type];
+  if (base === 0) return 0;
+  const variance = 0.8 + hashCell(seed + 10, gx, gy) * 0.4;
+  return Math.round(base * (waterfront ? 1.2 : 1) * variance * 10) / 10;
+}
+
 function buildWorld(): Parcel[] {
   const parcels: Parcel[] = [];
 
   for (const continent of CONTINENTS) {
     const [cx, cy] = continent.center;
     const [rx, ry] = continent.radius;
-    const land = continent.archipelago ? scatterIslands(continent) : new Set<string>();
+    const land =
+      continent.id === "WLD"
+        ? scatterIslands(
+            continent,
+            (x, y) =>
+              CONTINENTS.some(
+                (c) => c.id !== "WLD" && x >= c.worldOffset[0] - 4 && x < c.worldOffset[0] + c.cols + 4 && y >= c.worldOffset[1] - 4 && y < c.worldOffset[1] + c.rows + 4,
+              ),
+          )
+        : continent.archipelago
+          ? scatterIslands(continent)
+          : new Set<string>();
 
-    if (!continent.archipelago) {
+    if (continent.id !== "WLD" && !continent.archipelago) {
       for (let gy = 0; gy < continent.rows; gy++) {
         for (let gx = 0; gx < continent.cols; gx++) {
           const nx = (gx - cx) / rx;
@@ -388,7 +512,7 @@ function buildWorld(): Parcel[] {
       const waterfront =
         !land.has(`${gx + 1},${gy}`) || !land.has(`${gx - 1},${gy}`) || !land.has(`${gx},${gy + 1}`) || !land.has(`${gx},${gy - 1}`);
 
-      let type: ParcelType = district.baseType;
+      let type: ParcelType = continent.id === "WLD" ? wildTypeFor(continent.seed, gx, gy) : district.baseType;
       let apartments: number | undefined;
       let buildingName: string | undefined;
       let placeName: LocalizedText | undefined;
@@ -402,6 +526,7 @@ function buildWorld(): Parcel[] {
       }
 
       const status: ParcelStatus = type === "residential" || type === "commercial" || type === "resource" ? "available" : "reserved";
+      const owner = ownerFor(status, type, continent.seed, gx, gy);
 
       parcels.push({
         id: `${continent.id}-${String(gx).padStart(2, "0")}-${String(gy).padStart(2, "0")}`,
@@ -419,6 +544,10 @@ function buildWorld(): Parcel[] {
         apartments,
         buildingName,
         placeName,
+        owner,
+        assets: assetsFor(owner, type, continent.seed, gx, gy),
+        dailyReward: rewardFor(type, waterfront, continent.seed, gx, gy),
+        tollFee: tollFor(owner, type, waterfront, continent.seed, gx, gy),
       });
     }
   }
@@ -428,13 +557,21 @@ function buildWorld(): Parcel[] {
 
 export const PARCELS: Parcel[] = buildWorld();
 
-export const WORLD_BOUNDS = CONTINENTS.reduce(
-  (acc, c) => ({
-    maxX: Math.max(acc.maxX, c.worldOffset[0] + c.cols),
-    maxY: Math.max(acc.maxY, c.worldOffset[1] + c.rows),
-  }),
-  { maxX: 0, maxY: 0 },
-);
+// The full official grid extent, not just the bounding box of the
+// hand-authored continents -- see the top-of-file note on WLD.
+export const WORLD_BOUNDS = { maxX: WORLD_FACTS.gridSize, maxY: WORLD_FACTS.gridSize };
+
+const PARCEL_BY_CELL = new Map<string, Parcel>(PARCELS.map((p) => [`${p.wx},${p.wy}`, p]));
+
+export function parcelAtWorld(wx: number, wy: number): Parcel | undefined {
+  return PARCEL_BY_CELL.get(`${wx},${wy}`);
+}
+
+// Converts an internal render coordinate to the official on-chain-style
+// coordinate the docs use (grid starts at (coordMin, coordMin)).
+export function officialCoord(w: number): number {
+  return w + WORLD_FACTS.coordMin;
+}
 
 export function districtOf(p: Parcel): District {
   const continent = CONTINENTS.find((c) => c.id === p.continentId)!;
