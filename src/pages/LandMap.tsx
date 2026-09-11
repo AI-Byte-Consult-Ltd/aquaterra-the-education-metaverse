@@ -6,7 +6,7 @@ import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useLanguage } from "@/i18n/LanguageContext";
-import { CONTINENTS, PARCELS, WORLD_BOUNDS, districtOf, continentOf, type Parcel, type ParcelType } from "@/data/landMap";
+import { CONTINENTS, PARCELS, WORLD_BOUNDS, WORLD_FACTS, districtOf, continentOf, type Parcel, type ParcelType } from "@/data/landMap";
 
 const CELL = 22;
 const GAP = 2;
@@ -57,12 +57,14 @@ const STR = {
     priceNA: "Not for sale",
     yes: "Yes",
     no: "No",
-    hydro: "HYDRO",
+    raverse: "RAVERSE",
     zoomIn: "Zoom in",
     zoomOut: "Zoom out",
     reset: "Fit to screen",
     dragHint: "Drag to pan, scroll or pinch to zoom",
-    disclaimer: "Concept map, v1 — a new grid built from scratch for planning purposes. Old land & apartment NFTs on Cronos are not represented here yet.",
+    officialFacts: (f: typeof WORLD_FACTS) =>
+      `Officially: ${f.totalLands.toLocaleString("en-US")} LANDs on a ${f.gridSize}x${f.gridSize} grid (coords ${f.coordMin}..${f.coordMax}), ~${f.mintedLands.toLocaleString("en-US")} minted, priced in $${f.token} (${f.tokenSupply} supply, ${f.chain}).`,
+    disclaimer: "Concept map, v1 — an illustrative subset built from scratch for planning, not the real 640x640 grid above. Real land & apartment NFTs on Cronos are not represented here yet.",
   },
   ru: {
     back: "Назад на Aquaterra",
@@ -91,12 +93,14 @@ const STR = {
     priceNA: "Не продаётся",
     yes: "Да",
     no: "Нет",
-    hydro: "HYDRO",
+    raverse: "RAVERSE",
     zoomIn: "Приблизить",
     zoomOut: "Отдалить",
     reset: "Показать всё",
     dragHint: "Тяните для перемещения, крутите колесо для масштаба",
-    disclaimer: "Концептуальная карта, версия 1 — новая сетка, построена с нуля для планирования. Старые NFT земель и апартаментов на Cronos здесь пока не отражены.",
+    officialFacts: (f: typeof WORLD_FACTS) =>
+      `Официально: ${f.totalLands.toLocaleString("ru-RU")} участков на сетке ${f.gridSize}x${f.gridSize} (координаты ${f.coordMin}..${f.coordMax}), ~${f.mintedLands.toLocaleString("ru-RU")} уже сминтовано, цены в $${f.token} (${f.tokenSupply}, ${f.chain}).`,
+    disclaimer: "Концептуальная карта, версия 1 — уменьшенный иллюстративный набросок, не настоящая сетка 640×640 выше. Реальные NFT земель и апартаментов на Cronos здесь пока не отражены.",
   },
 } as const;
 
@@ -207,7 +211,8 @@ const LandMap = () => {
 
         <span className="text-primary font-display text-sm uppercase tracking-widest mb-3 block">{t.eyebrow}</span>
         <h1 className="font-display text-4xl md:text-5xl font-bold mb-4">{t.title}</h1>
-        <p className="text-muted-foreground text-lg max-w-2xl mb-8 leading-relaxed">{t.subtitle}</p>
+        <p className="text-muted-foreground text-lg max-w-2xl mb-3 leading-relaxed">{t.subtitle}</p>
+        <p className="text-xs text-primary/80 font-display tracking-wide max-w-2xl mb-8">{t.officialFacts(WORLD_FACTS)}</p>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
           {[
@@ -353,14 +358,17 @@ function ParcelDetails({ parcel, t, lang }: { parcel: Parcel; t: (typeof STR)["e
     </div>
   );
 
+  const name = parcel.buildingName ?? parcel.placeName?.[lang];
+
   return (
     <div>
       <div className="flex items-center gap-2 mb-1">
-        <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${TYPE_COLOR[parcel.type]}30` }}>
+        <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${TYPE_COLOR[parcel.type]}30` }}>
           <Icon className="w-4 h-4" style={{ color: TYPE_COLOR[parcel.type] }} />
         </span>
-        <h3 className="font-display font-semibold text-lg">{parcel.id}</h3>
+        <h3 className="font-display font-semibold text-lg leading-tight">{name ?? parcel.id}</h3>
       </div>
+      {name && <p className="text-xs text-muted-foreground/70 font-mono mb-1">{parcel.id}</p>}
       <p className="text-xs text-muted-foreground mb-3">{district.blurb[lang]}</p>
       <div>
         {row(t.fieldContinent, continent.name)}
@@ -370,7 +378,7 @@ function ParcelDetails({ parcel, t, lang }: { parcel: Parcel; t: (typeof STR)["e
         {row(t.fieldSize, `${parcel.sizeM2} m²`)}
         {row(t.fieldWaterfront, parcel.waterfront ? t.yes : t.no)}
         {parcel.apartments && row(t.fieldApartments, parcel.apartments)}
-        {row(t.fieldPrice, parcel.priceHydro ? `${parcel.priceHydro} ${t.hydro}` : t.priceNA)}
+        {row(t.fieldPrice, parcel.priceRaverse ? `${parcel.priceRaverse} ${t.raverse}` : t.priceNA)}
       </div>
     </div>
   );

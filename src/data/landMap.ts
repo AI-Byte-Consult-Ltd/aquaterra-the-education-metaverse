@@ -1,11 +1,30 @@
 // Aquaterra world grid — first-generation land parcel map.
-// Fresh (continent, gx, gy) coordinate system — deterministic, unlike the old
-// Rainbowland prototype's plotID (a keccak hash of the viewport offset, which
-// couldn't be reproduced or looked up). District names below are pulled from
-// that earlier project's README where they fit this world's geography; the
-// rest (Rainbowhill, Medieval, Cartoonville, Gatsbyville, Frozenville, Desert,
-// Voxelville, Pixelville, Lakeside, Riverside) are reserved for future
+//
+// This is a small illustrative prototype, NOT the real production grid.
+// Per the official docs (info.aquaterra.world), the real world is 640x640
+// = 409,600 LANDs (coords X/Y: -128..511), ~50,000 already minted, traded
+// on EbisusBay / Crypto.com NFT, priced in $RAVERSE (38B supply, Cronos).
+// See WORLD_FACTS below for the numbers surfaced on the page.
+//
+// Fresh (continent, gx, gy) coordinate system here — deterministic, unlike
+// the old Rainbowland prototype's plotID (a keccak hash of the viewport
+// offset, which couldn't be reproduced or looked up). District names are
+// pulled from that same official district list where they fit this map's
+// geography; the rest (Rainbowhill, Medieval, Cartoonville, Gatsbyville,
+// Frozenville, Desert, Voxelville, Pixelville, Lakeside, Riverside, Party
+// Island, Agora, The Digital Graveyard) are reserved for future
 // continents/biomes rather than forced into this first map.
+export const WORLD_FACTS = {
+  totalLands: 409_600,
+  mintedLands: 50_000,
+  gridSize: 640,
+  coordMin: -128,
+  coordMax: 511,
+  token: "RAVERSE",
+  tokenSupply: "38B",
+  chain: "Cronos",
+  districtsPlanned: 20,
+};
 
 export type ParcelType = "residential" | "commercial" | "tower" | "education" | "resource" | "landmark";
 export type ParcelStatus = "available" | "reserved";
@@ -58,8 +77,10 @@ export interface Parcel {
   status: ParcelStatus;
   waterfront: boolean;
   sizeM2: number;
-  priceHydro: number | null;
+  priceRaverse: number | null;
   apartments?: number;
+  buildingName?: string;
+  placeName?: LocalizedText;
 }
 
 export const CONTINENTS: ContinentSpec[] = [
@@ -185,13 +206,13 @@ const TOWERS: Array<{ continentId: string; cells: [number, number][]; name: stri
   {
     continentId: "MER",
     cells: [[6, 8], [7, 8], [6, 9], [7, 9]],
-    name: "Tower One",
+    name: "Radiant Residences 1",
     apartments: 36,
   },
   {
     continentId: "MER",
     cells: [[9, 6], [10, 6], [9, 7], [10, 7]],
-    name: "Tower Two",
+    name: "Radiant Residences 2",
     apartments: 28,
   },
 ];
@@ -302,11 +323,15 @@ function buildWorld(): Parcel[] {
 
       let type: ParcelType = district.baseType;
       let apartments: number | undefined;
+      let buildingName: string | undefined;
+      let placeName: LocalizedText | undefined;
       if (towerCellMap.has(key)) {
         type = "tower";
         apartments = towerCellMap.get(key)!.apartments;
+        buildingName = towerCellMap.get(key)!.name;
       } else if (landmarkCellMap.has(key)) {
         type = "landmark";
+        placeName = landmarkCellMap.get(key)!;
       }
 
       const status: ParcelStatus = type === "residential" || type === "commercial" || type === "resource" ? "available" : "reserved";
@@ -323,8 +348,10 @@ function buildWorld(): Parcel[] {
         status,
         waterfront,
         sizeM2: 256, // 16m x 16m, matching the earlier project's land-unit convention
-        priceHydro: priceFor(type, waterfront),
+        priceRaverse: priceFor(type, waterfront),
         apartments,
+        buildingName,
+        placeName,
       });
     }
   }
