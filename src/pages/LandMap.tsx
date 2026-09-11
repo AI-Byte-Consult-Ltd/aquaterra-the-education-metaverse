@@ -44,23 +44,18 @@ const STR = {
     typeLabel: { residential: "Residential", commercial: "Commercial", tower: "Tower", education: "Education", resource: "Resource", landmark: "Landmark" },
     statusLabel: { available: "Available", reserved: "Reserved" },
     panelEmptyTitle: "Select a parcel",
-    panelEmptyBody: "Click any tile on the map to see its district, type and indicative price.",
+    panelEmptyBody: "Click any tile on the map to see its district, type and status.",
     fieldId: "Parcel",
     fieldDistrict: "District",
     fieldContinent: "Continent",
     fieldType: "Type",
     fieldStatus: "Status",
     fieldSize: "Size",
-    fieldPrice: "Indicative price",
     fieldWaterfront: "Waterfront",
     fieldApartments: "Apartments inside",
     fieldResource: "Resource",
-    fieldHydroYield: "HYDRO yield",
-    priceNA: "Not for sale",
     yes: "Yes",
     no: "No",
-    raverse: "RAVERSE",
-    hydroPerDay: "HYDRO/day",
     zoomIn: "Zoom in",
     zoomOut: "Zoom out",
     reset: "Fit to screen",
@@ -83,23 +78,18 @@ const STR = {
     typeLabel: { residential: "Жильё", commercial: "Коммерция", tower: "Небоскрёб", education: "Образование", resource: "Ресурс", landmark: "Достопримечательность" },
     statusLabel: { available: "Свободно", reserved: "Зарезервировано" },
     panelEmptyTitle: "Выберите участок",
-    panelEmptyBody: "Нажмите на любую клетку карты, чтобы увидеть район, тип и ориентировочную цену.",
+    panelEmptyBody: "Нажмите на любую клетку карты, чтобы увидеть район, тип и статус.",
     fieldId: "Участок",
     fieldDistrict: "Район",
     fieldContinent: "Континент",
     fieldType: "Тип",
     fieldStatus: "Статус",
     fieldSize: "Площадь",
-    fieldPrice: "Ориентировочная цена",
     fieldWaterfront: "У воды",
     fieldApartments: "Апартаментов внутри",
     fieldResource: "Ресурс",
-    fieldHydroYield: "Добыча HYDRO",
-    priceNA: "Не продаётся",
     yes: "Да",
     no: "Нет",
-    raverse: "RAVERSE",
-    hydroPerDay: "HYDRO/день",
     zoomIn: "Приблизить",
     zoomOut: "Отдалить",
     reset: "Показать всё",
@@ -385,8 +375,6 @@ function ParcelDetails({ parcel, t, lang }: { parcel: Parcel; t: (typeof STR)["e
         {row(t.fieldWaterfront, parcel.waterfront ? t.yes : t.no)}
         {parcel.apartments && row(t.fieldApartments, parcel.apartments)}
         {parcel.resourceType && row(t.fieldResource, parcel.resourceType)}
-        {parcel.hydroYield && row(t.fieldHydroYield, `${parcel.hydroYield} ${t.hydroPerDay}`)}
-        {row(t.fieldPrice, parcel.priceRaverse ? `${parcel.priceRaverse} ${t.raverse}` : t.priceNA)}
       </div>
     </div>
   );
