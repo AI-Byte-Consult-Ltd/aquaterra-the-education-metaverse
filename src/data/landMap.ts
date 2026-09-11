@@ -6,6 +6,12 @@
 // on EbisusBay / Crypto.com NFT, priced in $RAVERSE (38B supply, Cronos).
 // See WORLD_FACTS below for the numbers surfaced on the page.
 //
+// HYDRO is not from those docs -- it's this prototype's own second token:
+// $RAVERSE prices land itself, HYDRO is a harvested resource that only
+// "resource" parcels (Oceania's wells) yield. Two-currency split, same
+// idea as AXS/SLP or SAND/gems: a tradable land currency plus a soft
+// in-world resource you produce by holding the right parcel.
+//
 // Fresh (continent, gx, gy) coordinate system here — deterministic, unlike
 // the old Rainbowland prototype's plotID (a keccak hash of the viewport
 // offset, which couldn't be reproduced or looked up). District names are
@@ -81,6 +87,7 @@ export interface Parcel {
   apartments?: number;
   buildingName?: string;
   placeName?: LocalizedText;
+  hydroYield?: number;
 }
 
 export const CONTINENTS: ContinentSpec[] = [
@@ -286,6 +293,16 @@ function priceFor(type: ParcelType, waterfront: boolean): number | null {
   return waterfront ? Math.round(p * 1.4) : p;
 }
 
+// HYDRO is Aquaterra's own resource-currency concept (not in the official
+// docs, which only name $RAVERSE) -- a second, harvested token distinct from
+// $RAVERSE: RAVERSE prices the land itself, HYDRO is what a resource parcel
+// produces from owning it. Only "resource" parcels (Oceania's wells) yield it.
+function hydroYieldFor(type: ParcelType, waterfront: boolean, seed: number, gx: number, gy: number): number | undefined {
+  if (type !== "resource") return undefined;
+  const variance = Math.round(hashCell(seed + 1, gx, gy) * 20);
+  return (waterfront ? 55 : 40) + variance;
+}
+
 function buildWorld(): Parcel[] {
   const parcels: Parcel[] = [];
 
@@ -349,6 +366,7 @@ function buildWorld(): Parcel[] {
         waterfront,
         sizeM2: 256, // 16m x 16m, matching the earlier project's land-unit convention
         priceRaverse: priceFor(type, waterfront),
+        hydroYield: hydroYieldFor(type, waterfront, continent.seed, gx, gy),
         apartments,
         buildingName,
         placeName,
