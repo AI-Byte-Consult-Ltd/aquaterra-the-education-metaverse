@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 import {
   Home, Store, Building2, GraduationCap, Droplets, Landmark, ZoomIn, ZoomOut, Maximize2, ArrowLeft,
-  X, Car, Wrench, Anchor, Coins, Footprints, Waves,
+  X, Car, Wrench, Anchor, Coins, Footprints, Waves, Sparkles, Trophy,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -14,6 +15,10 @@ import {
   type Parcel, type ParcelType, type ParcelAsset,
 } from "@/data/landMap";
 import { loadTileMap, unpackTile, isEmptyTile, type LoadedTileMap } from "@/data/tileMap";
+import {
+  loadProgress, visitParcel, canCollect, collectResource, TOTAL_DISTRICTS, TOTAL_LANDMARKS,
+  type PlayerProgress,
+} from "@/data/playerProgress";
 
 const CELL = 22;
 const GAP = 2;
@@ -70,7 +75,6 @@ const STR = {
     fieldSize: "Size",
     fieldWaterfront: "Waterfront",
     fieldApartments: "Apartments inside",
-    fieldResource: "Resource",
     fieldOwner: "Owner",
     ownerUnclaimed: "Unclaimed",
     fieldAssets: "Assets",
@@ -91,6 +95,15 @@ const STR = {
     officialFacts: (f: typeof WORLD_FACTS) =>
       `Officially: ${f.totalLands.toLocaleString("en-US")} LANDs on a ${f.gridSize}x${f.gridSize} grid (coords ${f.coordMin}..${f.coordMax}), ~${f.mintedLands.toLocaleString("en-US")} minted, priced in $${f.token} (${f.tokenSupply} supply, ${f.chain}).`,
     disclaimer: "Concept map, v1 — the grid now spans the full official 640×640 extent. Ownership, assets and rewards shown here are illustrative simulations, not yet read from the real contracts or marketplace.",
+    progressTitle: "Your Progress",
+    progressDistricts: "Realms explored",
+    progressLandmarks: "Landmarks found",
+    inventoryTitle: "Inventory",
+    inventoryEmpty: "Open resource parcels on the map and collect to fill this up.",
+    inYourInventory: "You have",
+    collectButton: "Collect",
+    collectedToday: "Collected — back tomorrow",
+    collectGained: (n: number, material: string) => `+${n} ${material}!`,
   },
   ru: {
     back: "Назад на Aquaterra",
@@ -113,7 +126,6 @@ const STR = {
     fieldSize: "Площадь",
     fieldWaterfront: "У воды",
     fieldApartments: "Апартаментов внутри",
-    fieldResource: "Ресурс",
     fieldOwner: "Владелец",
     ownerUnclaimed: "Не занят",
     fieldAssets: "Активы",
@@ -134,6 +146,15 @@ const STR = {
     officialFacts: (f: typeof WORLD_FACTS) =>
       `Официально: ${f.totalLands.toLocaleString("ru-RU")} участков на сетке ${f.gridSize}x${f.gridSize} (координаты ${f.coordMin}..${f.coordMax}), ~${f.mintedLands.toLocaleString("ru-RU")} уже сминтовано, цены в $${f.token} (${f.tokenSupply}, ${f.chain}).`,
     disclaimer: "Концептуальная карта, версия 1 — сетка теперь охватывает весь официальный размер 640×640. Владение, активы и доход здесь — иллюстративная симуляция, данные пока не читаются из реальных контрактов или маркетплейса.",
+    progressTitle: "Ваш прогресс",
+    progressDistricts: "Земель исследовано",
+    progressLandmarks: "Достопримечательностей найдено",
+    inventoryTitle: "Инвентарь",
+    inventoryEmpty: "Открывайте ресурсные участки на карте и собирайте — здесь появятся материалы.",
+    inYourInventory: "У вас есть",
+    collectButton: "Собрать",
+    collectedToday: "Собрано — приходите завтра",
+    collectGained: (n: number, material: string) => `+${n} ${material}!`,
   },
 } as const;
 
@@ -150,6 +171,7 @@ const LandMap = () => {
   const [selected, setSelected] = useState<Selected>(null);
   const [view, setView] = useState({ scale: 1, x: 20, y: 20 });
   const [tileMap, setTileMap] = useState<LoadedTileMap | null>(null);
+  const [progress, setProgress] = useState<PlayerProgress>(() => loadProgress());
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef({ active: false, lastX: 0, lastY: 0, downX: 0, downY: 0, moved: false });
@@ -250,8 +272,21 @@ const LandMap = () => {
       if (gx < 0 || gy < 0 || gx >= WORLD_BOUNDS.maxX || gy >= WORLD_BOUNDS.maxY) return;
       const parcel = parcelAtWorld(gx, gy);
       setSelected(parcel ? { kind: "parcel", parcel } : { kind: "ocean", wx: gx, wy: gy });
+      if (parcel) setProgress((p) => visitParcel(p, parcel));
     },
     [view],
+  );
+
+  const handleCollect = useCallback(
+    (parcel: Parcel) => {
+      setProgress((p) => {
+        const result = collectResource(p, parcel);
+        if (!result) return p;
+        toast.success(t.collectGained(result.gained, parcel.resourceType!));
+        return result.progress;
+      });
+    },
+    [t],
   );
 
   const onClick = useCallback(
@@ -502,6 +537,38 @@ const LandMap = () => {
           </div>
         </div>
 
+        <Card className="glass border-primary/10 mt-6">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Trophy className="w-4 h-4 text-primary" />
+              <h3 className="font-display font-semibold text-sm">{t.progressTitle}</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-4 max-w-sm">
+              <div>
+                <div className="font-display text-xl font-bold tabular-nums">{progress.visitedDistricts.length} / {TOTAL_DISTRICTS}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{t.progressDistricts}</div>
+              </div>
+              <div>
+                <div className="font-display text-xl font-bold tabular-nums">{progress.foundLandmarks.length} / {TOTAL_LANDMARKS}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{t.progressLandmarks}</div>
+              </div>
+            </div>
+            <div className="text-xs text-muted-foreground mb-2">{t.inventoryTitle}</div>
+            {Object.keys(progress.inventory).length === 0 ? (
+              <p className="text-sm text-muted-foreground/70 italic">{t.inventoryEmpty}</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(progress.inventory).map(([material, count]) => (
+                  <span key={material} className="inline-flex items-center gap-1.5 text-sm bg-muted/50 rounded-lg px-3 py-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-primary" />
+                    {material} × {count}
+                  </span>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <p className="text-xs text-muted-foreground mt-6 max-w-2xl">{t.disclaimer}</p>
       </div>
       <Footer />
@@ -517,7 +584,7 @@ const LandMap = () => {
               {t.close}
             </button>
             {selected.kind === "parcel" ? (
-              <ParcelDetails parcel={selected.parcel} t={t} lang={lang} />
+              <ParcelDetails parcel={selected.parcel} t={t} lang={lang} progress={progress} onCollect={handleCollect} />
             ) : (
               <OceanDetails wx={selected.wx} wy={selected.wy} t={t} />
             )}
@@ -528,7 +595,11 @@ const LandMap = () => {
   );
 };
 
-function ParcelDetails({ parcel, t, lang }: { parcel: Parcel; t: (typeof STR)["en"]; lang: "en" | "ru" }) {
+function ParcelDetails({
+  parcel, t, lang, progress, onCollect,
+}: {
+  parcel: Parcel; t: (typeof STR)["en"]; lang: "en" | "ru"; progress: PlayerProgress; onCollect: (parcel: Parcel) => void;
+}) {
   const district = districtOf(parcel);
   const Icon = TYPE_ICON[parcel.type];
 
@@ -566,9 +637,25 @@ function ParcelDetails({ parcel, t, lang }: { parcel: Parcel; t: (typeof STR)["e
         {row(t.fieldSize, `${parcel.sizeM2} m²`)}
         {row(t.fieldWaterfront, parcel.waterfront ? t.yes : t.no)}
         {parcel.apartments && row(t.fieldApartments, parcel.apartments)}
-        {parcel.resourceType && row(t.fieldResource, parcel.resourceType)}
         {row(t.fieldOwner, parcel.owner ?? t.ownerUnclaimed)}
       </div>
+
+      {parcel.resourceType && (
+        <div className="glass rounded-xl p-4 border-primary/10 mb-5 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+              <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
+              <span className="truncate">{parcel.resourceType}</span>
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {t.inYourInventory}: {progress.inventory[parcel.resourceType] ?? 0}
+            </div>
+          </div>
+          <Button size="sm" disabled={!canCollect(progress, parcel)} onClick={() => onCollect(parcel)} className="shrink-0">
+            {canCollect(progress, parcel) ? t.collectButton : t.collectedToday}
+          </Button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 mb-5">
         <div className="glass rounded-xl p-4 border-primary/10">
