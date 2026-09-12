@@ -13,6 +13,7 @@ import {
   CONTINENTS, PARCELS, WORLD_BOUNDS, WORLD_FACTS, districtOf, continentOf, parcelAtWorld, officialCoord,
   type Parcel, type ParcelType, type ParcelAsset,
 } from "@/data/landMap";
+import { loadTileMap, unpackTile, isEmptyTile, type LoadedTileMap } from "@/data/tileMap";
 
 const CELL = 22;
 const GAP = 2;
@@ -150,8 +151,18 @@ const LandMap = () => {
   const [continentFilter, setContinentFilter] = useState<string>("all");
   const [selected, setSelected] = useState<Selected>(null);
   const [view, setView] = useState({ scale: 1, x: 20, y: 20 });
+  const [tileMap, setTileMap] = useState<LoadedTileMap | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef({ active: false, lastX: 0, lastY: 0, downX: 0, downY: 0, moved: false });
+
+  useEffect(() => {
+    let cancelled = false;
+    loadTileMap()
+      .then((tm) => { if (!cancelled) setTileMap(tm); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const worldW = WORLD_BOUNDS.maxX * CELL;
   const worldH = WORLD_BOUNDS.maxY * CELL;
@@ -251,15 +262,127 @@ const LandMap = () => {
     return { total, available, reserved, continents: CONTINENTS.length };
   }, []);
 
-  const bridge = useMemo(() => {
-    const aur = CONTINENTS.find((c) => c.id === "AUR")!;
-    const mer = CONTINENTS.find((c) => c.id === "MER")!;
-    const x1 = (aur.worldOffset[0] + aur.cols) * CELL;
-    const y1 = (aur.worldOffset[1] + 10) * CELL;
-    const x2 = mer.worldOffset[0] * CELL;
-    const y2 = (mer.worldOffset[1] + 9) * CELL;
-    return { x1, y1, x2, y2 };
-  }, []);
+  // Renders the real Tiled-derived world art (once loaded) or a placeholder
+  // grid while waiting for the tileset PNG, plus the continent-filter dim
+  // overlay and the selection outline -- all in world-pixel coordinates
+  // (1 tile = CELL px at scale 1), matching how the old SVG was transformed.
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
+    const dpr = window.devicePixelRatio || 1;
+    const cw = wrap.clientWidth;
+    const ch = wrap.clientHeight;
+    const pxW = Math.round(cw * dpr);
+    const pxH = Math.round(ch * dpr);
+    if (canvas.width !== pxW || canvas.height !== pxH) {
+      canvas.width = pxW;
+      canvas.height = pxH;
+    }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.setTransform(view.scale * dpr, 0, 0, view.scale * dpr, view.x * dpr, view.y * dpr);
+
+    const x0 = clamp(Math.floor(-view.x / view.scale / CELL) - 1, 0, WORLD_BOUNDS.maxX);
+    const y0 = clamp(Math.floor(-view.y / view.scale / CELL) - 1, 0, WORLD_BOUNDS.maxY);
+    const x1 = clamp(Math.ceil((cw - view.x) / view.scale / CELL) + 1, 0, WORLD_BOUNDS.maxX);
+    const y1 = clamp(Math.ceil((ch - view.y) / view.scale / CELL) + 1, 0, WORLD_BOUNDS.maxY);
+
+    // Zoomed out enough that individual tiles would be sub-pixel, drawing all
+    // of them (up to 409,600) tanks frame rate during pan/zoom -- and the
+    // fully-zoomed-out view is the *default* state on load. Past this
+    // threshold, draw the pre-averaged overview bitmap (one drawImage call)
+    // instead of point-sampling individual tiles, which aliases badly on
+    // this art's tight repeating patterns (fences, crop rows -> stripes).
+    const pxPerTile = CELL * view.scale;
+    const DETAIL_THRESHOLD_PX = 6;
+    const useOverview = pxPerTile < DETAIL_THRESHOLD_PX && !!tileMap?.overview;
+
+    if (!tileMap?.image) {
+      // Placeholder while the real tileset PNG isn't in public/tiles/ yet.
+      ctx.fillStyle = "hsl(240 40% 12%)";
+      ctx.fillRect(x0 * CELL, y0 * CELL, (x1 - x0) * CELL, (y1 - y0) * CELL);
+    }
+
+    if (useOverview && tileMap?.overview) {
+      const { width: gridW, height: gridH } = tileMap.manifest.grid;
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(tileMap.overview, 0, 0, gridW, gridH, 0, 0, gridW * CELL, gridH * CELL);
+      ctx.imageSmoothingEnabled = false;
+    } else if (tileMap?.image) {
+      const { image, manifest, grid } = tileMap;
+      const { tileWidth, tileHeight, spacing, columns } = manifest.tileset;
+      const gridW = manifest.grid.width;
+      for (let ty = y0; ty < y1; ty++) {
+        const row = ty * gridW;
+        for (let tx = x0; tx < x1; tx++) {
+          const packed = grid[row + tx];
+          if (isEmptyTile(packed)) continue;
+          const { localId, flipH, flipV, flipD } = unpackTile(packed);
+          const col = localId % columns;
+          const trow = Math.floor(localId / columns);
+          const sx = col * (tileWidth + spacing);
+          const sy = trow * (tileHeight + spacing);
+          const dx = tx * CELL;
+          const dy = ty * CELL;
+          if (flipH || flipV || flipD) {
+            ctx.save();
+            ctx.translate(dx + CELL / 2, dy + CELL / 2);
+            if (flipD) ctx.transform(0, 1, 1, 0, 0, 0);
+            ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+            ctx.drawImage(image, sx, sy, tileWidth, tileHeight, -CELL / 2, -CELL / 2, CELL, CELL);
+            ctx.restore();
+          } else {
+            ctx.drawImage(image, sx, sy, tileWidth, tileHeight, dx, dy, CELL, CELL);
+          }
+        }
+      }
+    } else {
+      // Full-detail placeholder grid lines (Sandbox-style), only worth
+      // drawing once zoomed in enough for individual cells to matter.
+      if (pxPerTile >= DETAIL_THRESHOLD_PX) {
+        ctx.strokeStyle = "hsl(222 30% 20%)";
+        ctx.lineWidth = Math.max(0.5, 0.75 / view.scale);
+        for (let ty = y0; ty < y1; ty++) {
+          for (let tx = x0; tx < x1; tx++) {
+            ctx.strokeRect(tx * CELL + GAP / 2, ty * CELL + GAP / 2, CELL - GAP, CELL - GAP);
+          }
+        }
+      }
+    }
+
+    if (continentFilter !== "all") {
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      for (const p of PARCELS) {
+        if (p.continentId === continentFilter) continue;
+        if (p.wx < x0 || p.wx >= x1 || p.wy < y0 || p.wy >= y1) continue;
+        ctx.fillRect(p.wx * CELL, p.wy * CELL, CELL, CELL);
+      }
+    }
+
+    if (selected) {
+      const swx = selected.kind === "parcel" ? selected.parcel.wx : selected.wx;
+      const swy = selected.kind === "parcel" ? selected.parcel.wy : selected.wy;
+      ctx.strokeStyle = "hsl(210 40% 98%)";
+      ctx.lineWidth = 2 / view.scale;
+      ctx.strokeRect(swx * CELL + 1, swy * CELL + 1, CELL - 2, CELL - 2);
+    }
+  }, [view, selected, continentFilter, tileMap]);
+
+  useEffect(() => {
+    draw();
+  }, [draw]);
+
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const ro = new ResizeObserver(() => draw());
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, [draw]);
 
   return (
     <main className="min-h-screen bg-background">
@@ -321,57 +444,7 @@ const LandMap = () => {
             className="glass rounded-2xl overflow-hidden relative w-full min-w-0"
             style={{ height: "min(70vh, 720px)", touchAction: "none", cursor: "grab" }}
           >
-            <svg width={worldW} height={worldH} style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`, transformOrigin: "0 0" }}>
-              <defs>
-                <linearGradient id="water" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="hsl(var(--gradient-start))" />
-                  <stop offset="50%" stopColor="hsl(var(--gradient-mid))" />
-                  <stop offset="100%" stopColor="hsl(var(--gradient-end))" />
-                </linearGradient>
-                {/* Tiled once, repeated by the renderer -- not one node per cell -- so the
-                    full 640x640 grid always reads as a grid of squares, even zoomed out
-                    to where individual PARCELS rects would be sub-pixel. */}
-                <pattern id="gridTile" width={CELL} height={CELL} patternUnits="userSpaceOnUse">
-                  <rect x={GAP / 2} y={GAP / 2} width={CELL - GAP} height={CELL - GAP} rx={2} fill="hsl(var(--muted))" stroke="hsl(var(--border))" strokeWidth={0.75} />
-                </pattern>
-              </defs>
-              <rect x={0} y={0} width={worldW} height={worldH} fill="url(#water)" />
-              <rect x={0} y={0} width={worldW} height={worldH} fill="url(#gridTile)" />
-              <line
-                x1={bridge.x1} y1={bridge.y1} x2={bridge.x2} y2={bridge.y2}
-                stroke="hsl(var(--muted-foreground))" strokeWidth={3} strokeDasharray="3 7" opacity={0.5}
-              />
-              {PARCELS.map((p) => {
-                const dimmed = continentFilter !== "all" && p.continentId !== continentFilter;
-                const isSelected = selected?.kind === "parcel" && selected.parcel.id === p.id;
-                return (
-                  <rect
-                    key={p.id}
-                    x={p.wx * CELL + GAP / 2}
-                    y={p.wy * CELL + GAP / 2}
-                    width={CELL - GAP}
-                    height={CELL - GAP}
-                    rx={3}
-                    fill={TYPE_COLOR[p.type]}
-                    opacity={dimmed ? 0.15 : p.status === "reserved" ? 0.85 : 0.65}
-                    stroke={isSelected ? "hsl(var(--foreground))" : "transparent"}
-                    strokeWidth={isSelected ? 2 : 0}
-                  />
-                );
-              })}
-              {selected?.kind === "ocean" && (
-                <rect
-                  x={selected.wx * CELL + GAP / 2}
-                  y={selected.wy * CELL + GAP / 2}
-                  width={CELL - GAP}
-                  height={CELL - GAP}
-                  rx={3}
-                  fill="none"
-                  stroke="hsl(var(--foreground))"
-                  strokeWidth={2}
-                />
-              )}
-            </svg>
+            <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
 
             <div
               className="absolute bottom-3 right-3 flex flex-col gap-1.5"

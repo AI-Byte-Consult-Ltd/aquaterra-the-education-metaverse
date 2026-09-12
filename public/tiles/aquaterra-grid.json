@@ -1,0 +1,20 @@
+{
+  "grid": {
+    "width": 640,
+    "height": 640,
+    "originTileX": -128,
+    "originTileY": -128
+  },
+  "tileset": {
+    "name": "Roguelike",
+    "tileWidth": 16,
+    "tileHeight": 16,
+    "spacing": 1,
+    "tileCount": 1767,
+    "columns": 57,
+    "imageWidth": 968,
+    "imageHeight": 526,
+    "imageSourceHint": "../Tiles Map/roguelike-pack/Spritesheet/roguelikeSheet_transparent.png",
+    "webImagePath": "/tiles/roguelike-tileset.png"
+  }
+}
