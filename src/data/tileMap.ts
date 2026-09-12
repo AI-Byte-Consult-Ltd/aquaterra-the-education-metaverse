@@ -28,11 +28,12 @@ export interface UnpackedTile {
   flipD: boolean;
 }
 
-const EMPTY_TILE = 0;
-
+// 0 in the low 11 bits means "no tile" (raw gid 0) -- a real local tile id 0
+// is itself a drawable tile (gid == firstgid), so ids are stored shifted by
+// +1 to keep it distinguishable. See scripts/tmx-to-grid.mjs.
 export function unpackTile(packed: number): UnpackedTile {
   return {
-    localId: packed & 0x7ff,
+    localId: (packed & 0x7ff) - 1,
     flipH: (packed & 0x800) !== 0,
     flipV: (packed & 0x1000) !== 0,
     flipD: (packed & 0x2000) !== 0,
@@ -40,7 +41,7 @@ export function unpackTile(packed: number): UnpackedTile {
 }
 
 export function isEmptyTile(packed: number): boolean {
-  return (packed & 0x7ff) === EMPTY_TILE;
+  return (packed & 0x7ff) === 0;
 }
 
 export interface LoadedTileMap {

@@ -5,9 +5,14 @@
 // map-source/Aquaterra_Map_V.1.tmx is updated in Tiled.
 //
 // Output packing: one Uint16 per cell (little-endian), grid stored row-major
-// from the map's top-left tile. Bits 0-10 = local tile id (0-2047, this
-// tileset uses up to ~1766), bit 11 = horizontal flip, bit 12 = vertical
-// flip, bit 13 = diagonal flip (Tiled's GID flip flags, shifted down).
+// from the map's top-left tile. Bits 0-10 = (local tile id + 1) -- 0 is
+// reserved to mean "no tile" (raw gid 0), distinct from local tile id 0,
+// which is itself a real, drawable tile (gid firstgid) -- bit 11 =
+// horizontal flip, bit 12 = vertical flip, bit 13 = diagonal flip (Tiled's
+// GID flip flags, shifted down). Local id = gid - firstgid, NOT gid itself:
+// getting this wrong silently shifts every lookup to the next tile in the
+// sheet, which is easy to miss on uniform terrain but very visible on
+// distinctive tiles like coastline corners (they come out rotated/wrong).
 
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { inflateSync } from "node:zlib";
@@ -25,6 +30,10 @@ const xml = readFileSync(srcPath, "utf8");
 const tilesetMatch = xml.match(/<tileset[^>]*name="([^"]+)"[^>]*tilewidth="(\d+)"[^>]*tileheight="(\d+)"[^>]*spacing="(\d+)"[^>]*tilecount="(\d+)"[^>]*columns="(\d+)"/);
 if (!tilesetMatch) throw new Error("Could not find <tileset> element with the expected attributes");
 const [, tilesetName, tileWidthS, tileHeightS, spacingS, tilecountS, columnsS] = tilesetMatch;
+
+const firstgidMatch = xml.match(/<tileset[^>]*firstgid="(\d+)"/);
+if (!firstgidMatch) throw new Error("Could not find firstgid on the <tileset> element");
+const firstgid = Number(firstgidMatch[1]);
 
 const imageMatch = xml.match(/<image source="([^"]+)" width="(\d+)" height="(\d+)"/);
 if (!imageMatch) throw new Error("Could not find tileset <image> element");
@@ -67,11 +76,14 @@ for (const { cx, cy, cw, ch, buf } of chunks) {
   for (let ly = 0; ly < ch; ly++) {
     for (let lx = 0; lx < cw; lx++) {
       const gid = buf.readUInt32LE((ly * cw + lx) * 4);
-      const localId = gid & ID_MASK;
-      let packed = localId & 0x7ff; // 11 bits
-      if (gid & FLIP_H) packed |= 0x800;
-      if (gid & FLIP_V) packed |= 0x1000;
-      if (gid & FLIP_D) packed |= 0x2000;
+      let packed = 0; // 0 = no tile
+      if (gid !== 0) {
+        const localId = (gid & ID_MASK) - firstgid;
+        packed = (localId + 1) & 0x7ff; // 11 bits, shifted by 1 so 0 stays reserved for "no tile"
+        if (gid & FLIP_H) packed |= 0x800;
+        if (gid & FLIP_V) packed |= 0x1000;
+        if (gid & FLIP_D) packed |= 0x2000;
+      }
       grid[(oy + ly) * gridW + (ox + lx)] = packed;
     }
   }
