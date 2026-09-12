@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useLanguage } from "@/i18n/LanguageContext";
 import {
-  CONTINENTS, PARCELS, WORLD_BOUNDS, WORLD_FACTS, districtOf, parcelAtWorld, officialCoord,
+  DISTRICTS, PARCELS, WORLD_BOUNDS, WORLD_FACTS, districtOf, parcelAtWorld, officialCoord, initWorld,
   type Parcel, type ParcelType, type ParcelAsset,
 } from "@/data/landMap";
 import { loadTileMap, unpackTile, isEmptyTile, type LoadedTileMap } from "@/data/tileMap";
@@ -157,7 +157,14 @@ const LandMap = () => {
   useEffect(() => {
     let cancelled = false;
     loadTileMap()
-      .then((tm) => { if (!cancelled) setTileMap(tm); })
+      .then((tm) => {
+        if (cancelled) return;
+        // District assignment depends on the real per-cell tile id, so the
+        // parcel grid can't be built until this (already-being-fetched-for
+        // rendering) data is in -- see initWorld in landMap.ts.
+        initWorld(tm.grid);
+        setTileMap(tm);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
@@ -259,14 +266,15 @@ const LandMap = () => {
     dragRef.current.active = false;
   }, []);
 
-  const districts = CONTINENTS[0].districts;
-
   const stats = useMemo(() => {
     const total = PARCELS.length;
     const available = PARCELS.filter((p) => p.status === "available").length;
     const reserved = total - available;
-    return { total, available, reserved, districts: districts.length };
-  }, [districts.length]);
+    return { total, available, reserved, districts: DISTRICTS.length };
+    // PARCELS is populated by initWorld() once tileMap loads (see the effect
+    // above), not at module load -- recompute once that's happened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tileMap]);
 
   // Renders the real Tiled-derived world art (once loaded) or a placeholder
   // grid while waiting for the tileset PNG, plus the continent-filter dim
@@ -436,7 +444,7 @@ const LandMap = () => {
           >
             {t.filterAll}
           </button>
-          {districts.map((d) => (
+          {DISTRICTS.map((d) => (
             <button
               key={d.id}
               onClick={() => setDistrictFilter(d.id)}
