@@ -198,15 +198,21 @@ const LandMap = () => {
     });
   }, []);
 
-  const onWheel = useCallback(
-    (e: React.WheelEvent) => {
+  // Wheel is attached natively (not via React's onWheel prop) with
+  // passive:false -- React/the browser can otherwise still scroll the page
+  // underneath even when a synthetic handler calls preventDefault(), which
+  // is exactly the "map drifts while zooming" symptom this fixes.
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const handler = (e: WheelEvent) => {
       e.preventDefault();
-      const rect = wrapRef.current?.getBoundingClientRect();
-      const anchor = rect ? { x: e.clientX - rect.left, y: e.clientY - rect.top } : undefined;
-      zoomBy(1 - e.deltaY * 0.0015, anchor);
-    },
-    [zoomBy],
-  );
+      const rect = wrap.getBoundingClientRect();
+      zoomBy(1 - e.deltaY * 0.0015, { x: e.clientX - rect.left, y: e.clientY - rect.top });
+    };
+    wrap.addEventListener("wheel", handler, { passive: false });
+    return () => wrap.removeEventListener("wheel", handler);
+  }, [zoomBy]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     dragRef.current = { active: true, lastX: e.clientX, lastY: e.clientY, downX: e.clientX, downY: e.clientY, moved: false };
@@ -340,16 +346,21 @@ const LandMap = () => {
           }
         }
       }
-    } else {
-      // Full-detail placeholder grid lines (Sandbox-style), only worth
-      // drawing once zoomed in enough for individual cells to matter.
-      if (pxPerTile >= DETAIL_THRESHOLD_PX) {
-        ctx.strokeStyle = "hsl(222 30% 20%)";
-        ctx.lineWidth = Math.max(0.5, 0.75 / view.scale);
-        for (let ty = y0; ty < y1; ty++) {
-          for (let tx = x0; tx < x1; tx++) {
-            ctx.strokeRect(tx * CELL + GAP / 2, ty * CELL + GAP / 2, CELL - GAP, CELL - GAP);
-          }
+    }
+
+    // Parcel grid lines, Sandbox-style -- otherwise adjacent same-terrain
+    // tiles (grass next to grass, water next to water) blend into one
+    // undifferentiated field with no visible parcel boundaries. Only drawn
+    // once zoomed in past the overview threshold, where individual cells
+    // are large enough for a grid to read as a grid rather than noise.
+    if (!useOverview && pxPerTile >= DETAIL_THRESHOLD_PX) {
+      ctx.strokeStyle = tileMap?.image ? "rgba(0,0,0,0.35)" : "hsl(222 30% 20%)";
+      ctx.lineWidth = Math.max(0.5, 0.75 / view.scale);
+      const inset = tileMap?.image ? 0 : GAP / 2;
+      const size = tileMap?.image ? CELL : CELL - GAP;
+      for (let ty = y0; ty < y1; ty++) {
+        for (let tx = x0; tx < x1; tx++) {
+          ctx.strokeRect(tx * CELL + inset, ty * CELL + inset, size, size);
         }
       }
     }
@@ -435,7 +446,6 @@ const LandMap = () => {
         <div className="relative">
           <div
             ref={wrapRef}
-            onWheel={onWheel}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerLeave}
