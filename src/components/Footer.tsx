@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/i18n/LanguageContext";
 
@@ -46,22 +45,6 @@ const Footer = () => {
 
   return (
     <footer className="border-t border-border bg-card/50">
-      <div className="container py-16 lg:py-24">
-        <div className="glass rounded-3xl p-8 lg:p-16 text-center relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-transparent to-secondary/10" />
-          <div className="relative z-10">
-            <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-              {t("ft_cta_title1")} <span className="gradient-text">{t("ft_cta_title2")}</span>?
-            </h2>
-            <p className="text-muted-foreground text-lg max-w-2xl mx-auto mb-8">{t("ft_cta_sub")}</p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button variant="glow" size="xl">{t("ft_cta1")}</Button>
-              <Button variant="heroOutline" size="xl">{t("ft_cta2")}</Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="container py-12 lg:py-16">
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8">
           <div className="col-span-2 md:col-span-4 lg:col-span-1">
