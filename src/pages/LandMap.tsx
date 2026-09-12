@@ -175,6 +175,12 @@ const LandMap = () => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef({ active: false, lastX: 0, lastY: 0, downX: 0, downY: 0, moved: false });
+  // Multi-touch pinch-to-zoom: Pointer Events give each finger its own
+  // pointerId (unlike wheel, which only fires for mouse/trackpad), so we
+  // track every currently-down pointer and, once a second one joins,
+  // switch from single-finger panning to zooming off the pair's distance.
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const pinchDistRef = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -242,21 +248,48 @@ const LandMap = () => {
   }, [zoomBy]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
-    dragRef.current = { active: true, lastX: e.clientX, lastY: e.clientY, downX: e.clientX, downY: e.clientY, moved: false };
     (e.target as Element).setPointerCapture?.(e.pointerId);
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointersRef.current.size === 1) {
+      dragRef.current = { active: true, lastX: e.clientX, lastY: e.clientY, downX: e.clientX, downY: e.clientY, moved: false };
+    } else {
+      // A second finger just joined -- stop panning and start pinching.
+      // moved:true suppresses the tap-to-select that would otherwise fire
+      // once fingers lift after a pinch.
+      dragRef.current.active = false;
+      dragRef.current.moved = true;
+      pinchDistRef.current = null;
+    }
   }, []);
 
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragRef.current.active) return;
-    const dx = e.clientX - dragRef.current.lastX;
-    const dy = e.clientY - dragRef.current.lastY;
-    dragRef.current.lastX = e.clientX;
-    dragRef.current.lastY = e.clientY;
-    if (Math.hypot(e.clientX - dragRef.current.downX, e.clientY - dragRef.current.downY) > TAP_THRESHOLD) {
-      dragRef.current.moved = true;
-    }
-    setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
-  }, []);
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!pointersRef.current.has(e.pointerId)) return;
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (pointersRef.current.size >= 2) {
+        const [p1, p2] = [...pointersRef.current.values()];
+        const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const rect = wrapRef.current?.getBoundingClientRect();
+        if (rect && pinchDistRef.current) {
+          zoomBy(dist / pinchDistRef.current, { x: (p1.x + p2.x) / 2 - rect.left, y: (p1.y + p2.y) / 2 - rect.top });
+        }
+        pinchDistRef.current = dist;
+        return;
+      }
+
+      if (!dragRef.current.active) return;
+      const dx = e.clientX - dragRef.current.lastX;
+      const dy = e.clientY - dragRef.current.lastY;
+      dragRef.current.lastX = e.clientX;
+      dragRef.current.lastY = e.clientY;
+      if (Math.hypot(e.clientX - dragRef.current.downX, e.clientY - dragRef.current.downY) > TAP_THRESHOLD) {
+        dragRef.current.moved = true;
+      }
+      setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
+    },
+    [zoomBy],
+  );
 
   // Every one of the 640x640 cells is selectable -- land or open ocean --
   // so selection is computed from tap position + current view transform
@@ -297,8 +330,17 @@ const LandMap = () => {
     [selectAt],
   );
 
-  const onPointerLeave = useCallback(() => {
-    dragRef.current.active = false;
+  const onPointerLeave = useCallback((e: React.PointerEvent) => {
+    pointersRef.current.delete(e.pointerId);
+    pinchDistRef.current = null;
+    if (pointersRef.current.size === 1) {
+      // One finger still down after a pinch -- resume panning from there,
+      // but keep "moved" so lifting that finger doesn't fire a tap-select.
+      const [p] = [...pointersRef.current.values()];
+      dragRef.current = { active: true, lastX: p.x, lastY: p.y, downX: p.x, downY: p.y, moved: true };
+    } else {
+      dragRef.current.active = false;
+    }
   }, []);
 
   const stats = useMemo(() => {
@@ -497,6 +539,7 @@ const LandMap = () => {
             onPointerMove={onPointerMove}
             onPointerUp={onPointerLeave}
             onPointerLeave={onPointerLeave}
+            onPointerCancel={onPointerLeave}
             onClick={onClick}
             className="glass rounded-2xl overflow-hidden relative w-full min-w-0"
             style={{ height: "min(70vh, 720px)", touchAction: "none", cursor: "grab" }}
