@@ -78,7 +78,7 @@ const Footer = () => {
       <div className="border-t border-border">
         <div className="container py-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-muted-foreground text-sm">
-            © Platon BG Ltd 2025-2026. All rights reserved.
+            © 2011–2026 AI Byte Consult Ltd. All rights reserved.
           </p>
           <div className="flex items-center gap-6">
             <a href="#" className="text-muted-foreground hover:text-primary transition-colors text-sm">Twitter</a>
