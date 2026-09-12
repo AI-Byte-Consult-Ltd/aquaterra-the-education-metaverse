@@ -15,7 +15,6 @@ const Navbar = () => {
     { name: t("nav_howItWorks"), href: "#how-it-works" },
     { name: t("nav_nicsAi"), href: "#nics-ai" },
     { name: t("nav_useCases"), href: "#use-cases" },
-    { name: t("nav_pricing"), href: "#pricing" },
   ];
 
   useEffect(() => {
