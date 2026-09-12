@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useLanguage } from "@/i18n/LanguageContext";
 import {
-  CONTINENTS, PARCELS, WORLD_BOUNDS, WORLD_FACTS, districtOf, continentOf, parcelAtWorld, officialCoord,
+  CONTINENTS, PARCELS, WORLD_BOUNDS, WORLD_FACTS, districtOf, parcelAtWorld, officialCoord,
   type Parcel, type ParcelType, type ParcelAsset,
 } from "@/data/landMap";
 import { loadTileMap, unpackTile, isEmptyTile, type LoadedTileMap } from "@/data/tileMap";
@@ -53,11 +53,11 @@ const STR = {
     back: "Back to Aquaterra",
     eyebrow: "Aquaterra World · v1",
     title: "Land Map",
-    subtitle: "A first-generation parcel grid across Aquaterra's continents — a fresh coordinate system, built from scratch, not tied to any legacy contract.",
+    subtitle: "The Aquaterra world grid, mapped into eight realms — a fresh coordinate system, built from scratch, not tied to any legacy contract.",
     statTotal: "Parcels mapped",
     statAvailable: "Available",
     statReserved: "Reserved",
-    statContinents: "Continents",
+    statDistricts: "Districts",
     filterAll: "All",
     legendTitle: "Legend",
     typeLabel: { residential: "Residential", commercial: "Commercial", tower: "Tower", education: "Education", resource: "Resource", landmark: "Landmark" },
@@ -65,7 +65,6 @@ const STR = {
     fieldId: "Parcel",
     fieldCoords: "Coordinates",
     fieldDistrict: "District",
-    fieldContinent: "Continent",
     fieldType: "Type",
     fieldStatus: "Status",
     fieldSize: "Size",
@@ -97,11 +96,11 @@ const STR = {
     back: "Назад на Aquaterra",
     eyebrow: "Мир Aquaterra · v1",
     title: "Карта земельных участков",
-    subtitle: "Сетка участков первого поколения по континентам Aquaterra — новая система координат, построена с нуля, без привязки к старым контрактам.",
+    subtitle: "Мир Aquaterra, разделённый на восемь земель — новая система координат, построена с нуля, без привязки к старым контрактам.",
     statTotal: "Участков на карте",
     statAvailable: "Свободно",
     statReserved: "Зарезервировано",
-    statContinents: "Континентов",
+    statDistricts: "Районов",
     filterAll: "Все",
     legendTitle: "Легенда",
     typeLabel: { residential: "Жильё", commercial: "Коммерция", tower: "Небоскрёб", education: "Образование", resource: "Ресурс", landmark: "Достопримечательность" },
@@ -109,7 +108,6 @@ const STR = {
     fieldId: "Участок",
     fieldCoords: "Координаты",
     fieldDistrict: "Район",
-    fieldContinent: "Континент",
     fieldType: "Тип",
     fieldStatus: "Статус",
     fieldSize: "Площадь",
@@ -148,7 +146,7 @@ const LandMap = () => {
   const t = STR[language === "ru" ? "ru" : "en"];
   const lang = language === "ru" ? "ru" : "en";
 
-  const [continentFilter, setContinentFilter] = useState<string>("all");
+  const [districtFilter, setDistrictFilter] = useState<string>("all");
   const [selected, setSelected] = useState<Selected>(null);
   const [view, setView] = useState({ scale: 1, x: 20, y: 20 });
   const [tileMap, setTileMap] = useState<LoadedTileMap | null>(null);
@@ -261,12 +259,14 @@ const LandMap = () => {
     dragRef.current.active = false;
   }, []);
 
+  const districts = CONTINENTS[0].districts;
+
   const stats = useMemo(() => {
     const total = PARCELS.length;
     const available = PARCELS.filter((p) => p.status === "available").length;
     const reserved = total - available;
-    return { total, available, reserved, continents: CONTINENTS.length };
-  }, []);
+    return { total, available, reserved, districts: districts.length };
+  }, [districts.length]);
 
   // Renders the real Tiled-derived world art (once loaded) or a placeholder
   // grid while waiting for the tileset PNG, plus the continent-filter dim
@@ -365,12 +365,16 @@ const LandMap = () => {
       }
     }
 
-    if (continentFilter !== "all") {
+    // PARCELS now covers the full 640x640 grid, so dimming walks only the
+    // visible range (already bounded above) via direct cell lookup rather
+    // than scanning all 409,600 parcels on every draw (every drag frame).
+    if (districtFilter !== "all" && !useOverview) {
       ctx.fillStyle = "rgba(0,0,0,0.55)";
-      for (const p of PARCELS) {
-        if (p.continentId === continentFilter) continue;
-        if (p.wx < x0 || p.wx >= x1 || p.wy < y0 || p.wy >= y1) continue;
-        ctx.fillRect(p.wx * CELL, p.wy * CELL, CELL, CELL);
+      for (let ty = y0; ty < y1; ty++) {
+        for (let tx = x0; tx < x1; tx++) {
+          const p = parcelAtWorld(tx, ty);
+          if (p && p.districtId !== districtFilter) ctx.fillRect(tx * CELL, ty * CELL, CELL, CELL);
+        }
       }
     }
 
@@ -381,7 +385,7 @@ const LandMap = () => {
       ctx.lineWidth = 2 / view.scale;
       ctx.strokeRect(swx * CELL + 1, swy * CELL + 1, CELL - 2, CELL - 2);
     }
-  }, [view, selected, continentFilter, tileMap]);
+  }, [view, selected, districtFilter, tileMap]);
 
   useEffect(() => {
     draw();
@@ -414,7 +418,7 @@ const LandMap = () => {
             { label: t.statTotal, value: stats.total },
             { label: t.statAvailable, value: stats.available },
             { label: t.statReserved, value: stats.reserved },
-            { label: t.statContinents, value: stats.continents },
+            { label: t.statDistricts, value: stats.districts },
           ].map((s) => (
             <Card key={s.label} className="glass border-primary/10">
               <CardContent className="p-4">
@@ -427,18 +431,18 @@ const LandMap = () => {
 
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <button
-            onClick={() => setContinentFilter("all")}
-            className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${continentFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
+            onClick={() => setDistrictFilter("all")}
+            className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${districtFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
           >
             {t.filterAll}
           </button>
-          {CONTINENTS.map((c) => (
+          {districts.map((d) => (
             <button
-              key={c.id}
-              onClick={() => setContinentFilter(c.id)}
-              className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${continentFilter === c.id ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
+              key={d.id}
+              onClick={() => setDistrictFilter(d.id)}
+              className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${districtFilter === d.id ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
             >
-              {c.name}
+              {d.name}
             </button>
           ))}
         </div>
@@ -518,7 +522,6 @@ const LandMap = () => {
 
 function ParcelDetails({ parcel, t, lang }: { parcel: Parcel; t: (typeof STR)["en"]; lang: "en" | "ru" }) {
   const district = districtOf(parcel);
-  const continent = continentOf(parcel);
   const Icon = TYPE_ICON[parcel.type];
 
   const row = (label: string, value: React.ReactNode) => (
@@ -549,7 +552,6 @@ function ParcelDetails({ parcel, t, lang }: { parcel: Parcel; t: (typeof STR)["e
       <p className="text-sm text-muted-foreground mb-5">{district.blurb[lang]}</p>
 
       <div className="mb-5">
-        {row(t.fieldContinent, continent.name)}
         {row(t.fieldDistrict, district.name)}
         {row(t.fieldType, t.typeLabel[parcel.type])}
         {row(t.fieldStatus, t.statusLabel[parcel.status])}
