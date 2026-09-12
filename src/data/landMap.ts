@@ -10,13 +10,16 @@
 //
 // Districts are keyed directly by which real tile (from the team's Tiled
 // map, see tileMap.ts) sits at a cell -- not by geography. The team
-// labeled each of the 76 distinct tiles used on the map (terrain type,
-// or "just decoration", or a marker they'd painted in for their own
-// planning, e.g. "this tile means I already marked this plot sold") and
-// this file encodes that labeling directly in TILE_TO_DISTRICT. A tile
-// that repeats all over the map (e.g. every riverbank/coastline edge)
-// therefore produces one district scattered across the whole world, not
-// one contiguous region -- that's intentional, not a bug.
+// labeled each of the distinct tiles used on the map (terrain type, "just
+// decoration", or a marker painted in for their own planning) and this
+// file encodes that labeling directly in TILE_TO_DISTRICT. A tile that
+// repeats all over the map (e.g. every riverbank/coastline edge) therefore
+// produces one district scattered across the whole world, not one
+// contiguous region -- that's intentional, not a bug. The map is a living
+// source: when the team repaints tiles in Tiled, TILE_TO_DISTRICT gets
+// re-derived from the new file, and a tile's meaning can change entirely
+// between versions (see the V.2 update: the "reserved plot" marker tile
+// was retired, and a former decoration tile became the "Islands" marker).
 //
 // Because district assignment now depends on the real per-cell tile id,
 // PARCELS can no longer be built eagerly at module load (the tile grid is
@@ -92,8 +95,8 @@ export const DISTRICTS: District[] = [
   { id: "sindris-forge", name: "Sindri's Forge", baseType: "resource", waterfront: false,
     blurb: { en: "Named for the dwarf-smith of legend — a scorched, well-worked ground.", ru: "Названо в честь легендарного гнома-кузнеца — выжженная, обжитая земля." },
     resourceMaterials: ["Gold", "Energy Node", "Mithril"], rewardMultiplier: 1.2 },
-  { id: "claimed-plots", name: "Claimed Plots", baseType: "residential", waterfront: false,
-    blurb: { en: "Founder-marked ground — the earliest settlers already put down roots here.", ru: "Земля первых поселенцев — здесь уже пустили корни самые ранние жители." } },
+  { id: "timber-plaza", name: "Timber Plaza", baseType: "residential", waterfront: false,
+    blurb: { en: "Planked boardwalk ground, long since built up — open for any settler now.", ru: "Дощатая мостовая, давно обжитая земля — теперь открыта для любого поселенца." } },
   { id: "svartalfheim", name: "Svartalfheim", baseType: "resource", waterfront: false,
     blurb: { en: "A secretive enclave of rare hues — said to hide the richest veins in Aquaterra.", ru: "Скрытный анклав редких оттенков — говорят, здесь залегают самые богатые жилы Aquaterra." },
     resourceMaterials: ["Emerald", "Rare Earth", "Shadow Opal"], rewardMultiplier: 1.15 },
@@ -112,8 +115,6 @@ export const DISTRICTS: District[] = [
     blurb: { en: "The paved way that ties every realm of Aquaterra together.", ru: "Мощёный путь, связывающий все земли Aquaterra воедино." }, rewardMultiplier: 1.1 },
   { id: "railway", name: "Railway", baseType: "commercial", waterfront: false,
     blurb: { en: "Iron rails carrying goods between the realms.", ru: "Железные пути, перевозящие товары между землями." }, rewardMultiplier: 1.15 },
-  { id: "advertising", name: "Advertising District", baseType: "commercial", waterfront: false,
-    blurb: { en: "Prime billboard ground — every eye in Aquaterra passes through here.", ru: "Лучшие рекламные площади — здесь проходит каждый житель Aquaterra." }, rewardMultiplier: 1.15 },
   { id: "tidewater", name: "Tidewater", baseType: "resource", waterfront: true,
     blurb: { en: "Water that rises and falls with the world's own rhythm.", ru: "Вода, поднимающаяся и опадающая в такт дыханию мира." },
     resourceMaterials: ["Sea Salt", "Pearl"] },
@@ -129,9 +130,9 @@ export const DISTRICTS: District[] = [
   { id: "skerry", name: "Skerry", baseType: "resource", waterfront: true,
     blurb: { en: "A scatter of small rocky islets, barely above the waterline.", ru: "Россыпь маленьких скалистых островков, едва выступающих над водой." },
     resourceMaterials: ["Coral", "Driftwood", "Pearl"] },
-  { id: "emberfall", name: "Emberfall", baseType: "resource", waterfront: false,
-    blurb: { en: "Sun-baked ground with a warm, reddish cast.", ru: "Выжженная солнцем земля с тёплым красноватым отливом." },
-    resourceMaterials: ["Energy Node", "Obsidian", "Sulfur"] },
+  { id: "folkvangr", name: "Fólkvangr", baseType: "resource", waterfront: true,
+    blurb: { en: "Freyja's flowering fields — little blooming isles scattered across Aquaterra's waters.", ru: "Цветущие поля Фрейи — маленькие цветущие островки, разбросанные по водам Aquaterra." },
+    resourceMaterials: ["Wildflower Pollen", "Honey", "Herbal Extract"], rewardMultiplier: 1.1 },
   { id: "terra-incognita", name: "Terra Incognita", baseType: "resource", waterfront: false,
     blurb: { en: "Unmapped ground — not yet classified, same as most real Aquaterra LANDs today.", ru: "Неразмеченная земля — пока не классифицирована, как и большинство настоящих участков Aquaterra сегодня." },
     resourceMaterials: DEFAULT_RESOURCE_MATERIALS, rewardMultiplier: 0.7 },
@@ -153,7 +154,7 @@ const TILE_TO_DISTRICT: Record<number, string> = {
   60: "oceania", 231: "oceania",
   1498: "ran-reach",
   809: "sindris-forge",
-  1041: "claimed-plots",
+  1041: "timber-plaza",
   1257: "svartalfheim",
   // Coastline/riverbank edging -- appears all over the map, wherever land meets water.
   59: "coastal-reach", 61: "coastal-reach", 117: "coastal-reach", 3: "coastal-reach",
@@ -164,14 +165,13 @@ const TILE_TO_DISTRICT: Record<number, string> = {
   534: "yggdrasils-grove", 528: "yggdrasils-grove",
   234: "old-road", 119: "old-road", 233: "old-road",
   1069: "railway",
-  19: "advertising",
   178: "tidewater",
   467: "docks", 1322: "docks", 1262: "docks",
   980: "sunmeadow",
-  1570: "midgard", 1462: "midgard", 1519: "midgard", 1576: "midgard", 1569: "midgard", 1571: "midgard",
+  1570: "midgard", 1462: "midgard", 1519: "midgard", 1520: "midgard", 1463: "midgard", 1569: "midgard", 1571: "midgard",
   979: "windshore", 981: "windshore", 637: "windshore", 639: "windshore",
   1365: "skerry", 1366: "skerry",
-  1495: "emberfall",
+  573: "folkvangr",
   // Everything below this line was left as "or Terra Incognita" -- kept
   // explicit (rather than just falling through) so the source list of what
   // was reviewed and left unclassified is visible in one place.
@@ -332,11 +332,8 @@ function buildWorld(tileGrid: Uint16Array): Parcel[] {
         placeName = landmarkCellMap.get(key)!;
       }
 
-      // Claimed Plots are the team's own "already sold" markers from the
-      // original design -- honor that directly instead of rolling for it.
-      const isClaimed = district.id === "claimed-plots" && type === "residential";
-      const status: ParcelStatus = isClaimed || !(type === "residential" || type === "commercial" || type === "resource") ? "reserved" : "available";
-      const owner = isClaimed ? "Founding Settler" : ownerFor(status, type, wx, wy);
+      const status: ParcelStatus = (type === "residential" || type === "commercial" || type === "resource") ? "available" : "reserved";
+      const owner = ownerFor(status, type, wx, wy);
       const waterfront = district.waterfront;
 
       parcels.push({
