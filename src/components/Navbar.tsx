@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
@@ -7,13 +8,13 @@ import { useLanguage } from "@/i18n/LanguageContext";
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const landMapLabel = language === "ru" ? "Карта земель" : "Land Map";
 
   const navLinks = [
     { name: t("nav_howItWorks"), href: "#how-it-works" },
     { name: t("nav_nicsAi"), href: "#nics-ai" },
     { name: t("nav_useCases"), href: "#use-cases" },
-    { name: t("nav_pricing"), href: "#pricing" },
   ];
 
   useEffect(() => {
@@ -42,6 +43,9 @@ const Navbar = () => {
               {link.name}
             </a>
           ))}
+          <Link to="/map" className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium">
+            {landMapLabel}
+          </Link>
         </nav>
 
         <div className="hidden lg:flex items-center gap-4">
@@ -63,6 +67,9 @@ const Navbar = () => {
                 {link.name}
               </a>
             ))}
+            <Link to="/map" onClick={() => setIsMobileMenuOpen(false)} className="text-foreground hover:text-primary transition-colors font-medium py-2">
+              {landMapLabel}
+            </Link>
           </nav>
           <div className="flex flex-col gap-3">
             <Button variant="ghost" className="w-full">{t("nav_logIn")}</Button>

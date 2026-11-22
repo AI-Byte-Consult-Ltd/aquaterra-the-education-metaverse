@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist",
+    "deploy": "gh-pages -d dist --nojekyll",
     "publish-all": "git add . && git commit -m 'update: site changes' && git push origin main && npm run build && npm run deploy",
     "test": "vitest run"
   },

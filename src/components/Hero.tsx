@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import heroBg from "@/assets/hero-bg.jpg";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -31,9 +32,10 @@ const Hero = () => {
             {t("hero_sub2")}
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-up" style={{ animationDelay: "0.4s" }}>
-            <Button variant="glow" size="xl">{t("hero_cta1")}</Button>
-            <Button variant="heroOutline" size="xl">{t("hero_cta2")}</Button>
+          <div className="flex justify-center animate-fade-up" style={{ animationDelay: "0.4s" }}>
+            <Button variant="glow" size="xl" asChild>
+              <Link to="/map">{t("hero_cta1")}</Link>
+            </Button>
           </div>
 
           <div className="grid grid-cols-3 gap-8 max-w-xl mx-auto mt-16 animate-fade-up" style={{ animationDelay: "0.6s" }}>
