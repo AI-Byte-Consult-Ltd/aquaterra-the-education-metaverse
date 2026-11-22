@@ -2,11 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Building2, Link2, Maximize2, MapPin, Search, X, ZoomIn, ZoomOut } from "lucide-react";
 import { toast } from "sonner";
-import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { DEFAULT_CITY, findPlot, generateCity, parseAddress, type Plot } from "@/game/city/generator";
 import { IsoCityRenderer } from "@/game/city/isoRenderer";
-import { cityStrings } from "@/game/city/strings";
+import { cityLocale, cityStrings } from "@/game/city/strings";
 
 /** One tile is 10 × 10 m in the game world. */
 const TILE_M2 = 100;
@@ -194,7 +193,7 @@ const City = () => {
     }
   };
 
-  const fmt = (n: number) => n.toLocaleString(language);
+  const fmt = (n: number) => n.toLocaleString(cityLocale(language));
 
   return (
     <div className="fixed inset-0 flex flex-col bg-background text-foreground">
@@ -223,9 +222,6 @@ const City = () => {
             {t.searchGo}
           </button>
         </form>
-        <div className="ml-auto md:ml-0">
-          <LanguageSwitcher />
-        </div>
       </header>
 
       {/* canvas */}

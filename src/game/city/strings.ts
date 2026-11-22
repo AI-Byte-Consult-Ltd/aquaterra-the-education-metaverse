@@ -5,11 +5,11 @@ const en = {
   back: "AquaTerra",
   title: "City of Rays",
   badge: "Prototype",
-  searchPlaceholder: "Ray 3, house 12",
+  searchPlaceholder: "Ray 3, House 12",
   searchGo: "Go",
   notFound: "No such address",
   ray: (n: number) => `Ray ${n}`,
-  address: (ray: number, house: number) => `Ray ${ray}, house ${house}`,
+  address: (ray: number, house: number) => `Ray ${ray}, House ${house}`,
   tower: "First Light Tower",
   zone: "District",
   area: "Area",
@@ -56,62 +56,16 @@ const en = {
   tiles_m: "m",
 };
 
-type Strings = typeof en;
+export type CityStrings = typeof en;
 
-const ru: Strings = {
-  back: "AquaTerra",
-  title: "Город-лучи",
-  badge: "Прототип",
-  searchPlaceholder: "Луч 3, дом 12",
-  searchGo: "Найти",
-  notFound: "Такого адреса нет",
-  ray: (n) => `Луч ${n}`,
-  address: (ray, house) => `Луч ${ray}, дом ${house}`,
-  tower: "Башня «Первый Свет»",
-  zone: "Район",
-  area: "Площадь",
-  toTower: "До башни",
-  water: "Вид на воду",
-  yes: "да",
-  no: "нет",
-  status: "Статус",
-  free: "Свободен",
-  buyLater: "Покупка участков откроется на этапе 3 плана (владение и экономика). Пока ничего не продаётся.",
-  copyLink: "Скопировать ссылку",
-  copied: "Ссылка скопирована",
-  close: "Закрыть",
-  stats: (plots, rays, islands) => `${plots} участков · ${rays} лучей · ${islands} островов`,
-  hint: "Тяните, чтобы двигать, колесо или щипок для зума, нажмите на участок",
-  towerAbout:
-    "Сердце города и дом NICS AI. Улицы расходятся от башни лучами. Апартаменты — это существующие NFT Radiant Residences на Cronos: одна квартира, один NFT.",
-  floors: "Этажей",
-  apartments: "Апартаментов (NFT)",
-  contract: "Контракт на Cronos",
-  aiStatus: "NICS AI",
-  aiStatusValue: "Со-управляет городом. Голос на старте — готовые фразы и карточки, пока учится NICS Language.",
-  zones: {
-    core: "Ядро",
-    inner: "Внутреннее кольцо",
-    middle: "Среднее кольцо",
-    outer: "Внешнее кольцо",
-    coast: "Набережные",
-    islands: "Острова",
-  },
-  tiles: {
-    ocean: "Океан",
-    shallow: "Мелководье",
-    beach: "Пляж",
-    land: "Земля",
-    park: "Общественный парк",
-    street: "Улица",
-    bridge: "Мост",
-    canal: "Кольцевой канал",
-    plaza: "Площадь башни",
-    tower: "Башня «Первый Свет»",
-    plot: "Участок",
-  },
-  tiles_m: "м",
-};
+/**
+ * The game UI is English-only for now (decision 2026-11-22). To add a language,
+ * write a `CityStrings` object for it and register it here; every other
+ * language keeps falling back to English.
+ */
+const registry: Partial<Record<Language, CityStrings>> = { en };
 
-/** Russian and English for now; other site languages fall back to English. */
-export const cityStrings = (lang: Language): Strings => (lang === "ru" ? ru : en);
+export const cityStrings = (lang: Language): CityStrings => registry[lang] ?? en;
+
+/** Locale for numbers: the language's own when its strings exist, else English. */
+export const cityLocale = (lang: Language): string => (registry[lang] ? lang : "en");
