@@ -1,43 +1,51 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Link2, Maximize2, MapPin, Search, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, Building2, Home, Link2, Maximize2, MapPin, Search, X, ZoomIn, ZoomOut } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
-import { DEFAULT_CITY, findPlot, generateCity, parseAddress, type Plot } from "@/game/city/generator";
-import { IsoCityRenderer } from "@/game/city/isoRenderer";
-import { cityLocale, cityStrings } from "@/game/city/strings";
+import { DEFAULT_WORLD, findPlotByAddress, generateWorld, type Kind, type Plot, type World } from "@/game/world/generator";
+import { buildingFor } from "@/game/world/buildings";
+import { WorldRenderer } from "@/game/world/renderer";
+import { worldLocale, worldStrings } from "@/game/world/strings";
 
-/** One tile is 10 × 10 m in the game world. */
-const TILE_M2 = 100;
-const TILE_M = 10;
+/** One tile is 20 × 20 m in the game world. */
+const TILE_M2 = 400;
+const TILE_M = 20;
 const TOWER_CONTRACT = "0x3720cde69e4e997bbdeaec7b4e7b5f8c3c406869";
 
-type Selection = { kind: "plot"; plot: Plot } | { kind: "tower" } | null;
+type Selection = { kind: "plot"; plot: Plot } | { kind: "tower" } | { kind: "tile"; tile: Kind; district: number } | null;
 
 const City = () => {
   const { language } = useLanguage();
-  const t = cityStrings(language);
-  const city = useMemo(() => generateCity(DEFAULT_CITY), []);
+  const t = worldStrings(language);
+  const city = useMemo(() => generateWorld(DEFAULT_WORLD), []);
   const [params, setParams] = useSearchParams();
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rendererRef = useRef<IsoCityRenderer | null>(null);
+  const rendererRef = useRef<WorldRenderer | null>(null);
   const [selection, setSelection] = useState<Selection>(null);
   const [query, setQuery] = useState("");
+  const [houses, setHouses] = useState(true);
+  const housesRef = useRef(houses);
+  useEffect(() => {
+    housesRef.current = houses;
+    rendererRef.current?.setBuildingsVisible(houses);
+  }, [houses]);
 
   // --- renderer lifecycle ---------------------------------------------------
   useEffect(() => {
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
-    const r = new IsoCityRenderer(canvas, city, { ray: t.ray, tower: t.tower });
+    const r = new WorldRenderer(canvas, city, { tower: t.tower });
     rendererRef.current = r;
     const size = () => {
       const rect = wrap.getBoundingClientRect();
       r.resize(rect.width, rect.height, Math.min(window.devicePixelRatio || 1, 2));
     };
     size();
+    r.setBuildingsVisible(housesRef.current);
     r.fit();
     const ro = new ResizeObserver(size);
     ro.observe(wrap);
@@ -65,22 +73,21 @@ const City = () => {
       if (!r) return;
       r.selectedPlot = s?.kind === "plot" ? s.plot.id : null;
       r.towerSelected = s?.kind === "tower";
-      if (focus && s?.kind === "plot") r.focusTile(s.plot.anchor.x, s.plot.anchor.y, 1.6);
-      if (focus && s?.kind === "tower") r.focusTile(city.center, city.center - 6, 0.6);
+      if (focus && s?.kind === "plot") r.focusTile(s.plot.anchor.x, s.plot.anchor.y, 1.4);
+      if (focus && s?.kind === "tower") r.focusTile(city.center - 8, city.center - 8, 0.6);
       const next = new URLSearchParams(params);
-      if (s?.kind === "plot") next.set("addr", `${s.plot.ray}-${s.plot.house}`);
-      else next.delete("addr");
+      if (s?.kind === "plot") next.set("plot", String(s.plot.id));
+      else next.delete("plot");
       setParams(next, { replace: true });
     },
     [city, params, setParams],
   );
 
-  // deep link: /city?addr=3-12
+  // deep link: /city?plot=123
   useEffect(() => {
-    const addr = params.get("addr");
-    if (!addr || selection) return;
-    const parsed = parseAddress(addr);
-    const plot = parsed && findPlot(city, parsed.ray, parsed.house);
+    const id = Number(params.get("plot"));
+    if (!params.get("plot") || !Number.isInteger(id) || selection) return;
+    const plot = city.plots[id];
     if (plot) select({ kind: "plot", plot }, true);
     // run once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -142,6 +149,7 @@ const City = () => {
       const pick = r.pick(p.x, p.y);
       if (pick?.kind === "plot") select({ kind: "plot", plot: city.plots[pick.plotId] });
       else if (pick?.kind === "tower") select({ kind: "tower" });
+      else if (pick?.kind === "tile") select({ kind: "tile", tile: pick.tile, district: pick.district });
       else select(null);
     };
     const wheel = (e: WheelEvent) => {
@@ -175,8 +183,7 @@ const City = () => {
 
   const onSearch = (e: FormEvent) => {
     e.preventDefault();
-    const parsed = parseAddress(query);
-    const plot = parsed && findPlot(city, parsed.ray, parsed.house);
+    const plot = findPlotByAddress(city, query);
     if (!plot) {
       toast.error(t.notFound);
       return;
@@ -193,7 +200,7 @@ const City = () => {
     }
   };
 
-  const fmt = (n: number) => n.toLocaleString(cityLocale(language));
+  const fmt = (n: number) => n.toLocaleString(worldLocale(language));
 
   return (
     <div className="fixed inset-0 flex flex-col bg-background text-foreground">
@@ -229,8 +236,9 @@ const City = () => {
         <canvas ref={canvasRef} className="absolute inset-0 cursor-grab" />
 
         <div className="pointer-events-none absolute left-3 top-3 rounded-md bg-background/75 px-2.5 py-1.5 text-xs text-muted-foreground backdrop-blur">
-          <div className="font-medium text-foreground">{t.stats(city.plots.length, city.rays.length, city.islands.length)}</div>
+          <div className="font-medium text-foreground">{t.stats(city.plots.length, city.districts.length, city.airports.length, city.stations.length)}</div>
           <div className="hidden md:block">{t.hint}</div>
+          {houses && <div className="hidden max-w-xs md:block">{t.housesNote}</div>}
         </div>
 
         <div className="absolute right-3 top-3 flex flex-col gap-1.5">
@@ -239,13 +247,15 @@ const City = () => {
             { icon: ZoomOut, label: "−", on: () => zoom(1 / 1.4) },
             { icon: Maximize2, label: "fit", on: () => rendererRef.current?.fit() },
             { icon: Building2, label: t.tower, on: () => select({ kind: "tower" }, true) },
-          ].map(({ icon: Icon, label, on }) => (
+            { icon: Home, label: houses ? t.housesOff : t.housesOn, on: () => setHouses((h) => !h), active: houses },
+          ].map(({ icon: Icon, label, on, active }) => (
             <button
               key={label}
               onClick={on}
               aria-label={label}
+              aria-pressed={active}
               title={label}
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background/85 backdrop-blur hover:border-primary"
+              className={`flex h-9 w-9 items-center justify-center rounded-md border bg-background/85 backdrop-blur hover:border-primary ${active ? "border-primary text-primary" : "border-border"}`}
             >
               <Icon className="h-4 w-4" />
             </button>
@@ -259,7 +269,17 @@ const City = () => {
               <X className="h-4 w-4" />
             </button>
             {selection.kind === "plot" ? (
-              <PlotCard plot={selection.plot} t={t} fmt={fmt} onCopy={copyLink} />
+              <PlotCard plot={selection.plot} world={city} t={t} fmt={fmt} onCopy={copyLink} />
+            ) : selection.kind === "tile" ? (
+              <div className="space-y-2 pr-6">
+                <h2 className="font-display text-lg font-bold">{t.tiles[selection.tile]}</h2>
+                {selection.district >= 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    {city.districts[selection.district].name} · {t.biomes[city.districts[selection.district].biome]}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">{t.wild}</p>
+              </div>
             ) : (
               <div className="space-y-3 pr-6">
                 <div className="flex items-center gap-2">
@@ -293,26 +313,37 @@ const City = () => {
   );
 };
 
-function PlotCard({ plot, t, fmt, onCopy }: { plot: Plot; t: ReturnType<typeof cityStrings>; fmt: (n: number) => string; onCopy: () => void }) {
+function PlotCard({ plot, world, t, fmt, onCopy }: { plot: Plot; world: World; t: ReturnType<typeof worldStrings>; fmt: (n: number) => string; onCopy: () => void }) {
+  const d = world.districts[plot.district];
+  const house = buildingFor(world, plot);
   return (
     <div className="space-y-3 pr-6">
       <div className="flex items-center gap-2">
         <MapPin className="h-5 w-5 text-primary" />
-        <h2 className="font-display text-lg font-bold">{t.address(plot.ray, plot.house)}</h2>
+        <h2 className="font-display text-lg font-bold">{plot.address}</h2>
       </div>
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
-        <dt className="text-muted-foreground">{t.zone}</dt>
-        <dd className="font-medium">{t.zones[plot.zone]}</dd>
+        <dt className="text-muted-foreground">{t.district}</dt>
+        <dd className="font-medium">{d?.name ?? "—"}</dd>
+        <dt className="text-muted-foreground">{t.climate}</dt>
+        <dd className="font-medium">{d ? t.biomes[d.biome] : "—"}</dd>
+        <dt className="text-muted-foreground">{t.landscape}</dt>
+        <dd className="font-medium">{t.landscapes[plot.landscape]}</dd>
         <dt className="text-muted-foreground">{t.area}</dt>
         <dd className="font-medium">
-          {fmt(plot.tiles.length * TILE_M2)} {t.tiles_m}²
+          {fmt(plot.tiles.length * TILE_M2)} {t.m2}
         </dd>
         <dt className="text-muted-foreground">{t.toTower}</dt>
         <dd className="font-medium">
-          {fmt(Math.round((plot.distance * TILE_M) / 10) * 10)} {t.tiles_m}
+          {fmt(Math.round((plot.distance * TILE_M) / 100) / 10)} {t.km}
         </dd>
         <dt className="text-muted-foreground">{t.water}</dt>
         <dd className="font-medium">{plot.waterView ? t.yes : t.no}</dd>
+        <dt className="text-muted-foreground">{t.fitsHere}</dt>
+        <dd className="font-medium">
+          {house.tower ? `${house.tower.name} (${t.styles[house.style.id as keyof typeof t.styles]})` : t.styles[house.style.id as keyof typeof t.styles]} ·{" "}
+          {t.floorsShort(house.floors)}
+        </dd>
         <dt className="text-muted-foreground">{t.status}</dt>
         <dd className="font-medium text-emerald-500">{t.free}</dd>
       </dl>
