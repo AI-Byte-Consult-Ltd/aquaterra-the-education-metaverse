@@ -1,6 +1,6 @@
 import { KINDS, type Kind, type World } from "./generator";
 import { buildingsFor, type Building, type BuildingStyle, type Tower } from "./buildings";
-import { baseColor, daylight, shade, skyColor, treeColor, type RGB } from "./palette";
+import { LAGOON, baseColor, daylight, shade, skyColor, treeColor, type RGB } from "./palette";
 
 export const TW = 32;
 export const TH = 16;
@@ -61,7 +61,8 @@ export class WorldRenderer {
   /** Skyscraper column on this tile: building index and its height in floors. */
   private towerAt: Int32Array;
   private towerFloors: Int16Array;
-  private styleColors = new Map<string, { wl: string; wr: string; roof: string; roofDark: string; win: string; post: string }>();
+  /** Colours of each building at the current daylight, by plot id. */
+  private houseColors: { wl: string; wr: string; roof: string; roofDark: string; win: string; post: string; trim: string }[] = [];
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -138,27 +139,26 @@ export class WorldRenderer {
       const biome = d >= 0 ? w.districts[d].biome : "temperate";
       // every district has its own slight tint so neighbours of one climate stay distinct
       const tint = d >= 0 && !WATER.includes(k) ? 0.92 + ((d * 37) % 13) / 100 : 1;
-      const c = baseColor(k, biome);
+      const c = w.zone[i] && (k === "shallow" || k === "ocean") ? (k === "shallow" ? LAGOON : ([40, 150, 190] as RGB)) : baseColor(k, biome);
       this.top[i] = shade(c, this.day, tint);
       this.left[i] = shade(c, this.day, tint * 0.74);
       this.right[i] = shade(c, this.day, tint * 0.6);
       if (k === "forest") this.tree[i] = shade(treeColor(biome), this.day);
     }
-    this.styleColors.clear();
-    for (const b of this.buildings) {
+    const night = this.day < 0.5;
+    this.houseColors = this.buildings.map((b) => {
       const st = b.style;
-      if (this.styleColors.has(st.id)) continue;
-      const night = this.day < 0.5;
       const win: RGB = night ? st.window : [60, 80, 104];
-      this.styleColors.set(st.id, {
-        wl: shade(st.wall, this.day, 0.92),
-        wr: shade(st.wall, this.day, 0.72),
-        roof: shade(st.roofColor, this.day, 1),
-        roofDark: shade(st.roofColor, this.day, 0.78),
-        win: night ? `rgb(${win.join(",")})` : shade(win, this.day, st.id === "skyline" || st.id === "spire" ? 1.6 : 1),
+      return {
+        wl: shade(b.wall, this.day, 0.92),
+        wr: shade(b.wall, this.day, 0.72),
+        roof: shade(b.roofColor, this.day, 1),
+        roofDark: shade(b.roofColor, this.day, 0.78),
+        win: night ? `rgb(${win.join(",")})` : shade(win, this.day, 1),
         post: shade([90, 70, 54], this.day),
-      });
-    }
+        trim: shade([212, 172, 76], this.day, 1.05),
+      };
+    });
     this.groundKey = "";
     this.overview = null;
   }
@@ -402,7 +402,10 @@ export class WorldRenderer {
         }
         if (k === "forest") this.drawTree(ctx, px, py + hh, i);
         else if (k === "rail" || k === "railbridge" || k === "station") this.drawRail(ctx, px, py, x, y);
-        else if (k === "runway") this.drawRunway(ctx, px, py, x, y);
+        else if (k === "runway") {
+          this.drawRunway(ctx, px, py, x, y);
+          if ((x * 31 + y * 17) % 41 === 0) this.drawPlane(ctx, px, py + hh, this.axis(x, y, ["runway"]), 1.25);
+        } else if (k === "apron" && (x * 7 + y * 13) % 6 === 0) this.drawPlane(ctx, px, py + hh, (x + y) % 2 ? "x" : "y", 1);
         else if ((k === "road" || k === "bridge") && night && (x + y) % 3 === 0) {
           ctx.fillStyle = "rgba(255,214,140,0.85)";
           ctx.fillRect(px - 1.3, py + hh - 1.3, 2.6, 2.6);
@@ -410,7 +413,7 @@ export class WorldRenderer {
           ctx.fillStyle = night ? "rgba(255,230,160,0.9)" : "rgba(255,255,255,0.7)";
           ctx.fillRect(px - 5, py + hh - 1, 10, 2);
         }
-        if (this.showBuildings && this.houseAt[i] >= 0) this.drawBuilding(ctx, px, py + hh, this.buildings[this.houseAt[i]]);
+        if (this.showBuildings && this.houseAt[i] >= 0) this.drawBuilding(ctx, px, py + hh, this.houseAt[i]);
         else if (this.showBuildings && this.towerAt[i] >= 0) this.drawTowerColumn(ctx, px, py, x, y, this.buildings[this.towerAt[i]].tower!);
       }
     }
@@ -644,9 +647,10 @@ export class WorldRenderer {
   }
 
   /** An isometric house standing on the centre (px, py) of a tile. */
-  private drawBuilding(ctx: CanvasRenderingContext2D, px: number, py: number, b: Building) {
+  private drawBuilding(ctx: CanvasRenderingContext2D, px: number, py: number, id: number) {
+    const b: Building = this.buildings[id];
     const st: BuildingStyle = b.style;
-    const col = this.styleColors.get(st.id)!;
+    const col = this.houseColors[id];
     const a = (TW / 2) * st.footprint;
     const c = (TH / 2) * st.footprint;
     let base = py;
@@ -682,7 +686,7 @@ export class WorldRenderer {
     ctx.fill();
     // a row of windows on each floor
     ctx.fillStyle = col.win;
-    const cols = st.id === "skyline" || st.id === "spire" ? 3 : 2;
+    const cols = b.cols;
     for (let f = 0; f < b.floors; f++) {
       const fy = base - f * FLOOR_PX - FLOOR_PX * 0.62;
       for (let k = 0; k < cols; k++) {
@@ -695,7 +699,80 @@ export class WorldRenderer {
         ctx.fillRect(rx - 0.8, ly - 1.1, 1.6, 2.2);
       }
     }
-    // roof
+    if (b.balconies) {
+      ctx.strokeStyle = col.roof;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      for (let f = 1; f < b.floors; f++) {
+        const fy = base - f * FLOOR_PX;
+        ctx.moveTo(px - a, fy);
+        ctx.lineTo(px, fy + c);
+        ctx.lineTo(px + a, fy);
+      }
+      ctx.stroke();
+    }
+    if (st.roof === "deco" || st.roof === "mansion") {
+      // gilded verticals and a cornice: the Jazz Age signature
+      ctx.strokeStyle = col.trim;
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      for (const t of st.roof === "deco" ? [0.2, 0.5, 0.8] : [0.15, 0.4, 0.65, 0.9]) {
+        ctx.moveTo(px - a + a * t, base + c * t);
+        ctx.lineTo(px - a + a * t, top + c * t);
+        ctx.moveTo(px + a - a * t, base + c * t);
+        ctx.lineTo(px + a - a * t, top + c * t);
+      }
+      ctx.moveTo(px - a, top + 1);
+      ctx.lineTo(px, top + c + 1);
+      ctx.lineTo(px + a, top + 1);
+      ctx.stroke();
+    }
+    let roofTop = top;
+    if (b.setback && st.roof !== "deco") {
+      // a smaller penthouse floor on top
+      const a2 = a * 0.62;
+      const c2 = c * 0.62;
+      const t2 = top - FLOOR_PX;
+      ctx.fillStyle = col.roof;
+      ctx.beginPath();
+      ctx.moveTo(px, top - c);
+      ctx.lineTo(px + a, top);
+      ctx.lineTo(px, top + c);
+      ctx.lineTo(px - a, top);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = col.wl;
+      ctx.beginPath();
+      ctx.moveTo(px - a2, top);
+      ctx.lineTo(px, top + c2);
+      ctx.lineTo(px, t2 + c2);
+      ctx.lineTo(px - a2, t2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = col.wr;
+      ctx.beginPath();
+      ctx.moveTo(px + a2, top);
+      ctx.lineTo(px, top + c2);
+      ctx.lineTo(px, t2 + c2);
+      ctx.lineTo(px + a2, t2);
+      ctx.closePath();
+      ctx.fill();
+      roofTop = t2;
+    }
+    const k2 = b.setback && st.roof !== "deco" ? 0.62 : 1;
+    this.drawRoof(ctx, px, roofTop, a * k2, c * k2, b, col);
+  }
+
+  private drawRoof(
+    ctx: CanvasRenderingContext2D,
+    px: number,
+    top: number,
+    a: number,
+    c: number,
+    b: Building,
+    col: { wl: string; wr: string; roof: string; roofDark: string; win: string; post: string; trim: string },
+  ) {
+    const st = b.style;
     const diamond = (cx: number, cy: number, aa: number, cc: number) => {
       ctx.beginPath();
       ctx.moveTo(cx, cy - cc);
@@ -780,6 +857,93 @@ export class WorldRenderer {
       case "cone":
         pyramid(top, a * 1.15, c * 1.15, c * 2.6);
         break;
+      case "factory": {
+        ctx.fillStyle = col.roof;
+        diamond(px, top, a, c);
+        ctx.fill();
+        // saw-tooth skylights along the roof
+        ctx.fillStyle = col.roofDark;
+        for (let k = 0; k < 3; k++) {
+          const t = (k + 0.5) / 3;
+          const x0 = px - a + a * t;
+          const y0 = top - c + c * t;
+          ctx.beginPath();
+          ctx.moveTo(x0, y0 + c * 0.55);
+          ctx.lineTo(x0 + a * 0.45, y0 + c);
+          ctx.lineTo(x0 + a * 0.45, y0 + c - 4);
+          ctx.closePath();
+          ctx.fill();
+        }
+        // chimney with smoke
+        const cx = px + a * 0.45;
+        const cy = top - c * 0.1;
+        ctx.fillStyle = shade([150, 70, 56], this.day);
+        ctx.fillRect(cx - 1.6, cy - 16, 3.2, 16);
+        ctx.fillStyle = "rgba(220,224,230,0.55)";
+        for (const [dx, dy, r] of [[1, -19, 2.4], [3, -23, 3], [6, -27, 3.6]]) {
+          ctx.beginPath();
+          ctx.arc(cx + dx, cy + dy, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      }
+      case "mansion": {
+        // a low hipped slate roof, gold ridge, and a white portico on the front
+        pyramid(top, a, c, c * 1.1);
+        ctx.strokeStyle = col.trim;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(px - a, top);
+        ctx.lineTo(px, top + c);
+        ctx.lineTo(px + a, top);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(255,255,255,0.9)";
+        for (const t of [0.35, 0.5, 0.65]) ctx.fillRect(px - a + a * t - 0.5, top + c * t, 1, b.floors * FLOOR_PX);
+        break;
+      }
+      case "deco": {
+        // stepped crown of three tiers and a needle, edged in gold
+        let aa = a;
+        let cc = c;
+        let y = top;
+        for (let k = 0; k < 3; k++) {
+          const na = aa * 0.72;
+          const nc = cc * 0.72;
+          const hgt = 6 - k;
+          ctx.fillStyle = col.roof;
+          diamond(px, y, aa, cc);
+          ctx.fill();
+          ctx.fillStyle = col.wl;
+          ctx.beginPath();
+          ctx.moveTo(px - na, y);
+          ctx.lineTo(px, y + nc);
+          ctx.lineTo(px, y + nc - hgt);
+          ctx.lineTo(px - na, y - hgt);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = col.wr;
+          ctx.beginPath();
+          ctx.moveTo(px + na, y);
+          ctx.lineTo(px, y + nc);
+          ctx.lineTo(px, y + nc - hgt);
+          ctx.lineTo(px + na, y - hgt);
+          ctx.closePath();
+          ctx.fill();
+          aa = na;
+          cc = nc;
+          y -= hgt;
+        }
+        ctx.fillStyle = col.trim;
+        diamond(px, y, aa, cc);
+        ctx.fill();
+        ctx.strokeStyle = col.trim;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(px, y);
+        ctx.lineTo(px, y - 14);
+        ctx.stroke();
+        break;
+      }
       case "pagoda":
         pyramid(top, a * 1.3, c * 1.3, c * 1.2);
         ctx.fillStyle = col.wl;
@@ -803,6 +967,22 @@ export class WorldRenderer {
       ctx.lineTo(x - 5, py + 1);
       ctx.closePath();
       ctx.fill();
+    } else if (biome === "oceania") {
+      // palm: a leaning trunk and a crown of fronds
+      ctx.strokeStyle = "rgba(120,90,60,0.95)";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(x, py + 1);
+      ctx.quadraticCurveTo(x + 1, py - 6, x + 3, py - 11);
+      ctx.stroke();
+      ctx.strokeStyle = this.tree[i];
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      for (const [dx, dy] of [[-6, 2], [6, 2], [-4, -3], [5, -3], [0, -5]]) {
+        ctx.moveTo(x + 3, py - 11);
+        ctx.quadraticCurveTo(x + 3 + dx * 0.5, py - 13 + dy * 0.3, x + 3 + dx, py - 11 + dy);
+      }
+      ctx.stroke();
     } else if (biome === "desert" || biome === "savanna") {
       ctx.fillRect(x - 0.8, py - 8, 1.6, 9);
       ctx.beginPath();
@@ -817,6 +997,34 @@ export class WorldRenderer {
       ctx.arc(x + 1.5, py - 4.5, 3.4, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+
+  /** A small airliner seen from above, nose along the tile axis. */
+  private drawPlane(ctx: CanvasRenderingContext2D, px: number, py: number, ax: "x" | "y", k: number) {
+    // screen directions of the tile axes
+    const f = ax === "x" ? { x: TW / 2, y: TH / 2 } : { x: -TW / 2, y: TH / 2 };
+    const s = ax === "x" ? { x: -TW / 2, y: TH / 2 } : { x: TW / 2, y: TH / 2 };
+    const P = (u: number, v: number) => ({ x: px + (f.x * u + s.x * v) * k, y: py - 3 + (f.y * u + s.y * v) * k });
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.beginPath();
+    ctx.ellipse(px + 1, py + 1, 9 * k, 4 * k, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = this.isNight ? "#c8d0e0" : "#ffffff";
+    const poly = (pts: [number, number][]) => {
+      ctx.beginPath();
+      pts.forEach(([u, v], n) => {
+        const q = P(u, v);
+        if (n) ctx.lineTo(q.x, q.y);
+        else ctx.moveTo(q.x, q.y);
+      });
+      ctx.closePath();
+      ctx.fill();
+    };
+    poly([[-0.42, -0.04], [0.4, -0.04], [0.46, 0], [0.4, 0.04], [-0.42, 0.04]]); // fuselage
+    poly([[0.02, -0.04], [-0.12, -0.36], [-0.18, -0.36], [-0.1, -0.04], [-0.1, 0.04], [-0.18, 0.36], [-0.12, 0.36], [0.02, 0.04]]); // wings
+    poly([[-0.34, -0.03], [-0.44, -0.14], [-0.47, -0.14], [-0.42, 0], [-0.47, 0.14], [-0.44, 0.14], [-0.34, 0.03]]); // tail
+    ctx.fillStyle = "#3a8fd6";
+    poly([[0.3, -0.035], [0.38, -0.03], [0.38, 0.03], [0.3, 0.035]]);
   }
 
   private axis(x: number, y: number, kinds: Kind[]): "x" | "y" {

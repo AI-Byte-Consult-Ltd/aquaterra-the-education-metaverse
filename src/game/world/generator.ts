@@ -11,7 +11,8 @@
  *
  * The generator is pure and deterministic: the same seed gives the same world.
  */
-import { DISTRICT_NAMES, streetNamer } from "./names";
+import { streetNamer } from "./names";
+import { BIOMES, REGIONS, region, type Biome, type RegionSpec } from "./regions";
 import { MinHeap, fbm, ridged, rng, valueNoise } from "./noise";
 
 export const KINDS = [
@@ -42,29 +43,21 @@ export const KINDS = [
 export type Kind = (typeof KINDS)[number];
 const K = Object.fromEntries(KINDS.map((k, i) => [k, i])) as Record<Kind, number>;
 
-export const BIOMES = [
-  "metropolis",
-  "temperate",
-  "tundra",
-  "desert",
-  "jungle",
-  "savanna",
-  "wetland",
-  "volcanic",
-  "autumn",
-  "blossom",
-] as const;
-export type Biome = (typeof BIOMES)[number];
+export { BIOMES, type Biome } from "./regions";
 
 export interface WorldParams {
   seed: number;
   size: number;
+  /** Side of the square that holds the main continent; the rest of the map is open sea and Oceania. */
+  landSize: number;
   districts: number;
+  /** Island districts of Oceania, an archipelago south-east of the continent. */
+  oceania: number;
   rivers: number;
   airports: number;
 }
 
-export const DEFAULT_WORLD: WorldParams = { seed: 20261122, size: 320, districts: 30, rivers: 24, airports: 2 };
+export const DEFAULT_WORLD: WorldParams = { seed: 20261122, size: 440, landSize: 320, districts: 30, oceania: 4, rivers: 24, airports: 2 };
 
 export interface District {
   id: number;
@@ -86,15 +79,16 @@ export interface Road {
 
 export interface Plot {
   id: number;
-  /** Postal address, e.g. "12 Coral Street". */
+  /** Postal address, e.g. "12 Coral Street", or "Isle 7, Pearl Atolls" for an island of its own. */
   address: string;
   number: number;
+  /** Street of the address, -1 for an island plot. */
   road: number;
   district: number;
   tiles: number[];
   anchor: { x: number; y: number };
   /** Main landscape of the plot. */
-  landscape: "meadow" | "forest" | "hillside" | "beachfront";
+  landscape: "meadow" | "forest" | "hillside" | "beachfront" | "island";
   waterView: boolean;
   /** Straight-line distance to the tower in tiles. */
   distance: number;
@@ -114,6 +108,8 @@ export interface World {
   kind: Uint8Array;
   /** Terrain height: < 0 water, 0..1 land. */
   height: Float32Array;
+  /** 1 where the tile belongs to Oceania (sea and islands), else 0. */
+  zone: Uint8Array;
   /** District id per tile, -1 for open water. */
   district: Int16Array;
   /** Plot id per tile, -1 if none. */
@@ -137,8 +133,12 @@ const ROADLIKE = new Set<number>([K.road, K.street, K.bridge, K.plaza]);
 
 export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
   const { size, seed } = params;
+  const L = params.landSize;
   const N = size * size;
-  const center = Math.floor(size / 2);
+  // the continent keeps its shape whatever the map size; extra room goes to the south-east sea
+  const off = Math.min(10, Math.floor((size - L) / 2));
+  const center = Math.floor(L / 2) + off;
+  const zone = new Uint8Array(N);
   const rand = rng(seed);
   const kind = new Uint8Array(N);
   const height = new Float32Array(N);
@@ -163,10 +163,26 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
     const r = 0.62 + islandRand() * 0.28;
     return { x: Math.cos(a) * r, y: Math.sin(a) * r, s: 0.04 + islandRand() * 0.07, h: 0.35 + islandRand() * 0.35 };
   });
+  // Oceania: a wide lagoon of countless small islands, a few larger ones and atolls
+  const oceRand = rng(seed + 89);
+  const OCE = { x: 1.2, y: 1.18, r: 0.5 };
+  const oceWarp = fbm(seed + 91, 3);
+  const isle = valueNoise(seed + 93);
+  const isle2 = valueNoise(seed + 95);
+  // larger islands of four kinds: mountainous, flat, forested and ring-shaped atolls
+  const bigIsles = Array.from({ length: 16 }, (_, k) => {
+    const a = oceRand() * Math.PI * 2;
+    const r = Math.sqrt(oceRand()) * OCE.r * 0.82;
+    const type = (["mountain", "flat", "forest", "atoll"] as const)[k % 4];
+    const s = 0.02 + oceRand() * 0.035;
+    const h = type === "mountain" ? 0.6 + oceRand() * 0.35 : type === "flat" ? 0.09 + oceRand() * 0.05 : type === "forest" ? 0.2 + oceRand() * 0.12 : 0.1;
+    return { x: OCE.x + Math.cos(a) * r, y: OCE.y + Math.sin(a) * r, s, h, atoll: type === "atoll" };
+  });
+  const oceMask = new Float32Array(N);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const nx = (x / size) * 2 - 1;
-      const ny = (y / size) * 2 - 1;
+      const nx = ((x - off) / L) * 2 - 1;
+      const ny = ((y - off) / L) * 2 - 1;
       const wx = nx + 0.45 * warpX(nx * 1.3 + 5, ny * 1.3 + 5);
       const wy = ny + 0.45 * warpY(nx * 1.3 - 7, ny * 1.3 - 7);
       // continent shape: noisy, stretched, not a circle
@@ -180,9 +196,27 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
         if (bump > 0.08) h = Math.max(h, is.h * bump - 0.14 + base(wx * 4, wy * 4) * 0.12);
       }
       if (h > 0) h += Math.pow(ridge(nx * 2.6, ny * 2.6), 3) * mm * 1.25 * Math.min(1, h * 4);
-      h += detail(x / 6, y / 6) * 0.025;
+      h += detail((x - off) / 6, (y - off) / 6) * 0.025;
+      if (params.oceania > 0) {
+        const od = Math.hypot((nx - OCE.x) * 1.15, ny - OCE.y) + oceWarp(nx * 2.5, ny * 2.5) * 0.12;
+        const m = Math.min(1, Math.max(0, (OCE.r - od) / 0.12));
+        if (m > 0) {
+          oceMask[idx(x, y)] = m;
+          // a shallow shelf; small islands where fine noise peaks, denser towards the middle
+          const t = isle(x / 3.2, y / 3.2) * 0.65 + isle2(x / 9, y / 9) * 0.35;
+          const thr = 0.42 - 0.12 * m;
+          let oh = t > thr ? 0.004 + (t - thr) * 0.5 : -0.02 - (thr - t) * 0.08;
+          for (const b of bigIsles) {
+            const di = Math.hypot(nx - b.x, ny - b.y);
+            const bump = b.atoll ? Math.exp(-(((di - b.s * 1.4) / (b.s * 0.45)) ** 2)) : Math.exp(-((di / b.s) ** 2));
+            if (bump > 0.1) oh = Math.max(oh, b.h * bump - 0.04 + isle(x / 4, y / 4) * 0.03);
+          }
+          h = h * (1 - m) + Math.max(h, oh) * m;
+        }
+      }
       // flat, safe ground for the capital around the tower
       const dc = Math.hypot(nx, ny);
+      if (oceMask[idx(x, y)] > 0.3) zone[idx(x, y)] = 1;
       const w = Math.exp(-((dc / 0.11) ** 2));
       h = h * (1 - w) + 0.14 * w;
       height[idx(x, y)] = h;
@@ -200,9 +234,14 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
   }
 
   // --- 2. districts (climate zones) ------------------------------------------------
-  const districts: District[] = [{ id: 0, name: DISTRICT_NAMES.metropolis[0], biome: "metropolis", x: center, y: center, capital: true }];
+  const districts: District[] = [{ id: 0, name: REGIONS.metropolis.names[0], biome: "metropolis", x: center, y: center, capital: true }];
   const landCandidates: number[] = [];
-  for (let i = 0; i < N; i++) if (height[i] > 0.03 && height[i] < 0.5) landCandidates.push(i);
+  // continental towns, in the continent's own tile order so the mainland is the same at any map size
+  for (let ly = 0; ly < L; ly++)
+    for (let lx = 0; lx < L; lx++) {
+      const i = idx(lx + off, ly + off);
+      if (height[i] > 0.03 && height[i] < 0.5 && !zone[i]) landCandidates.push(i);
+    }
   for (let tries = 0; tries < 6000 && districts.length < params.districts; tries++) {
     const i = landCandidates[Math.floor(rand() * landCandidates.length)];
     const x = i % size;
@@ -215,8 +254,8 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
   const moist = fbm(seed + 97, 3);
   const used: Partial<Record<Biome, number>> = {};
   const scored = districts.slice(1).map((d) => {
-    const lat = (d.y / size) * 2 - 1; // -1 north … 1 south
-    const m = moist((d.x / size) * 3, (d.y / size) * 3);
+    const lat = ((d.y - off) / L) * 2 - 1; // -1 north … 1 south
+    const m = moist(((d.x - off) / L) * 3, ((d.y - off) / L) * 3);
     const alt = height[idx(d.x, d.y)];
     return { d, lat, m, alt };
   });
@@ -224,48 +263,53 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
   // a cap per climate keeps the world varied (frozen north next to jungle and dunes).
   const cap = Math.ceil((districts.length - 1) / 7);
   const count: Partial<Record<Biome, number>> = {};
-  const fit = (b: Biome, lat: number, m: number, alt: number) => {
-    switch (b) {
-      case "tundra":
-        return -lat * 2 + alt;
-      case "desert":
-        return lat * 1.5 - m * 1.5;
-      case "jungle":
-        return lat * 1.5 + m * 1.5;
-      case "savanna":
-        return lat * 0.8 - Math.abs(m) * 0.5 + 0.2;
-      case "wetland":
-        return m * 2 - alt * 2;
-      case "volcanic":
-        return alt * 3 - 1;
-      case "autumn":
-        return -lat * 0.8 + m * 0.5;
-      case "blossom":
-        return 0.3 - Math.abs(lat) + m * 0.6;
-      case "temperate":
-        return 0.2 - Math.abs(lat) * 0.5;
-      default:
-        return -9;
+  const site = (s: (typeof scored)[number]) => ({ lat: s.lat, moist: s.m, alt: s.alt, dist: Math.hypot(s.d.x - center, s.d.y - center) });
+  const taken = new Set<(typeof scored)[number]>();
+  // landmark districts first, in table order: each takes the best-scoring free sites
+  for (const b of BIOMES) {
+    const lm = (region(b) as RegionSpec).landmark;
+    if (!lm) continue;
+    const ranked = scored
+      .filter((s) => !taken.has(s))
+      .map((s) => ({ s, v: lm.score(site(s)) }))
+      .filter((o) => o.v > -Infinity)
+      .sort((a, c) => c.v - a.v)
+      .slice(0, lm.count);
+    for (const { s } of ranked) {
+      s.d.biome = b;
+      taken.add(s);
+      count[b] = (count[b] ?? 0) + 1;
     }
-  };
-  // the two highest districts are volcanic ridges
-  const volcanic = [...scored].sort((a, b) => b.alt - a.alt).slice(0, 2);
-  for (const v of volcanic) v.d.biome = "volcanic";
-  count.volcanic = volcanic.length;
+  }
+  // the rest share out the climates by fit, with a cap per climate so the world stays varied
+  const climates = BIOMES.filter((b) => (region(b) as RegionSpec).fit);
   for (const s of [...scored].sort(() => rand() - 0.5)) {
-    if (volcanic.includes(s)) continue;
-    const prefs = (BIOMES.filter((b) => b !== "metropolis") as Biome[])
-      .map((b) => ({ b, v: fit(b, s.lat, s.m, s.alt) + rand() * 0.25 }))
-      .sort((a, b) => b.v - a.v);
+    if (taken.has(s)) continue;
+    const prefs = climates.map((b) => ({ b, v: (region(b) as RegionSpec).fit!(site(s)) + rand() * 0.25 })).sort((a, c) => c.v - a.v);
     const pick = prefs.find((p) => (count[p.b] ?? 0) < cap) ?? prefs[0];
     s.d.biome = pick.b;
     count[pick.b] = (count[pick.b] ?? 0) + 1;
   }
   for (const d of districts.slice(1)) {
-    const list = DISTRICT_NAMES[d.biome];
+    const list = REGIONS[d.biome].names;
     const n = used[d.biome] ?? 0;
     used[d.biome] = n + 1;
     d.name = n < list.length ? list[n] : `${list[n % list.length]} ${["East", "West", "North", "South"][Math.floor(n / list.length) % 4]}`;
+  }
+  // Oceania's island towns, on its larger islands
+  const oceaniaFrom = districts.length;
+  {
+    const cands: number[] = [];
+    for (let i = 0; i < N; i++) if (zone[i] && height[i] > 0.04) cands.push(i);
+    for (let tries = 0; tries < 4000 && districts.length - oceaniaFrom < params.oceania && cands.length; tries++) {
+      const i = cands[Math.floor(rand() * cands.length)];
+      const x = i % size;
+      const y = (i - x) / size;
+      if (districts.some((d) => Math.hypot(d.x - x, d.y - y) < 26)) continue;
+      const k = districts.length - oceaniaFrom;
+      const names = REGIONS.oceania.names;
+      districts.push({ id: districts.length, name: names[k % names.length], biome: "oceania", x, y, capital: false });
+    }
   }
   // assign tiles: nearest centre in a noise-warped metric, so borders are irregular
   const bx = fbm(seed + 131, 3);
@@ -274,13 +318,15 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
     for (let x = 0; x < size; x++) {
       const i = idx(x, y);
       if (height[i] < 0) continue;
-      const px = x + bx(x / 35, y / 35) * 24;
-      const py = y + by(x / 35, y / 35) * 24;
+      const px = x + bx((x - off) / 35, (y - off) / 35) * 24;
+      const py = y + by((x - off) / 35, (y - off) / 35) * 24;
       let best = 0;
       let bd = Infinity;
       for (const d of districts) {
-        const dd = (d.x - px) ** 2 + (d.y - py) ** 2 * (d.capital ? 1 : 1);
-        const weight = d.capital ? 0.55 : 1; // capital district is a bit larger
+        if ((d.biome === "oceania") !== (zone[i] === 1) && districts.length > oceaniaFrom) continue;
+        const dd = (d.x - px) ** 2 + (d.y - py) ** 2;
+        // regions with a small "area" factor claim more ground (capital, great forest, great desert…)
+        const weight = region(d.biome).area;
         if (dd * weight < bd) {
           bd = dd * weight;
           best = d.id;
@@ -294,24 +340,12 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
 
   // --- 3. forests ----------------------------------------------------------------------
   const forestN = fbm(seed + 151, 4);
-  const forestThreshold: Record<Biome, number> = {
-    metropolis: 0.42,
-    temperate: 0.08,
-    tundra: 0.12,
-    desert: 0.55,
-    jungle: -0.25,
-    savanna: 0.35,
-    wetland: 0.15,
-    volcanic: 0.4,
-    autumn: -0.05,
-    blossom: 0.05,
-  };
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = idx(x, y);
       if (kind[i] !== K.land && kind[i] !== K.hill) continue;
       if (dist2c(x, y) < 18) continue;
-      if (forestN(x / 22, y / 22) > forestThreshold[biomeAt(i)]) kind[i] = K.forest;
+      if (forestN((x - off) / 22, (y - off) / 22) > region(biomeAt(i)).forest) kind[i] = K.forest;
     }
   }
 
@@ -321,9 +355,9 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
     for (let x = 0; x < size; x++) {
       const i = idx(x, y);
       const k = kind[i];
-      if ((k !== K.land && k !== K.forest) || height[i] < 0.08 || height[i] > 0.38 || dist2c(x, y) < 24) continue;
-      const bonus = biomeAt(i) === "wetland" ? 0.12 : biomeAt(i) === "desert" ? -0.15 : 0;
-      if (lakeN(x / 14, y / 14) + bonus > 0.5) kind[i] = K.lake;
+      if ((k !== K.land && k !== K.forest) || zone[i] || height[i] < 0.08 || height[i] > 0.38 || dist2c(x, y) < 24) continue;
+      const bonus = region(biomeAt(i)).lakes;
+      if (lakeN((x - off) / 14, (y - off) / 14) + bonus > 0.5) kind[i] = K.lake;
     }
   }
 
@@ -394,13 +428,27 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
   const airports: Airport[] = [];
   const airportGates: { gate: number; ax: number; ay: number }[] = [];
   // --- 9. airports ------------------------------------------------------------------------
-  const RUNWAY = 22;
+  // the airport district gets the big international airport, the others a regional one
+  const hub = districts.find((d) => d.biome === "airport");
   for (let a = 0; a < params.airports; a++) {
+    const RUNWAY = a === 0 && hub ? 34 : 22;
     let best: { x: number; y: number; horiz: boolean; score: number } | null = null;
     for (let tries = 0; tries < 5000; tries++) {
-      const horiz = rand() < 0.5;
-      const x0 = Math.floor(rand() * (size - RUNWAY - 8)) + 4;
-      const y0 = Math.floor(rand() * (size - RUNWAY - 8)) + 4;
+      // the hub airport scans every spot around its district's town; regional ones search at random
+      const HUB_SPOTS = 31 * 31 * 2;
+      if (a === 0 && hub && tries === HUB_SPOTS && best) break;
+      const atHub = a === 0 && !!hub && tries < HUB_SPOTS;
+      let horiz = rand() < 0.5;
+      let x0 = Math.floor(rand() * (size - RUNWAY - 8)) + 4;
+      let y0 = Math.floor(rand() * (size - RUNWAY - 8)) + 4;
+      if (atHub && hub) {
+        horiz = tries % 2 === 0;
+        const cell = Math.floor(tries / 2);
+        x0 = hub.x - Math.floor(RUNWAY / 2) + ((cell % 31) - 15) * 2;
+        y0 = hub.y - Math.floor(RUNWAY / 2) + (Math.floor(cell / 31) - 15) * 2;
+        if (x0 < 4 || y0 < 4 || x0 + RUNWAY + 4 > size || y0 + RUNWAY + 4 > size) continue;
+        if (Math.hypot(x0 + RUNWAY / 2 - hub.x, y0 + RUNWAY / 2 - hub.y) < 6) continue; // leave the town square
+      }
       const w = horiz ? RUNWAY : 6;
       const h = horiz ? 6 : RUNWAY;
       if (Math.hypot(x0 - center, y0 - center) < 50) continue;
@@ -412,7 +460,7 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
       for (let y = y0; y < y0 + h && ok; y++)
         for (let x = x0; x < x0 + w; x++) {
           const k = kind[idx(x, y)];
-          if (!(k === K.land || k === K.forest || k === K.beach)) {
+          if (!(k === K.land || k === K.forest || k === K.beach || (atHub && (k === K.hill || k === K.river)))) {
             ok = false;
             break;
           }
@@ -421,7 +469,7 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
           hmin = Math.min(hmin, hh);
           hmax = Math.max(hmax, hh);
         }
-      if (!ok || hmax - hmin > 0.2) continue;
+      if (!ok || hmax - hmin > (atHub ? 0.3 : 0.2)) continue;
       const score = hmax - hmin + hs / (w * h) * 0.2 + rand() * 0.02;
       if (!best || score < best.score) best = { x: x0, y: y0, horiz, score };
     }
@@ -434,12 +482,12 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
         const y = horiz ? y0 + b2 : y0 + a2;
         const i = idx(x, y);
         height[i] = flat;
-        kind[i] = b2 < 2 ? K.runway : b2 >= 3 && a2 >= RUNWAY / 2 - 3 && a2 < RUNWAY / 2 + 3 ? (b2 >= 4 ? K.terminal : K.apron) : K.apron;
+        kind[i] = b2 < 2 ? K.runway : b2 >= 3 && Math.abs(a2 - RUNWAY / 2) < (RUNWAY > 30 ? 7 : 3) ? (b2 >= 4 ? K.terminal : K.apron) : K.apron;
       }
     const ax = horiz ? x0 + RUNWAY / 2 : x0 + 5;
     const ay = horiz ? y0 + 5 : y0 + RUNWAY / 2;
     const did = district[idx(ax, ay)];
-    airports.push({ name: `${districts[did]?.name ?? "AquaTerra"} Airport`, x: ax, y: ay, district: did });
+    airports.push({ name: `${districts[did]?.name ?? "AquaTerra"} ${a === 0 && hub ? "International Airport" : "Airport"}`, x: ax, y: ay, district: did });
     airportGates.push({ gate: idx(horiz ? ax : x0 + 6, horiz ? y0 + 6 : ay), ax, ay });
   }
 
@@ -490,7 +538,7 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
     const k = kind[i];
     const x = i % size;
     const y = (i - x) / size;
-    const j = 1 + (jitter(x / 5, y / 5) + 1) * 0.35;
+    const j = 1 + (jitter((x - off) / 5, (y - off) / 5) + 1) * 0.35;
     switch (k) {
       case K.road:
       case K.street:
@@ -772,7 +820,7 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
     let dTown = Infinity;
     for (const d of districts) if (!d.capital) dTown = Math.min(dTown, Math.hypot(d.x - x, d.y - y));
     const urban = Math.max(Math.exp(-((dTower / 30) ** 2)), 0.7 * Math.exp(-((dTown / 14) ** 2)));
-    const variety = 0.55 + (sizeN(x / 7, y / 7) + 1) * 0.6 + rand() * 0.5; // big and small plots side by side
+    const variety = 0.55 + (sizeN((x - off) / 7, (y - off) / 7) + 1) * 0.6 + rand() * 0.5; // big and small plots side by side
     const r = (1.15 + (1 - urban) * 2.3) * variety;
     const cx = Math.floor(x / cell);
     const cy = Math.floor(y / cell);
@@ -926,6 +974,53 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
     }
   }
 
+  // --- 12. Oceania: every small island without a plot is a plot of its own ------------------
+  const isleCount = new Map<number, number>();
+  const seenIsle = new Uint8Array(N);
+  for (let i0 = 0; i0 < N; i0++) {
+    if (!zone[i0] || seenIsle[i0] || plotOf[i0] >= 0 || !BUILDABLE.has(kind[i0])) continue;
+    const comp: number[] = [i0];
+    seenIsle[i0] = 1;
+    for (let q = 0; q < comp.length; q++) {
+      const x = comp[q] % size;
+      const y = (comp[q] - x) / size;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (!inb(x + dx, y + dy)) continue;
+        const j = idx(x + dx, y + dy);
+        if (seenIsle[j] || plotOf[j] >= 0 || !BUILDABLE.has(kind[j])) continue;
+        seenIsle[j] = 1;
+        comp.push(j);
+      }
+    }
+    if (comp.length < 2 || comp.length > 40) continue;
+    let sx = 0;
+    let sy = 0;
+    for (const t of comp) {
+      sx += t % size;
+      sy += Math.floor(t / size);
+    }
+    const cx = sx / comp.length;
+    const cy = sy / comp.length;
+    const anchorT = comp.reduce((a, t) => (Math.hypot((t % size) - cx, Math.floor(t / size) - cy) < Math.hypot((a % size) - cx, Math.floor(a / size) - cy) ? t : a));
+    const dId = district[anchorT];
+    const number = (isleCount.get(dId) ?? 0) + 1;
+    isleCount.set(dId, number);
+    const id = plots.length;
+    for (const t of comp) plotOf[t] = id;
+    plots.push({
+      id,
+      address: `Isle ${number}, ${districts[dId]?.name ?? "Oceania"}`,
+      number,
+      road: -1,
+      district: dId,
+      tiles: comp,
+      anchor: { x: anchorT % size, y: Math.floor(anchorT / size) },
+      landscape: "island",
+      waterView: true,
+      distance: Math.hypot(cx - center, cy - center),
+    });
+  }
+
   // --- stats --------------------------------------------------------------------------------
   let roadTiles = 0;
   let bridgeTiles = 0;
@@ -946,6 +1041,7 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
     size,
     center,
     kind,
+    zone,
     height,
     district,
     plotOf,
@@ -961,9 +1057,11 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
 
 export function findPlotByAddress(world: World, query: string): Plot | undefined {
   const q = query.trim().toLowerCase().replace(/\s+/g, " ");
+  const exact = world.plots.find((p) => p.address.toLowerCase() === q);
+  if (exact) return exact;
   const m = q.match(/^(\d+)\s+(.+)$/);
   if (!m) return undefined;
   const num = Number(m[1]);
   const street = m[2];
-  return world.plots.find((p) => p.number === num && world.roads[p.road].name.toLowerCase() === street);
+  return world.plots.find((p) => p.road >= 0 && p.number === num && world.roads[p.road].name.toLowerCase() === street);
 }

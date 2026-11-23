@@ -1,18 +1,7 @@
-import type { Biome } from "./generator";
+import { REGIONS, type Biome } from "./regions";
 
-/** District names per climate. Original names, picked without repeats. */
-export const DISTRICT_NAMES: Record<Biome, string[]> = {
-  metropolis: ["First Light City"],
-  temperate: ["Greenhaven", "Meadowmere", "Willowbrook", "Clearwater", "Fairfield Vale", "Hollowmere"],
-  tundra: ["Frostvale", "Glacier Reach", "Snowcrest", "Icefjord", "Whitepeak", "Borealis"],
-  desert: ["Sunreach Dunes", "Amber Sands", "Mirage Flats", "Saffron Basin", "Dustwind", "Goldmesa"],
-  jungle: ["Verdant Canopy", "Emerald Deep", "Monsoon Wilds", "Orchid Hollow", "Vinewood", "Rainheart"],
-  savanna: ["Goldgrass Plains", "Lionfall Steppe", "Acacia Rise", "Sunburnt Range", "Tallgrass"],
-  wetland: ["Mistmarsh", "Reedwater", "Lotus Fen", "Heron Delta", "Fogmere"],
-  volcanic: ["Ember Fields", "Obsidian Ridge", "Cinder Heights", "Ashfall"],
-  autumn: ["Amberwood", "Maple Crown", "Copperleaf", "Rustfield", "Harvest Hollow"],
-  blossom: ["Sakura Terrace", "Petalbrook", "Blossom Isle", "Lantern Gardens"],
-};
+/** District names per region, from the region table. */
+export const DISTRICT_NAMES = Object.fromEntries(Object.entries(REGIONS).map(([b, r]) => [b, r.names])) as Record<Biome, string[]>;
 
 const STREET_A = [
   "Coral", "Harbor", "Lumen", "Cedar", "Signal", "Aurora", "Quartz", "Willow", "Beacon", "Tidal", "Nova", "Orchard",

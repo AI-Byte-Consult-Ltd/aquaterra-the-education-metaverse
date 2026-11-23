@@ -70,6 +70,43 @@ describe("world generator", () => {
     expect(landscapes.size).toBeGreaterThanOrEqual(3);
   });
 
+  it("has Oceania: many islands of their own, of different kinds, reached by bridges", () => {
+    const oce = world.districts.filter((d) => d.biome === "oceania");
+    expect(oce.length).toBe(DEFAULT_WORLD.oceania);
+    const isles = world.plots.filter((p) => p.landscape === "island");
+    expect(isles.length).toBeGreaterThan(60);
+    expect(new Set(isles.map((p) => p.address)).size).toBe(isles.length);
+    const zoneKinds = new Set<Kind>();
+    for (let i = 0; i < n * n; i++) if (world.zone[i]) zoneKinds.add(kindAt(i));
+    for (const k of ["mountain", "forest", "beach", "land", "shallow"] as Kind[]) expect(zoneKinds.has(k), k).toBe(true);
+    expect(findPlotByAddress(world, isles[0].address)?.id).toBe(isles[0].id);
+  });
+
+  it("has a great forest district covered in woods", () => {
+    const woods = world.districts.find((d) => d.biome === "woodland")!;
+    expect(woods).toBeDefined();
+    let land = 0;
+    let forest = 0;
+    for (let i = 0; i < n * n; i++)
+      if (world.district[i] === woods.id && ["land", "hill", "forest"].includes(kindAt(i))) {
+        land++;
+        if (kindAt(i) === "forest") forest++;
+      }
+    expect(forest / land).toBeGreaterThan(0.8);
+  });
+
+  it("has a great desert of sand only", () => {
+    const sands = world.districts.find((d) => d.biome === "dunes")!;
+    expect(sands).toBeDefined();
+    let tiles = 0;
+    for (let i = 0; i < n * n; i++)
+      if (world.district[i] === sands.id) {
+        tiles++;
+        expect(["forest", "lake"]).not.toContain(kindAt(i));
+      }
+    expect(tiles).toBeGreaterThan(1200);
+  });
+
   it("finds a plot by its address", () => {
     const p = world.plots[100];
     expect(findPlotByAddress(world, p.address)?.id).toBe(100);
