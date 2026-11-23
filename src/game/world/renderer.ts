@@ -133,13 +133,14 @@ export class WorldRenderer {
     this.left = new Array(n);
     this.right = new Array(n);
     this.tree = new Array(n);
+    const lagoon = new Set([1, ...w.expansions.filter((e) => e.lagoon).map((e) => e.zone)]);
     for (let i = 0; i < n; i++) {
       const k = this.kinds[i];
       const d = w.district[i];
       const biome = d >= 0 ? w.districts[d].biome : "temperate";
       // every district has its own slight tint so neighbours of one climate stay distinct
       const tint = d >= 0 && !WATER.includes(k) ? 0.92 + ((d * 37) % 13) / 100 : 1;
-      const c = w.zone[i] && (k === "shallow" || k === "ocean") ? (k === "shallow" ? LAGOON : ([40, 150, 190] as RGB)) : baseColor(k, biome);
+      const c = lagoon.has(w.zone[i]) && (k === "shallow" || k === "ocean") ? (k === "shallow" ? LAGOON : ([40, 150, 190] as RGB)) : baseColor(k, biome);
       this.top[i] = shade(c, this.day, tint);
       this.left[i] = shade(c, this.day, tint * 0.74);
       this.right[i] = shade(c, this.day, tint * 0.6);

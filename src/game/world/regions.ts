@@ -5,6 +5,9 @@
  * strings.ts). The generator, the colours, the trees and the house catalogue all
  * read from this table, so nothing else has to change. The order of entries is
  * the order landmark districts are placed in.
+ *
+ * To add a whole new land (an island or an archipelago) without changing anything
+ * that already exists, add an entry at the end of expansions.ts.
  */
 import type { RGB } from "./palette";
 
@@ -215,6 +218,17 @@ export const REGIONS = {
     lakes: -9,
     area: 1,
     houses: ["bungalow", "bungalow", "villa"],
+    sea: true,
+  },
+  isles: {
+    names: ["Stormcrest Isles", "Saltwind Isles", "Driftstone Isles", "Gullrock Isles", "Kelpwater Isles", "Cragmoor Isles"],
+    ground: g([118, 186, 102], [64, 146, 84], [116, 150, 96], [104, 108, 100], [228, 232, 236], [238, 226, 186], [30, 120, 70]),
+    forest: 0.05,
+    lakes: -9,
+    area: 1,
+    houses: ["villa", "lodge", "bungalow"],
+    coastHouse: "resort",
+    // a land added later (see expansions.ts): rugged green islands with mountains
     sea: true,
   },
 } satisfies Record<string, RegionSpec>;
