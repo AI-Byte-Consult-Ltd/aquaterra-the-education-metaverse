@@ -13,6 +13,7 @@
  */
 import { streetNamer } from "./names";
 import { BIOMES, REGIONS, region, type Biome, type RegionSpec } from "./regions";
+import { EXPANSIONS, MARGIN } from "./expansions";
 import { MinHeap, fbm, ridged, rng, valueNoise } from "./noise";
 
 export const KINDS = [
@@ -55,6 +56,8 @@ export interface WorldParams {
   oceania: number;
   rivers: number;
   airports: number;
+  /** How many lands from expansions.ts to raise (default: all). Earlier lands never change when later ones are added. */
+  lands?: number;
 }
 
 export const DEFAULT_WORLD: WorldParams = { seed: 20261122, size: 440, landSize: 320, districts: 30, oceania: 4, rivers: 24, airports: 2 };
@@ -108,7 +111,7 @@ export interface World {
   kind: Uint8Array;
   /** Terrain height: < 0 water, 0..1 land. */
   height: Float32Array;
-  /** 1 where the tile belongs to Oceania (sea and islands), else 0. */
+  /** 0 the continent, 1 Oceania (sea and islands), 2 and up a land from expansions.ts. */
   zone: Uint8Array;
   /** District id per tile, -1 for open water. */
   district: Int16Array;
@@ -122,6 +125,8 @@ export interface World {
   airports: Airport[];
   stations: { x: number; y: number; district: number }[];
   stats: { roadTiles: number; railTiles: number; bridgeTiles: number; riverTiles: number; landTiles: number };
+  /** Lands added later (expansions.ts): their zone value, whether their sea is lagoon-coloured, and their districts. */
+  expansions: { name: string; zone: number; lagoon: boolean; districts: number[] }[];
 }
 
 export const kindName = (w: World, i: number): Kind => KINDS[w.kind[i]];
@@ -774,251 +779,492 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
   }
 
   // --- 11. plots: irregular parcels grown from seeds along the streets ---------------------
-  // distance from streets through buildable land
-  const MAXDEPTH = 6;
-  const roadDist = new Int16Array(N).fill(-1);
-  const roadNear = new Int32Array(N).fill(-1); // nearest road tile
-  const queue: number[] = [];
-  for (let i = 0; i < N; i++)
-    if (kind[i] === K.road || kind[i] === K.street) {
-      roadDist[i] = 0;
-      roadNear[i] = i;
-      queue.push(i);
-    }
-  for (let q = 0; q < queue.length; q++) {
-    const cur = queue[q];
-    if (roadDist[cur] >= MAXDEPTH) continue;
-    const x = cur % size;
-    const y = (cur - x) / size;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const nx2 = x + dx;
-      const ny2 = y + dy;
-      if (!inb(nx2, ny2)) continue;
-      const j = idx(nx2, ny2);
-      if (roadDist[j] >= 0 || !BUILDABLE.has(kind[j])) continue;
-      roadDist[j] = roadDist[cur] + 1;
-      roadNear[j] = roadNear[cur];
-      queue.push(j);
-    }
-  }
-  // seeds by dart throwing: dense near the tower and towns, sparse in the countryside
-  const sizeN = valueNoise(seed + 233);
-  const seeds: { i: number; r: number }[] = [];
-  const grid = new Map<number, number[]>();
-  const cell = 6;
-  const cellKey = (x: number, y: number) => Math.floor(x / cell) * 10000 + Math.floor(y / cell);
-  const buildable: number[] = [];
-  for (let i = 0; i < N; i++) if (roadDist[i] > 0) buildable.push(i);
-  for (let s = buildable.length - 1; s > 0; s--) {
-    const j = Math.floor(rand() * (s + 1));
-    [buildable[s], buildable[j]] = [buildable[j], buildable[s]];
-  }
-  for (const i of buildable) {
-    const x = i % size;
-    const y = (i - x) / size;
-    const dTower = dist2c(x, y);
-    let dTown = Infinity;
-    for (const d of districts) if (!d.capital) dTown = Math.min(dTown, Math.hypot(d.x - x, d.y - y));
-    const urban = Math.max(Math.exp(-((dTower / 30) ** 2)), 0.7 * Math.exp(-((dTown / 14) ** 2)));
-    const variety = 0.55 + (sizeN((x - off) / 7, (y - off) / 7) + 1) * 0.6 + rand() * 0.5; // big and small plots side by side
-    const r = (1.15 + (1 - urban) * 2.3) * variety;
-    const cx = Math.floor(x / cell);
-    const cy = Math.floor(y / cell);
-    let ok = true;
-    for (let gx = cx - 2; gx <= cx + 2 && ok; gx++)
-      for (let gy = cy - 2; gy <= cy + 2 && ok; gy++) {
-        const list = grid.get(gx * 10000 + gy);
-        if (!list) continue;
-        for (const si of list) {
-          const sx2 = seeds[si].i % size;
-          const sy2 = Math.floor(seeds[si].i / size);
-          if (Math.hypot(sx2 - x, sy2 - y) < Math.min(r, seeds[si].r) * 1.1) {
-            ok = false;
-            break;
-          }
-        }
-      }
-    if (!ok) continue;
-    const key = cellKey(x, y);
-    if (!grid.has(key)) grid.set(key, []);
-    grid.get(key)!.push(seeds.length);
-    seeds.push({ i, r });
-  }
-  // grow plots with randomised Dijkstra: organic, irregular borders
-  const cost = new Float64Array(N).fill(Infinity);
-  const owner = new Int32Array(N).fill(-1);
-  const heap = new MinHeap();
-  seeds.forEach((s, n) => {
-    cost[s.i] = 0;
-    owner[s.i] = n;
-    heap.push(0, s.i);
-  });
-  const tileW = new Float32Array(N);
-  for (let i = 0; i < N; i++) tileW[i] = 1 + rand() * 1.1;
-  while (heap.size) {
-    const cur = heap.pop();
-    const o = owner[cur];
-    const x = cur % size;
-    const y = (cur - x) / size;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const nx2 = x + dx;
-      const ny2 = y + dy;
-      if (!inb(nx2, ny2)) continue;
-      const j = idx(nx2, ny2);
-      if (roadDist[j] <= 0) continue;
-      const c = cost[cur] + tileW[j];
-      if (c > seeds[o].r * 2.2) continue; // plots do not sprawl forever
-      if (c < cost[j]) {
-        cost[j] = c;
-        owner[j] = o;
-        heap.push(c, j);
-      }
-    }
-  }
-  const groups = new Map<number, number[]>();
-  for (let i = 0; i < N; i++) {
-    const o = owner[i];
-    if (o < 0 || roadDist[i] <= 0) continue;
-    if (!groups.has(o)) groups.set(o, []);
-    groups.get(o)!.push(i);
-  }
-
-  // frontage: the plot tile closest to a street names the address
-  type Draft = { tiles: number[]; road: number; along: number; side: number };
-  const drafts: Draft[] = [];
-  for (const tiles of groups.values()) {
-    if (tiles.length < 2) continue;
-    let front = tiles[0];
-    for (const t of tiles) if (roadDist[t] < roadDist[front]) front = t;
-    if (roadDist[front] > 2) continue; // must touch (or almost touch) a street
-    const rt = roadNear[front];
-    const road = roadOf[rt];
-    if (road < 0) continue;
-    const rx = rt % size;
-    const ry = (rt - rx) / size;
-    // position along the street, and which side of it the plot lies on
-    const path = roadPaths[road];
-    const pi = roadIdx[rt];
-    const a = path[Math.max(0, pi - 1)];
-    const b = path[Math.min(path.length - 1, pi + 1)];
-    const dx = (b % size) - (a % size);
-    const dy = Math.floor(b / size) - Math.floor(a / size);
-    const fx = front % size;
-    const fy = (front - fx) / size;
-    const cross = dx * (fy - ry) - dy * (fx - rx);
-    drafts.push({ tiles, road, along: pi + (cross > 0 ? 0.5 : 0), side: cross > 0 ? 1 : 0 });
-  }
+  // (a function, so that new lands can grow their own plots with their own random numbers)
   const plots: Plot[] = [];
-  const byRoad = new Map<number, Draft[]>();
-  for (const d of drafts) {
-    if (!byRoad.has(d.road)) byRoad.set(d.road, []);
-    byRoad.get(d.road)!.push(d);
-  }
-  const waterSet = new Set<number>([K.deep, K.ocean, K.shallow, K.lake, K.river]);
-  for (const [road, list] of [...byRoad.entries()].sort((a, b) => a[0] - b[0])) {
-    list.sort((a, b) => a.along - b.along);
-    let odd = 1;
-    let even = 2;
-    for (const d of list) {
-      const number = d.side ? even : odd;
-      if (d.side) even += 2;
-      else odd += 2;
-      const id = plots.length;
-      let sx = 0;
-      let sy = 0;
-      let waterView = false;
-      const counts: Record<string, number> = {};
-      for (const t of d.tiles) {
-        plotOf[t] = id;
-        const x = t % size;
-        const y = (t - x) / size;
-        sx += x;
-        sy += y;
-        const kk = KINDS[kind[t]];
-        counts[kk] = (counts[kk] ?? 0) + 1;
-        if (!waterView)
-          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [0, 2], [-2, 0], [0, -2]]) {
-            if (inb(x + dx, y + dy) && waterSet.has(kind[idx(x + dx, y + dy)])) {
-              waterView = true;
+  const makePlots = (pr: () => number, inArea: (i: number) => boolean) => {
+    // distance from streets through buildable land
+    const MAXDEPTH = 6;
+    const roadDist = new Int16Array(N).fill(-1);
+    const roadNear = new Int32Array(N).fill(-1); // nearest road tile
+    const queue: number[] = [];
+    for (let i = 0; i < N; i++)
+      if (inArea(i) && (kind[i] === K.road || kind[i] === K.street)) {
+        roadDist[i] = 0;
+        roadNear[i] = i;
+        queue.push(i);
+      }
+    for (let q = 0; q < queue.length; q++) {
+      const cur = queue[q];
+      if (roadDist[cur] >= MAXDEPTH) continue;
+      const x = cur % size;
+      const y = (cur - x) / size;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx2 = x + dx;
+        const ny2 = y + dy;
+        if (!inb(nx2, ny2)) continue;
+        const j = idx(nx2, ny2);
+        if (roadDist[j] >= 0 || !BUILDABLE.has(kind[j])) continue;
+        roadDist[j] = roadDist[cur] + 1;
+        roadNear[j] = roadNear[cur];
+        queue.push(j);
+      }
+    }
+    // seeds by dart throwing: dense near the tower and towns, sparse in the countryside
+    const sizeN = valueNoise(seed + 233);
+    const seeds: { i: number; r: number }[] = [];
+    const grid = new Map<number, number[]>();
+    const cell = 6;
+    const cellKey = (x: number, y: number) => Math.floor(x / cell) * 10000 + Math.floor(y / cell);
+    const buildable: number[] = [];
+    for (let i = 0; i < N; i++) if (roadDist[i] > 0 && inArea(i)) buildable.push(i);
+    for (let s = buildable.length - 1; s > 0; s--) {
+      const j = Math.floor(pr() * (s + 1));
+      [buildable[s], buildable[j]] = [buildable[j], buildable[s]];
+    }
+    for (const i of buildable) {
+      const x = i % size;
+      const y = (i - x) / size;
+      const dTower = dist2c(x, y);
+      let dTown = Infinity;
+      for (const d of districts) if (!d.capital) dTown = Math.min(dTown, Math.hypot(d.x - x, d.y - y));
+      const urban = Math.max(Math.exp(-((dTower / 30) ** 2)), 0.7 * Math.exp(-((dTown / 14) ** 2)));
+      const variety = 0.55 + (sizeN((x - off) / 7, (y - off) / 7) + 1) * 0.6 + pr() * 0.5; // big and small plots side by side
+      const r = (1.15 + (1 - urban) * 2.3) * variety;
+      const cx = Math.floor(x / cell);
+      const cy = Math.floor(y / cell);
+      let ok = true;
+      for (let gx = cx - 2; gx <= cx + 2 && ok; gx++)
+        for (let gy = cy - 2; gy <= cy + 2 && ok; gy++) {
+          const list = grid.get(gx * 10000 + gy);
+          if (!list) continue;
+          for (const si of list) {
+            const sx2 = seeds[si].i % size;
+            const sy2 = Math.floor(seeds[si].i / size);
+            if (Math.hypot(sx2 - x, sy2 - y) < Math.min(r, seeds[si].r) * 1.1) {
+              ok = false;
               break;
             }
           }
-      }
-      const cx = sx / d.tiles.length;
-      const cy = sy / d.tiles.length;
-      let anchor = { x: Math.round(cx), y: Math.round(cy) };
-      let bd = Infinity;
-      for (const t of d.tiles) {
-        const x = t % size;
-        const y = (t - x) / size;
-        const dd = (x - cx) ** 2 + (y - cy) ** 2;
-        if (dd < bd) {
-          bd = dd;
-          anchor = { x, y };
+        }
+      if (!ok) continue;
+      const key = cellKey(x, y);
+      if (!grid.has(key)) grid.set(key, []);
+      grid.get(key)!.push(seeds.length);
+      seeds.push({ i, r });
+    }
+    // grow plots with randomised Dijkstra: organic, irregular borders
+    const cost = new Float64Array(N).fill(Infinity);
+    const owner = new Int32Array(N).fill(-1);
+    const heap = new MinHeap();
+    seeds.forEach((s, n) => {
+      cost[s.i] = 0;
+      owner[s.i] = n;
+      heap.push(0, s.i);
+    });
+    const tileW = new Float32Array(N);
+    for (let i = 0; i < N; i++) if (inArea(i)) tileW[i] = 1 + pr() * 1.1;
+    while (heap.size) {
+      const cur = heap.pop();
+      const o = owner[cur];
+      const x = cur % size;
+      const y = (cur - x) / size;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx2 = x + dx;
+        const ny2 = y + dy;
+        if (!inb(nx2, ny2)) continue;
+        const j = idx(nx2, ny2);
+        if (roadDist[j] <= 0) continue;
+        const c = cost[cur] + tileW[j];
+        if (c > seeds[o].r * 2.2) continue; // plots do not sprawl forever
+        if (c < cost[j]) {
+          cost[j] = c;
+          owner[j] = o;
+          heap.push(c, j);
         }
       }
-      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
-      const landscape: Plot["landscape"] = top === "forest" ? "forest" : top === "hill" ? "hillside" : top === "beach" ? "beachfront" : "meadow";
+    }
+    const groups = new Map<number, number[]>();
+    for (let i = 0; i < N; i++) {
+      const o = owner[i];
+      if (o < 0 || roadDist[i] <= 0) continue;
+      if (!groups.has(o)) groups.set(o, []);
+      groups.get(o)!.push(i);
+    }
+
+    // frontage: the plot tile closest to a street names the address
+    type Draft = { tiles: number[]; road: number; along: number; side: number };
+    const drafts: Draft[] = [];
+    for (const tiles of groups.values()) {
+      if (tiles.length < 2) continue;
+      let front = tiles[0];
+      for (const t of tiles) if (roadDist[t] < roadDist[front]) front = t;
+      if (roadDist[front] > 2) continue; // must touch (or almost touch) a street
+      const rt = roadNear[front];
+      const road = roadOf[rt];
+      if (road < 0) continue;
+      const rx = rt % size;
+      const ry = (rt - rx) / size;
+      // position along the street, and which side of it the plot lies on
+      const path = roadPaths[road];
+      const pi = roadIdx[rt];
+      const a = path[Math.max(0, pi - 1)];
+      const b = path[Math.min(path.length - 1, pi + 1)];
+      const dx = (b % size) - (a % size);
+      const dy = Math.floor(b / size) - Math.floor(a / size);
+      const fx = front % size;
+      const fy = (front - fx) / size;
+      const cross = dx * (fy - ry) - dy * (fx - rx);
+      drafts.push({ tiles, road, along: pi + (cross > 0 ? 0.5 : 0), side: cross > 0 ? 1 : 0 });
+    }
+    const byRoad = new Map<number, Draft[]>();
+    for (const d of drafts) {
+      if (!byRoad.has(d.road)) byRoad.set(d.road, []);
+      byRoad.get(d.road)!.push(d);
+    }
+    const waterSet = new Set<number>([K.deep, K.ocean, K.shallow, K.lake, K.river]);
+    for (const [road, list] of [...byRoad.entries()].sort((a, b) => a[0] - b[0])) {
+      list.sort((a, b) => a.along - b.along);
+      let odd = 1;
+      let even = 2;
+      for (const d of list) {
+        const number = d.side ? even : odd;
+        if (d.side) even += 2;
+        else odd += 2;
+        const id = plots.length;
+        let sx = 0;
+        let sy = 0;
+        let waterView = false;
+        const counts: Record<string, number> = {};
+        for (const t of d.tiles) {
+          plotOf[t] = id;
+          const x = t % size;
+          const y = (t - x) / size;
+          sx += x;
+          sy += y;
+          const kk = KINDS[kind[t]];
+          counts[kk] = (counts[kk] ?? 0) + 1;
+          if (!waterView)
+            for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [0, 2], [-2, 0], [0, -2]]) {
+              if (inb(x + dx, y + dy) && waterSet.has(kind[idx(x + dx, y + dy)])) {
+                waterView = true;
+                break;
+              }
+            }
+        }
+        const cx = sx / d.tiles.length;
+        const cy = sy / d.tiles.length;
+        let anchor = { x: Math.round(cx), y: Math.round(cy) };
+        let bd = Infinity;
+        for (const t of d.tiles) {
+          const x = t % size;
+          const y = (t - x) / size;
+          const dd = (x - cx) ** 2 + (y - cy) ** 2;
+          if (dd < bd) {
+            bd = dd;
+            anchor = { x, y };
+          }
+        }
+        const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+        const landscape: Plot["landscape"] = top === "forest" ? "forest" : top === "hill" ? "hillside" : top === "beach" ? "beachfront" : "meadow";
+        plots.push({
+          id,
+          address: `${number} ${roads[road].name}`,
+          number,
+          road,
+          district: district[idx(anchor.x, anchor.y)],
+          tiles: d.tiles,
+          anchor,
+          landscape,
+          waterView,
+          distance: Math.hypot(cx - center, cy - center),
+        });
+      }
+    }
+  };
+  makePlots(rand, () => true);
+
+  // --- 12. Oceania: every small island without a plot is a plot of its own ------------------
+  const makeIsles = (inArea: (i: number) => boolean) => {
+    const isleCount = new Map<number, number>();
+    const seenIsle = new Uint8Array(N);
+    for (let i0 = 0; i0 < N; i0++) {
+      if (!inArea(i0) || seenIsle[i0] || plotOf[i0] >= 0 || !BUILDABLE.has(kind[i0])) continue;
+      const comp: number[] = [i0];
+      seenIsle[i0] = 1;
+      for (let q = 0; q < comp.length; q++) {
+        const x = comp[q] % size;
+        const y = (comp[q] - x) / size;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          if (!inb(x + dx, y + dy)) continue;
+          const j = idx(x + dx, y + dy);
+          if (seenIsle[j] || plotOf[j] >= 0 || !BUILDABLE.has(kind[j])) continue;
+          seenIsle[j] = 1;
+          comp.push(j);
+        }
+      }
+      if (comp.length < 2 || comp.length > 40) continue;
+      let sx = 0;
+      let sy = 0;
+      for (const t of comp) {
+        sx += t % size;
+        sy += Math.floor(t / size);
+      }
+      const cx = sx / comp.length;
+      const cy = sy / comp.length;
+      const anchorT = comp.reduce((a, t) => (Math.hypot((t % size) - cx, Math.floor(t / size) - cy) < Math.hypot((a % size) - cx, Math.floor(a / size) - cy) ? t : a));
+      const dId = district[anchorT];
+      const number = (isleCount.get(dId) ?? 0) + 1;
+      isleCount.set(dId, number);
+      const id = plots.length;
+      for (const t of comp) plotOf[t] = id;
       plots.push({
         id,
-        address: `${number} ${roads[road].name}`,
+        address: `Isle ${number}, ${districts[dId]?.name ?? "Isles"}`,
         number,
-        road,
-        district: district[idx(anchor.x, anchor.y)],
-        tiles: d.tiles,
-        anchor,
-        landscape,
-        waterView,
+        road: -1,
+        district: dId,
+        tiles: comp,
+        anchor: { x: anchorT % size, y: Math.floor(anchorT / size) },
+        landscape: "island",
+        waterView: true,
         distance: Math.hypot(cx - center, cy - center),
       });
     }
-  }
+  };
+  makeIsles((i) => zone[i] === 1);
 
-  // --- 12. Oceania: every small island without a plot is a plot of its own ------------------
-  const isleCount = new Map<number, number>();
-  const seenIsle = new Uint8Array(N);
-  for (let i0 = 0; i0 < N; i0++) {
-    if (!zone[i0] || seenIsle[i0] || plotOf[i0] >= 0 || !BUILDABLE.has(kind[i0])) continue;
-    const comp: number[] = [i0];
-    seenIsle[i0] = 1;
-    for (let q = 0; q < comp.length; q++) {
-      const x = comp[q] % size;
-      const y = (comp[q] - x) / size;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        if (!inb(x + dx, y + dy)) continue;
-        const j = idx(x + dx, y + dy);
-        if (seenIsle[j] || plotOf[j] >= 0 || !BUILDABLE.has(kind[j])) continue;
-        seenIsle[j] = 1;
-        comp.push(j);
+  // --- 13. new lands --------------------------------------------------------------------------
+  const expansions = growLands();
+
+  // New lands from expansions.ts, raised out of open sea after the whole world above is built.
+  // Each uses only its own random numbers and touches only open sea, so nothing that already
+  // existed changes: same tiles, districts, roads and plot addresses.
+  function growLands(): World["expansions"] {
+    const out: World["expansions"] = [];
+    EXPANSIONS.slice(0, params.lands ?? EXPANSIONS.length).forEach((ex, k) => {
+      const z = 2 + k;
+      const er = rng((seed ^ (ex.seed * 2654435761)) >>> 0);
+      const [x0, y0, x1, y1] = ex.area.map((v) => Math.max(0, Math.min(size - 1, v)));
+      if (x1 - x0 < 24 || y1 - y0 < 24) return;
+      const isOld = (i: number) => zone[i] !== 0 || (kind[i] !== K.deep && kind[i] !== K.ocean);
+      // open sea kept around everything that already exists
+      const near = new Int16Array(N).fill(-1);
+      const q: number[] = [];
+      for (let y = Math.max(0, y0 - MARGIN); y <= Math.min(size - 1, y1 + MARGIN); y++)
+        for (let x = Math.max(0, x0 - MARGIN); x <= Math.min(size - 1, x1 + MARGIN); x++)
+          if (isOld(idx(x, y))) {
+            near[idx(x, y)] = 0;
+            q.push(idx(x, y));
+          }
+      for (let h = 0; h < q.length; h++) {
+        const cur = q[h];
+        if (near[cur] >= MARGIN) continue;
+        const x = cur % size;
+        const y = (cur - x) / size;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+          if (!inb(x + dx, y + dy)) continue;
+          const j = idx(x + dx, y + dy);
+          if (near[j] >= 0) continue;
+          near[j] = near[cur] + 1;
+          q.push(j);
+        }
       }
-    }
-    if (comp.length < 2 || comp.length > 40) continue;
-    let sx = 0;
-    let sy = 0;
-    for (const t of comp) {
-      sx += t % size;
-      sy += Math.floor(t / size);
-    }
-    const cx = sx / comp.length;
-    const cy = sy / comp.length;
-    const anchorT = comp.reduce((a, t) => (Math.hypot((t % size) - cx, Math.floor(t / size) - cy) < Math.hypot((a % size) - cx, Math.floor(a / size) - cy) ? t : a));
-    const dId = district[anchorT];
-    const number = (isleCount.get(dId) ?? 0) + 1;
-    isleCount.set(dId, number);
-    const id = plots.length;
-    for (const t of comp) plotOf[t] = id;
-    plots.push({
-      id,
-      address: `Isle ${number}, ${districts[dId]?.name ?? "Oceania"}`,
-      number,
-      road: -1,
-      district: dId,
-      tiles: comp,
-      anchor: { x: anchorT % size, y: Math.floor(anchorT / size) },
-      landscape: "island",
-      waterView: true,
-      distance: Math.hypot(cx - center, cy - center),
+      const free = (i: number) => near[i] < 0;
+      const inArea = (i: number) => zone[i] === z;
+
+      // 1. shape: one ragged island, or an archipelago of islets and larger islands
+      const S = ex.seed * 17;
+      const base = fbm(S + 1, 5);
+      const warpA = fbm(S + 2, 3);
+      const warpB = fbm(S + 3, 3);
+      const hills = ridged(S + 4, 4);
+      const fine = valueNoise(S + 5);
+      const fine2 = valueNoise(S + 6);
+      const cx = (x0 + x1) / 2;
+      const cy = (y0 + y1) / 2;
+      const hw = (x1 - x0) / 2;
+      const hh = (y1 - y0) / 2;
+      const bigs = Array.from({ length: ex.shape === "archipelago" ? 18 : 0 }, (_, b) => {
+        const type = (["mountain", "flat", "forest", "mountain", "atoll"] as const)[b % 5];
+        const s = 3.5 + er() * 7;
+        return {
+          x: cx + (er() * 2 - 1) * hw * 0.72,
+          y: cy + (er() * 2 - 1) * hh * 0.78,
+          s,
+          h: type === "mountain" ? 0.62 + er() * 0.36 : type === "flat" ? 0.1 + er() * 0.06 : type === "forest" ? 0.22 + er() * 0.14 : 0.1,
+          atoll: type === "atoll",
+        };
+      });
+      for (let y = y0; y <= y1; y++)
+        for (let x = x0; x <= x1; x++) {
+          const i = idx(x, y);
+          if (!free(i)) continue;
+          const u = (x - cx) / hw;
+          const v = (y - cy) / hh;
+          const od = Math.hypot(u, v) + warpA(u * 2.2, v * 2.2) * 0.14;
+          const m = Math.min(1, Math.max(0, (0.98 - od) / 0.16));
+          if (m <= 0) continue;
+          let h: number;
+          if (ex.shape === "island") {
+            const wu = u + 0.3 * warpA(u * 1.6 + 4, v * 1.6 + 4);
+            const wv = v + 0.3 * warpB(u * 1.6 - 6, v * 1.6 - 6);
+            const d = Math.hypot(wu, wv);
+            h = base(x / 26, y / 26) * 0.42 + 0.3 - 0.55 * d * d + fine(x / 5, y / 5) * 0.03;
+            if (h > 0) h = 0.04 + h * 0.75 + Math.pow(hills(x / 30, y / 30), 3) * 0.16 * Math.min(1, h * 5);
+            h = Math.min(h, 0.5);
+            h = h * m - 0.2 * (1 - m);
+          } else {
+            const t = fine(x / 3.2, y / 3.2) * 0.65 + fine2(x / 9, y / 9) * 0.35;
+            const thr = 0.42 - 0.12 * m;
+            h = t > thr ? 0.004 + (t - thr) * 0.5 : -0.02 - (thr - t) * 0.08;
+            const px = x + warpA(x / 12, y / 12) * 3.5;
+            const py = y + warpB(x / 12, y / 12) * 3.5;
+            for (const b of bigs) {
+              const di = Math.hypot(px - b.x, py - b.y);
+              const bump = b.atoll ? Math.exp(-(((di - b.s * 1.4) / (b.s * 0.45)) ** 2)) : Math.exp(-((di / b.s) ** 2));
+              if (bump > 0.1) h = Math.max(h, b.h * bump - 0.04 + fine(x / 4, y / 4) * 0.03);
+            }
+            if (m < 1) h = Math.min(h, -0.02 - (1 - m) * 0.1);
+          }
+          if (ex.lagoon && m > 0.3) zone[i] = z;
+          if (h <= -0.045) continue;
+          height[i] = h;
+          kind[i] = h < 0 ? K.shallow : h < 0.035 ? K.beach : h > 0.72 ? K.peak : h > 0.55 ? K.mountain : h > 0.4 ? K.hill : K.land;
+          zone[i] = z;
+        }
+      // a shallow rim around every new coast
+      for (let y = y0; y <= y1; y++)
+        for (let x = x0; x <= x1; x++) {
+          const i = idx(x, y);
+          if (!free(i) || kind[i] !== K.ocean && kind[i] !== K.deep) continue;
+          if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => inb(x + dx, y + dy) && zone[idx(x + dx, y + dy)] === z && height[idx(x + dx, y + dy)] >= 0)) {
+            kind[i] = K.shallow;
+            height[i] = -0.01;
+            zone[i] = z;
+          }
+        }
+
+      // 2. districts, with names that carry on each region's list
+      const first = districts.length;
+      const cands: number[] = [];
+      let land = 0;
+      for (let y = y0; y <= y1; y++)
+        for (let x = x0; x <= x1; x++) {
+          const i = idx(x, y);
+          if (!inArea(i) || height[i] < 0) continue;
+          land++;
+          if (height[i] > 0.04 && height[i] < 0.5 && BUILDABLE.has(kind[i])) cands.push(i);
+        }
+      const minD = Math.max(14, Math.sqrt(land / Math.max(1, ex.districts.length)) * 0.7);
+      for (let tries = 0; tries < 6000 && districts.length - first < ex.districts.length && cands.length; tries++) {
+        const i = cands[Math.floor(er() * cands.length)];
+        const x = i % size;
+        const y = (i - x) / size;
+        if (districts.slice(first).some((d) => Math.hypot(d.x - x, d.y - y) < minD)) continue;
+        const b = ex.districts[districts.length - first];
+        const list = REGIONS[b].names;
+        let name = "";
+        for (let n = used[b] ?? 0; ; n++) {
+          name = n < list.length ? list[n] : `${list[n % list.length]} ${["East", "West", "North", "South"][Math.floor(n / list.length) % 4]}`;
+          used[b] = n + 1;
+          if (!districts.some((d) => d.name === name)) break;
+        }
+        districts.push({ id: districts.length, name, biome: b, x, y, capital: false });
+      }
+      const mine = districts.slice(first);
+      if (!mine.length) return;
+      for (let y = y0; y <= y1; y++)
+        for (let x = x0; x <= x1; x++) {
+          const i = idx(x, y);
+          if (!inArea(i) || height[i] < 0 && kind[i] !== K.shallow) continue;
+          const px = x + bx((x - off) / 35, (y - off) / 35) * 24;
+          const py = y + by((x - off) / 35, (y - off) / 35) * 24;
+          let best = mine[0].id;
+          let bd = Infinity;
+          for (const d of mine) {
+            const dd = ((d.x - px) ** 2 + (d.y - py) ** 2) * region(d.biome).area;
+            if (dd < bd) {
+              bd = dd;
+              best = d.id;
+            }
+          }
+          district[i] = best;
+        }
+
+      // 3. forests, lakes and marsh ponds
+      for (let y = y0; y <= y1; y++)
+        for (let x = x0; x <= x1; x++) {
+          const i = idx(x, y);
+          if (!inArea(i) || (kind[i] !== K.land && kind[i] !== K.hill)) continue;
+          const spec = region(districts[district[i]].biome);
+          if (forestN((x - off) / 22, (y - off) / 22) > spec.forest) kind[i] = K.forest;
+          if (!ex.lagoon && height[i] > 0.06 && height[i] < 0.38 && lakeN((x - off) / 14, (y - off) / 14) + spec.lakes > 0.5) kind[i] = K.lake;
+        }
+      for (const d of mine)
+        for (let y = d.y - 1; y <= d.y + 1; y++) for (let x = d.x - 1; x <= d.x + 1; x++) if (inb(x, y) && !isWater(kind[idx(x, y)])) kind[idx(x, y)] = K.plaza;
+
+      // 4. roads: highways between the towns, a bridge to the old world, streets around each town
+      const own = (c: (i: number) => number) => (i: number) => (inArea(i) ? c(i) : Infinity);
+      const inTree2 = new Set<number>([0]);
+      while (inTree2.size < mine.length) {
+        let pair: [number, number] | null = null;
+        let bd = Infinity;
+        for (const a of inTree2)
+          for (let b = 0; b < mine.length; b++) {
+            if (inTree2.has(b)) continue;
+            const dd = Math.hypot(mine[a].x - mine[b].x, mine[a].y - mine[b].y);
+            if (dd < bd) {
+              bd = dd;
+              pair = [a, b];
+            }
+          }
+        if (!pair) break;
+        inTree2.add(pair[1]);
+        const p = astar(idx(mine[pair[0]].x, mine[pair[0]].y), idx(mine[pair[1]].x, mine[pair[1]].y), own(roadCost));
+        if (p) layRoad(p, "highway");
+      }
+      {
+        // the nearest town to an existing road gets a long bridge over the sea to it
+        let link: { from: number; to: number; dd: number } | null = null;
+        for (let i = 0; i < N; i++) {
+          if (zone[i] !== 0 || (kind[i] !== K.road && kind[i] !== K.bridge)) continue;
+          const x = i % size;
+          const y = (i - x) / size;
+          for (const d of mine) {
+            const dd = Math.hypot(d.x - x, d.y - y);
+            if (!link || dd < link.dd) link = { from: idx(d.x, d.y), to: i, dd };
+          }
+        }
+        if (link) {
+          const linkCost = (i: number) => {
+            if (inArea(i)) return roadCost(i);
+            const k2 = kind[i];
+            if (k2 === K.road || k2 === K.bridge) return 0.3;
+            return k2 === K.deep || k2 === K.ocean || k2 === K.shallow ? roadCost(i) : Infinity;
+          };
+          const p = astar(link.from, link.to, linkCost);
+          if (p) layRoad(p, "highway", `${ex.name} Bridge`);
+        }
+      }
+      for (const d of mine)
+        for (let s = 0; s < 14; s++) {
+          const ang = er() * Math.PI * 2;
+          const r = 18 * (0.45 + er() * 0.55);
+          const tx2 = Math.round(d.x + Math.cos(ang) * r);
+          const ty2 = Math.round(d.y + Math.sin(ang) * r);
+          if (!inb(tx2, ty2)) continue;
+          const t = idx(tx2, ty2);
+          if (!inArea(t) || !BUILDABLE.has(kind[t])) continue;
+          const p = astar(idx(d.x, d.y), t, own(streetCost));
+          if (p) layRoad(p, "street");
+        }
+
+      // 5. plots along the new streets, and islands of their own
+      makePlots(er, inArea);
+      makeIsles(inArea);
+      out.push({ name: ex.name, zone: z, lagoon: !!ex.lagoon, districts: mine.map((d) => d.id) });
     });
+    return out;
   }
 
   // --- stats --------------------------------------------------------------------------------
@@ -1052,6 +1298,7 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
     airports,
     stations,
     stats: { roadTiles, railTiles, bridgeTiles, riverTiles, landTiles },
+    expansions,
   };
 }
 

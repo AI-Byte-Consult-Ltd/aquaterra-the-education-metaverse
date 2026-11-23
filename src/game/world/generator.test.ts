@@ -113,4 +113,29 @@ describe("world generator", () => {
     expect(findPlotByAddress(world, `  ${p.address.toUpperCase()} `)?.id).toBe(100);
     expect(findPlotByAddress(world, "99999 Nowhere Street")).toBeUndefined();
   });
+
+  it("only grows: new lands leave every existing tile, district, road and address as it was", () => {
+    const steps = [0, 1, 2].map((lands) => generateWorld({ ...DEFAULT_WORLD, lands }));
+    for (let s = 1; s < steps.length; s++) {
+      const before = steps[s - 1];
+      const after = steps[s];
+      expect(after.districts.length).toBeGreaterThan(before.districts.length);
+      expect(after.plots.length).toBeGreaterThan(before.plots.length);
+      expect(after.districts.slice(0, before.districts.length)).toEqual(before.districts);
+      expect(after.roads.slice(0, before.roads.length)).toEqual(before.roads);
+      expect(after.plots.slice(0, before.plots.length).map((p) => [p.address, p.tiles.join()])).toEqual(before.plots.map((p) => [p.address, p.tiles.join()]));
+      for (let i = 0; i < n * n; i++) {
+        if (after.kind[i] === before.kind[i]) continue;
+        // only open sea may change: into new land, or into a bridge over it
+        expect(["deep", "ocean", "shallow"]).toContain(KINDS[before.kind[i]]);
+        expect(before.plotOf[i]).toBe(-1);
+      }
+    }
+  });
+
+  it("adds Greenhaven meadows, Mistmarsh wetlands and a northern archipelago", () => {
+    const names = world.districts.map((d) => d.name);
+    for (const name of ["Greenhaven", "Mistmarsh", "Stormcrest Isles"]) expect(names).toContain(name);
+    for (const e of world.expansions) expect(world.plots.filter((p) => e.districts.includes(p.district)).length, e.name).toBeGreaterThan(50);
+  });
 });

@@ -46,6 +46,7 @@ const en = {
     autumn: "Autumn forest",
     blossom: "Blossom gardens",
     oceania: "Oceania islands",
+    isles: "Northern isles",
     woodland: "Great forest",
     dunes: "Great desert",
     industrial: "Industrial",
