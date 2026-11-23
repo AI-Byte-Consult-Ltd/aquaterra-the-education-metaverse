@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Link2, Maximize2, MapPin, Search, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, Building2, Home, Link2, Maximize2, MapPin, Search, X, ZoomIn, ZoomOut } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { DEFAULT_WORLD, findPlotByAddress, generateWorld, type Kind, type Plot, type World } from "@/game/world/generator";
+import { buildingFor } from "@/game/world/buildings";
 import { WorldRenderer } from "@/game/world/renderer";
 import { worldLocale, worldStrings } from "@/game/world/strings";
 
@@ -25,6 +26,12 @@ const City = () => {
   const rendererRef = useRef<WorldRenderer | null>(null);
   const [selection, setSelection] = useState<Selection>(null);
   const [query, setQuery] = useState("");
+  const [houses, setHouses] = useState(true);
+  const housesRef = useRef(houses);
+  useEffect(() => {
+    housesRef.current = houses;
+    rendererRef.current?.setBuildingsVisible(houses);
+  }, [houses]);
 
   // --- renderer lifecycle ---------------------------------------------------
   useEffect(() => {
@@ -38,6 +45,7 @@ const City = () => {
       r.resize(rect.width, rect.height, Math.min(window.devicePixelRatio || 1, 2));
     };
     size();
+    r.setBuildingsVisible(housesRef.current);
     r.fit();
     const ro = new ResizeObserver(size);
     ro.observe(wrap);
@@ -230,6 +238,7 @@ const City = () => {
         <div className="pointer-events-none absolute left-3 top-3 rounded-md bg-background/75 px-2.5 py-1.5 text-xs text-muted-foreground backdrop-blur">
           <div className="font-medium text-foreground">{t.stats(city.plots.length, city.districts.length, city.airports.length, city.stations.length)}</div>
           <div className="hidden md:block">{t.hint}</div>
+          {houses && <div className="hidden max-w-xs md:block">{t.housesNote}</div>}
         </div>
 
         <div className="absolute right-3 top-3 flex flex-col gap-1.5">
@@ -238,13 +247,15 @@ const City = () => {
             { icon: ZoomOut, label: "−", on: () => zoom(1 / 1.4) },
             { icon: Maximize2, label: "fit", on: () => rendererRef.current?.fit() },
             { icon: Building2, label: t.tower, on: () => select({ kind: "tower" }, true) },
-          ].map(({ icon: Icon, label, on }) => (
+            { icon: Home, label: houses ? t.housesOff : t.housesOn, on: () => setHouses((h) => !h), active: houses },
+          ].map(({ icon: Icon, label, on, active }) => (
             <button
               key={label}
               onClick={on}
               aria-label={label}
+              aria-pressed={active}
               title={label}
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background/85 backdrop-blur hover:border-primary"
+              className={`flex h-9 w-9 items-center justify-center rounded-md border bg-background/85 backdrop-blur hover:border-primary ${active ? "border-primary text-primary" : "border-border"}`}
             >
               <Icon className="h-4 w-4" />
             </button>
@@ -304,6 +315,7 @@ const City = () => {
 
 function PlotCard({ plot, world, t, fmt, onCopy }: { plot: Plot; world: World; t: ReturnType<typeof worldStrings>; fmt: (n: number) => string; onCopy: () => void }) {
   const d = world.districts[plot.district];
+  const house = buildingFor(world, plot);
   return (
     <div className="space-y-3 pr-6">
       <div className="flex items-center gap-2">
@@ -327,6 +339,10 @@ function PlotCard({ plot, world, t, fmt, onCopy }: { plot: Plot; world: World; t
         </dd>
         <dt className="text-muted-foreground">{t.water}</dt>
         <dd className="font-medium">{plot.waterView ? t.yes : t.no}</dd>
+        <dt className="text-muted-foreground">{t.fitsHere}</dt>
+        <dd className="font-medium">
+          {t.styles[house.style.id as keyof typeof t.styles]} · {t.floorsShort(house.floors)}
+        </dd>
         <dt className="text-muted-foreground">{t.status}</dt>
         <dd className="font-medium text-emerald-500">{t.free}</dd>
       </dl>

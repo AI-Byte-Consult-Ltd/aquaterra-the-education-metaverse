@@ -1,4 +1,5 @@
 import type { Language } from "@/i18n/translations";
+import type { STYLES } from "./buildings";
 import type { Biome, Kind, Plot } from "./generator";
 
 const en = {
@@ -77,6 +78,28 @@ const en = {
     tower: "First Light Tower",
   } satisfies Record<Kind, string>,
   wild: "Not divided into plots yet",
+  houses: "Houses",
+  housesOn: "Show houses",
+  housesOff: "Hide houses",
+  housesNote: "Houses on the map are a preview of what fits each plot. Nothing is built or owned yet.",
+  fitsHere: "Fits here",
+  floorsShort: (n: number) => (n === 1 ? "1 floor" : `${n} floors`),
+  styles: {
+    skyline: "Skyline Tower",
+    spire: "Glass Spire",
+    loft: "City Loft",
+    garden: "Garden House",
+    snowdome: "Snow Dome",
+    lodge: "Timber Lodge",
+    adobe: "Adobe Court",
+    canopy: "Canopy Stilt House",
+    rondavel: "Thatch Rondavel",
+    stiltcabin: "Marsh Stilt Cabin",
+    basalt: "Basalt Bunker",
+    cedar: "Cedar Cottage",
+    pagoda: "Blossom Pagoda",
+    villa: "Beach Villa",
+  } satisfies Record<keyof typeof STYLES, string>,
   m2: "m²",
   km: "km",
 };
