@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Home, Link2, Maximize2, MapPin, Search, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, Building2, Home, Link2, Maximize2, MapPin, Search, UserRound, X, ZoomIn, ZoomOut } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { DEFAULT_WORLD, findPlotByAddress, generateWorld, type Kind, type Plot, type World } from "@/game/world/generator";
 import { buildingFor } from "@/game/world/buildings";
 import { WorldRenderer } from "@/game/world/renderer";
 import { worldLocale, worldStrings } from "@/game/world/strings";
+import { useAccount } from "@/game/account/AccountContext";
+import { accountStrings } from "@/game/account/strings";
 
 /** One tile is 20 × 20 m in the game world. */
 const TILE_M2 = 400;
@@ -18,6 +20,8 @@ type Selection = { kind: "plot"; plot: Plot } | { kind: "tower" } | { kind: "til
 const City = () => {
   const { language } = useLanguage();
   const t = worldStrings(language);
+  const ta = accountStrings(language);
+  const { player } = useAccount();
   const city = useMemo(() => generateWorld(DEFAULT_WORLD), []);
   const [params, setParams] = useSearchParams();
 
@@ -229,6 +233,17 @@ const City = () => {
             {t.searchGo}
           </button>
         </form>
+        {player && (
+          <Link
+            to="/profile"
+            title={ta.profile}
+            aria-label={ta.profile}
+            className="ml-auto flex h-9 max-w-[40%] items-center gap-1.5 rounded-full border border-border bg-background/60 px-2.5 text-sm hover:border-primary md:ml-0"
+          >
+            <UserRound className="h-4 w-4 shrink-0 text-primary" />
+            <span className="hidden truncate sm:inline">{player.displayName || ta.noName}</span>
+          </Link>
+        )}
       </header>
 
       {/* canvas */}

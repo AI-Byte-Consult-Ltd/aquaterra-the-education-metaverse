@@ -1,15 +1,20 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Menu, X } from "lucide-react";
+import { Menu, UserRound, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/i18n/LanguageContext";
+import { useAccount } from "@/game/account/AccountContext";
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { t, language } = useLanguage();
   const landMapLabel = language === "ru" ? "Карта земель" : "Land Map";
+  const { player } = useAccount();
+  // Signed in: the button shows the citizen name and opens the world.
+  const accountLink = player ? "/world" : "/login";
+  const accountLabel = player ? player.displayName || player.email : t("nav_logIn");
 
   const navLinks = [
     { name: t("nav_howItWorks"), href: "#how-it-works" },
@@ -43,15 +48,22 @@ const Navbar = () => {
               {link.name}
             </a>
           ))}
-          <Link to="/map" className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium">
+          <Link to="/world" className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium">
             {landMapLabel}
           </Link>
         </nav>
 
         <div className="hidden lg:flex items-center gap-4">
           <LanguageSwitcher />
-          <Button variant="ghost" size="sm">{t("nav_logIn")}</Button>
-          <Button variant="hero" size="sm">{t("nav_startLearning")}</Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link to={accountLink} className="max-w-[12rem]">
+              {player && <UserRound className="h-4 w-4 shrink-0" />}
+              <span className="truncate">{accountLabel}</span>
+            </Link>
+          </Button>
+          <Button variant="hero" size="sm" asChild>
+            <Link to="/world">{t("nav_startLearning")}</Link>
+          </Button>
         </div>
 
         <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="lg:hidden p-2 text-foreground">
@@ -67,13 +79,20 @@ const Navbar = () => {
                 {link.name}
               </a>
             ))}
-            <Link to="/map" onClick={() => setIsMobileMenuOpen(false)} className="text-foreground hover:text-primary transition-colors font-medium py-2">
+            <Link to="/world" onClick={() => setIsMobileMenuOpen(false)} className="text-foreground hover:text-primary transition-colors font-medium py-2">
               {landMapLabel}
             </Link>
           </nav>
           <div className="flex flex-col gap-3">
-            <Button variant="ghost" className="w-full">{t("nav_logIn")}</Button>
-            <Button variant="hero" className="w-full">{t("nav_startLearning")}</Button>
+            <Button variant="ghost" className="w-full" asChild>
+              <Link to={accountLink} onClick={() => setIsMobileMenuOpen(false)}>
+                {player && <UserRound className="h-4 w-4 shrink-0" />}
+                <span className="truncate">{accountLabel}</span>
+              </Link>
+            </Button>
+            <Button variant="hero" className="w-full" asChild>
+              <Link to="/world" onClick={() => setIsMobileMenuOpen(false)}>{t("nav_startLearning")}</Link>
+            </Button>
           </div>
           <div className="mt-6 pt-6 border-t border-border">
             <LanguageSwitcher />
