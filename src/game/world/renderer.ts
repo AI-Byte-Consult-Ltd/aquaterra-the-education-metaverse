@@ -137,7 +137,8 @@ export class WorldRenderer {
 
   fit() {
     const s = this.world.size;
-    const worldW = s * TW * 0.78;
+    // fit the land, not the whole ocean square; on a narrow phone screen crop the sides a little
+    const worldW = s * TW * (this.width < this.height ? 0.55 : 0.78);
     const worldH = s * TH * 0.82;
     const scale = Math.min(this.width / worldW, this.height / worldH);
     const c = s / 2;
@@ -575,9 +576,12 @@ export class WorldRenderer {
 
     // district names
     if (s < 1.2) {
+      const taken: { x: number; y: number }[] = [];
       for (const d of w.districts) {
         if (d.capital) continue;
         const { px, py } = at(d.x, d.y);
+        if (taken.some((q) => Math.abs(q.x - px) * s < 120 && Math.abs(q.y - py) * s < 24)) continue;
+        taken.push({ x: px, y: py });
         pill(d.name, px, py - 14 * k, s > 0.3 ? 12 : 11, "#ffffff", "rgba(10,18,40,0.72)");
       }
     }
