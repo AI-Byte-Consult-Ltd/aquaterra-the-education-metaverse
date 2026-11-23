@@ -1,0 +1,127 @@
+import { useEffect, useState, type FormEvent } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowLeft, Check, Globe2, Loader2, LogOut, UserRound } from "lucide-react";
+import { useLanguage } from "@/i18n/LanguageContext";
+import { useAccount } from "@/game/account/AccountContext";
+import { safeNext, saveDisplayName, validDisplayName, type AccountError } from "@/game/account/api";
+import { accountLocale, accountStrings } from "@/game/account/strings";
+
+const Profile = () => {
+  const { language } = useLanguage();
+  const t = accountStrings(language);
+  const { player, session, updatePlayer, signOut } = useAccount();
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const welcome = params.get("welcome") === "1";
+  const next = safeNext(params.get("next"));
+
+  const [name, setName] = useState(player?.displayName ?? "");
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<AccountError | null>(null);
+
+  useEffect(() => {
+    setName(player?.displayName ?? "");
+  }, [player?.displayName]);
+
+  if (!player || !session) return null;
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!validDisplayName(name)) return setError("name");
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    const r = await saveDisplayName(session, name);
+    setBusy(false);
+    if (!r.ok) {
+      if (r.error === "session") {
+        signOut();
+        return;
+      }
+      return setError(r.error);
+    }
+    updatePlayer(r.data.player);
+    setSaved(true);
+    if (welcome) navigate(next, { replace: true });
+  };
+
+  const since = player.createdAt
+    ? new Date(player.createdAt).toLocaleDateString(accountLocale(language), { year: "numeric", month: "long", day: "numeric" })
+    : "—";
+
+  return (
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <header className="flex items-center justify-between gap-2 px-4 py-3">
+        <Link to="/world" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" />
+          {t.brand}
+        </Link>
+      </header>
+      <main className="flex flex-1 items-start justify-center px-4 pb-16 pt-6 md:items-center md:pt-0">
+        <div className="w-full max-w-md space-y-6 rounded-2xl border border-border bg-card/80 p-6 shadow-2xl backdrop-blur">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 text-primary">
+              <UserRound className="h-6 w-6" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="font-display text-2xl font-bold">{welcome ? t.chooseName : t.profileTitle}</h1>
+              <p className="text-sm text-muted-foreground">{t.profileIntro}</p>
+            </div>
+          </div>
+
+          <form onSubmit={save} className="space-y-2" noValidate>
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium">{t.displayName}</span>
+              <div className="flex gap-2">
+                <input
+                  value={name}
+                  autoFocus={welcome}
+                  maxLength={24}
+                  onChange={(e) => { setName(e.target.value); setSaved(false); }}
+                  placeholder={t.displayNamePlaceholder}
+                  className="h-11 min-w-0 flex-1 rounded-md border border-input bg-background/60 px-3 text-base outline-none focus:border-primary"
+                />
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="flex h-11 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                >
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : null}
+                  {busy ? t.saving : saved ? t.saved : t.save}
+                </button>
+              </div>
+            </label>
+            {error ? <p role="alert" className="text-sm text-destructive">{t.errors[error]}</p> : <p className="text-xs text-muted-foreground">{t.displayNameHint}</p>}
+          </form>
+
+          <dl className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-2 text-sm">
+            <dt className="text-muted-foreground">{t.email}</dt>
+            <dd className="truncate font-medium">{player.email}</dd>
+            <dt className="text-muted-foreground">{t.memberSince}</dt>
+            <dd className="font-medium">{since}</dd>
+          </dl>
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Link
+              to={welcome ? next : "/world"}
+              className="flex h-11 flex-1 items-center justify-center gap-2 rounded-md border border-primary/50 text-sm font-semibold text-primary hover:bg-primary/10"
+            >
+              <Globe2 className="h-4 w-4" />
+              {t.openWorld}
+            </Link>
+            <button
+              onClick={() => { signOut(); navigate("/", { replace: true }); }}
+              className="flex h-11 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <LogOut className="h-4 w-4" />
+              {t.signOut}
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default Profile;

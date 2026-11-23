@@ -34,7 +34,7 @@ const Hero = () => {
 
           <div className="flex justify-center animate-fade-up" style={{ animationDelay: "0.4s" }}>
             <Button variant="glow" size="xl" asChild>
-              <Link to="/map">{t("hero_cta1")}</Link>
+              <Link to="/world">{t("hero_cta1")}</Link>
             </Button>
           </div>
 
