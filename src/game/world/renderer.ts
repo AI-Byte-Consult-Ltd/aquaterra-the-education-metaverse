@@ -1,5 +1,5 @@
 import { KINDS, type Kind, type World } from "./generator";
-import { buildingsFor, type Building, type BuildingStyle } from "./buildings";
+import { buildingsFor, type Building, type BuildingStyle, type Tower } from "./buildings";
 import { baseColor, daylight, shade, skyColor, treeColor, type RGB } from "./palette";
 
 export const TW = 32;
@@ -21,8 +21,12 @@ export type Pick = { kind: "plot"; plotId: number } | { kind: "tower" } | { kind
 const isoX = (x: number, y: number) => ((x - y) * TW) / 2;
 const isoY = (x: number, y: number) => ((x + y) * TH) / 2;
 
-/** Height of one floor in screen pixels at scale 1. */
+/** Height of one floor of a house in screen pixels at scale 1. */
 const FLOOR_PX = 5;
+/** Skyscrapers use the First Light Tower's scale: 108 floors = TOWER_HEIGHT. */
+const TOWER_FLOOR_PX = TOWER_HEIGHT / 108;
+/** Gap left on the outer edges of a skyscraper, as a share of a tile (sidewalk). */
+const TOWER_INSET = 0.14;
 
 const WATER: Kind[] = ["deep", "ocean", "shallow", "lake", "river"];
 
@@ -54,6 +58,9 @@ export class WorldRenderer {
   private buildings: Building[];
   /** Plot whose house stands on this tile, or -1. */
   private houseAt: Int32Array;
+  /** Skyscraper column on this tile: building index and its height in floors. */
+  private towerAt: Int32Array;
+  private towerFloors: Int16Array;
   private styleColors = new Map<string, { wl: string; wr: string; roof: string; roofDark: string; win: string; post: string }>();
 
   constructor(
@@ -72,7 +79,17 @@ export class WorldRenderer {
     for (let i = 0; i < n; i++) this.elev[i] = this.elevationOf(i);
     this.buildings = buildingsFor(world);
     this.houseAt = new Int32Array(n).fill(-1);
-    for (const p of world.plots) this.houseAt[p.anchor.y * world.size + p.anchor.x] = p.id;
+    this.towerAt = new Int32Array(n).fill(-1);
+    this.towerFloors = new Int16Array(n);
+    for (const p of world.plots) {
+      const t = this.buildings[p.id].tower;
+      if (t)
+        t.tiles.forEach((tile, k) => {
+          this.towerAt[tile] = p.id;
+          this.towerFloors[tile] = t.heights[k];
+        });
+      else this.houseAt[p.anchor.y * world.size + p.anchor.x] = p.id;
+    }
     this.refreshDaylight();
   }
 
@@ -294,6 +311,8 @@ export class WorldRenderer {
   private visibleRange() {
     // generous margin so tall houses just below the screen still show their tops
     const pad = 14;
+    // skyscrapers below the screen can reach high into it
+    const front = this.showBuildings ? 40 : pad;
     const pts = [
       this.screenToWorld(0, 0),
       this.screenToWorld(this.width, 0),
@@ -304,9 +323,9 @@ export class WorldRenderer {
     const n = this.world.size;
     return {
       x0: clamp(Math.floor(Math.min(...tiles.map((t) => t.x))) - pad, 0, n - 1),
-      x1: clamp(Math.ceil(Math.max(...tiles.map((t) => t.x))) + pad, 0, n - 1),
+      x1: clamp(Math.ceil(Math.max(...tiles.map((t) => t.x))) + front, 0, n - 1),
       y0: clamp(Math.floor(Math.min(...tiles.map((t) => t.y))) - pad, 0, n - 1),
-      y1: clamp(Math.ceil(Math.max(...tiles.map((t) => t.y))) + pad, 0, n - 1),
+      y1: clamp(Math.ceil(Math.max(...tiles.map((t) => t.y))) + front, 0, n - 1),
     };
   }
 
@@ -392,6 +411,234 @@ export class WorldRenderer {
           ctx.fillRect(px - 5, py + hh - 1, 10, 2);
         }
         if (this.showBuildings && this.houseAt[i] >= 0) this.drawBuilding(ctx, px, py + hh, this.buildings[this.houseAt[i]]);
+        else if (this.showBuildings && this.towerAt[i] >= 0) this.drawTowerColumn(ctx, px, py, x, y, this.buildings[this.towerAt[i]].tower!);
+      }
+    }
+  }
+
+  /**
+   * One tile-sized column of a skyscraper. Columns of the same tower join without gaps,
+   * so the tower follows its plot's shape; outer edges step in to leave a sidewalk.
+   * (px, py) is the top corner of the tile.
+   */
+  private drawTowerColumn(ctx: CanvasRenderingContext2D, px: number, py: number, x: number, y: number, t: Tower) {
+    const w = this.world;
+    const n = w.size;
+    const i = y * n + x;
+    const id = this.towerAt[i];
+    const same = (xx: number, yy: number) => xx >= 0 && yy >= 0 && xx < n && yy < n && this.towerAt[yy * n + xx] === id;
+    const floorsAt = (xx: number, yy: number) => (same(xx, yy) ? this.towerFloors[yy * n + xx] : 0);
+    const u0 = same(x - 1, y) ? 0 : TOWER_INSET;
+    const u1 = same(x + 1, y) ? 1 : 1 - TOWER_INSET;
+    const v0 = same(x, y - 1) ? 0 : TOWER_INSET;
+    const v1 = same(x, y + 1) ? 1 : 1 - TOWER_INSET;
+    const hw = TW / 2;
+    const hh = TH / 2;
+    const P = (u: number, v: number, z: number) => ({ x: px + (u - v) * hw, y: py + (u + v) * hh - z });
+    const floors = this.towerFloors[i];
+    const H = floors * TOWER_FLOOR_PX;
+    const night = this.isNight;
+    const glass = t.glass;
+    const seed = (i * 2654435761) >>> 0;
+    const face = (ua: number, va: number, ub: number, vb: number, zFrom: number, k: number) => {
+      if (zFrom >= H) return;
+      const a0 = P(ua, va, zFrom);
+      const b0 = P(ub, vb, zFrom);
+      const a1 = P(ua, va, H);
+      const b1 = P(ub, vb, H);
+      ctx.fillStyle = shade(glass, this.day, k);
+      ctx.beginPath();
+      ctx.moveTo(a0.x, a0.y);
+      ctx.lineTo(b0.x, b0.y);
+      ctx.lineTo(b1.x, b1.y);
+      ctx.lineTo(a1.x, a1.y);
+      ctx.closePath();
+      ctx.fill();
+      const at = (s: number, z: number) => ({ x: a0.x + (b0.x - a0.x) * s, y: a0.y + (b0.y - a0.y) * s - (z - zFrom) });
+      const frame = shade(t.frame, this.day, k);
+      const lit = night ? "rgba(255,226,150,0.95)" : shade([238, 246, 255], this.day, k * 0.95);
+      switch (t.facade) {
+        case "grid": {
+          const step = TOWER_FLOOR_PX * 2;
+          ctx.fillStyle = lit;
+          for (let z = zFrom + step * 0.6, r = 0; z < H - 1; z += step, r++)
+            for (let c = 0; c < 3; c++) {
+              if (night && ((seed >>> ((r + c) % 24)) & 3) === 0) continue;
+              const q = at((c + 0.55) / 3.1, z);
+              ctx.fillRect(q.x - 0.9, q.y - 0.9, 1.8, 1.8);
+            }
+          break;
+        }
+        case "bands": {
+          ctx.strokeStyle = frame;
+          ctx.lineWidth = 1.1;
+          ctx.beginPath();
+          for (let z = zFrom + TOWER_FLOOR_PX * 3; z < H; z += TOWER_FLOOR_PX * 3) {
+            const q0 = at(0, z);
+            const q1 = at(1, z);
+            ctx.moveTo(q0.x, q0.y);
+            ctx.lineTo(q1.x, q1.y);
+          }
+          ctx.stroke();
+          if (night) {
+            ctx.fillStyle = lit;
+            for (let z = zFrom + TOWER_FLOOR_PX * 1.5, r = 0; z < H; z += TOWER_FLOOR_PX * 3, r++) {
+              if (((seed >>> (r % 28)) & 1) === 0) continue;
+              const q = at(((r * 37) % 10) / 12 + 0.05, z);
+              ctx.fillRect(q.x - 2, q.y - 0.6, 4, 1.2);
+            }
+          }
+          break;
+        }
+        case "fins": {
+          ctx.strokeStyle = frame;
+          ctx.lineWidth = 0.9;
+          ctx.beginPath();
+          for (let c = 1; c < 5; c++) {
+            const q0 = at(c / 5, zFrom);
+            const q1 = at(c / 5, H);
+            ctx.moveTo(q0.x, q0.y);
+            ctx.lineTo(q1.x, q1.y);
+          }
+          ctx.stroke();
+          if (night) {
+            ctx.fillStyle = lit;
+            for (let z = zFrom + 2, r = 0; z < H - 1; z += TOWER_FLOOR_PX * 2, r++) {
+              const c = (seed >>> (r % 26)) % 5;
+              const q = at((c + 0.5) / 5, z);
+              ctx.fillRect(q.x - 0.8, q.y - 0.8, 1.6, 1.6);
+            }
+          }
+          break;
+        }
+        case "curtain": {
+          // a sky reflection sweeping across the glass
+          const r0 = at(0.25, zFrom);
+          const r1 = at(0.55, zFrom);
+          ctx.fillStyle = night ? "rgba(140,200,255,0.10)" : "rgba(255,255,255,0.22)";
+          ctx.beginPath();
+          ctx.moveTo(r0.x, r0.y);
+          ctx.lineTo(r1.x, r1.y);
+          ctx.lineTo(r1.x, a1.y + (r1.y - a0.y) - (H - zFrom) * 0.02);
+          ctx.lineTo(r0.x, a1.y + (r0.y - a0.y));
+          ctx.closePath();
+          ctx.fill();
+          if (night) {
+            ctx.fillStyle = lit;
+            for (let z = zFrom + 2, r = 0; z < H - 1; z += TOWER_FLOOR_PX * 1.5, r++) {
+              if (((seed >>> (r % 30)) & 3) !== 0) continue;
+              const q = at(((r * 53) % 9) / 10 + 0.05, z);
+              ctx.fillRect(q.x - 1, q.y - 0.7, 2, 1.4);
+            }
+          }
+          break;
+        }
+      }
+    };
+    // left face: the south edge, right face: the east edge
+    face(u0, v1, u1, v1, floorsAt(x, y + 1) * TOWER_FLOOR_PX, 0.95);
+    face(u1, v1, u1, v0, floorsAt(x + 1, y) * TOWER_FLOOR_PX, 0.72);
+    // roof
+    const c00 = P(u0, v0, H);
+    const c10 = P(u1, v0, H);
+    const c11 = P(u1, v1, H);
+    const c01 = P(u0, v1, H);
+    ctx.fillStyle = shade(t.frame, this.day, 0.9);
+    ctx.beginPath();
+    ctx.moveTo(c00.x, c00.y);
+    ctx.lineTo(c10.x, c10.y);
+    ctx.lineTo(c11.x, c11.y);
+    ctx.lineTo(c01.x, c01.y);
+    ctx.closePath();
+    ctx.fill();
+    if (i === t.crown) this.drawTowerTop(ctx, P(0.5, 0.5, H), t, (u1 - u0) * hw, (v1 - v0) * hh);
+  }
+
+  private drawTowerTop(ctx: CanvasRenderingContext2D, c: { x: number; y: number }, t: Tower, a: number, b: number) {
+    const night = this.isNight;
+    const frame = shade(t.frame, this.day, 1);
+    const glow = (r: number, y: number) => {
+      const g = ctx.createRadialGradient(c.x, y, 0, c.x, y, r);
+      g.addColorStop(0, night ? "rgba(255,90,80,0.95)" : "rgba(255,120,100,0.8)");
+      g.addColorStop(1, "rgba(255,90,80,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(c.x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    ctx.strokeStyle = frame;
+    switch (t.top) {
+      case "roofbox":
+        ctx.fillStyle = shade(t.frame, this.day, 0.7);
+        ctx.fillRect(c.x - a * 0.35, c.y - 6, a * 0.7, 6);
+        break;
+      case "spire":
+        ctx.fillStyle = shade(t.glass, this.day, 1.15);
+        ctx.beginPath();
+        ctx.moveTo(c.x - a * 0.25, c.y);
+        ctx.lineTo(c.x + a * 0.25, c.y);
+        ctx.lineTo(c.x, c.y - 46);
+        ctx.closePath();
+        ctx.fill();
+        glow(4, c.y - 46);
+        break;
+      case "antenna":
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(c.x - 3, c.y);
+        ctx.lineTo(c.x - 3, c.y - 30);
+        ctx.moveTo(c.x + 3, c.y + 1);
+        ctx.lineTo(c.x + 3, c.y - 20);
+        ctx.stroke();
+        glow(3, c.y - 30);
+        break;
+      case "crown":
+        ctx.fillStyle = shade(t.frame, this.day, 1.05);
+        ctx.beginPath();
+        ctx.moveTo(c.x - a, c.y);
+        ctx.lineTo(c.x, c.y + b);
+        ctx.lineTo(c.x, c.y - 24);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = shade(t.frame, this.day, 0.75);
+        ctx.beginPath();
+        ctx.moveTo(c.x + a, c.y);
+        ctx.lineTo(c.x, c.y + b);
+        ctx.lineTo(c.x, c.y - 24);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      case "helipad":
+        ctx.fillStyle = shade([70, 74, 86], this.day);
+        ctx.beginPath();
+        ctx.ellipse(c.x, c.y, a * 0.8, b * 0.8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = night ? "rgba(255,230,120,0.95)" : "rgba(255,255,255,0.9)";
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.font = "bold 6px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("H", c.x, c.y);
+        break;
+      case "dome":
+        ctx.fillStyle = shade(t.glass, this.day, 1.2);
+        ctx.beginPath();
+        ctx.ellipse(c.x, c.y, a * 0.8, a * 0.7, 0, Math.PI, 0);
+        ctx.fill();
+        break;
+      case "beacon": {
+        ctx.fillStyle = shade(t.frame, this.day, 0.85);
+        ctx.fillRect(c.x - 2, c.y - 12, 4, 12);
+        const g = ctx.createRadialGradient(c.x, c.y - 14, 0, c.x, c.y - 14, night ? 26 : 12);
+        g.addColorStop(0, `rgba(${t.glass.map((v) => Math.min(255, v + 90)).join(",")},0.95)`);
+        g.addColorStop(1, "rgba(120,220,255,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y - 14, night ? 26 : 12, 0, Math.PI * 2);
+        ctx.fill();
+        break;
       }
     }
   }

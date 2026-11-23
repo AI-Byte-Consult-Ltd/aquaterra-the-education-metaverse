@@ -341,7 +341,8 @@ function PlotCard({ plot, world, t, fmt, onCopy }: { plot: Plot; world: World; t
         <dd className="font-medium">{plot.waterView ? t.yes : t.no}</dd>
         <dt className="text-muted-foreground">{t.fitsHere}</dt>
         <dd className="font-medium">
-          {t.styles[house.style.id as keyof typeof t.styles]} · {t.floorsShort(house.floors)}
+          {house.tower ? `${house.tower.name} (${t.styles[house.style.id as keyof typeof t.styles]})` : t.styles[house.style.id as keyof typeof t.styles]} ·{" "}
+          {t.floorsShort(house.floors)}
         </dd>
         <dt className="text-muted-foreground">{t.status}</dt>
         <dd className="font-medium text-emerald-500">{t.free}</dd>
