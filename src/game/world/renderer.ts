@@ -1,5 +1,5 @@
 import { KINDS, type Kind, type World } from "./generator";
-import { buildingsFor, type Building, type BuildingStyle, type Tower } from "./buildings";
+import { buildingsFor, hasHouse, type Building, type BuildingStyle, type Tower } from "./buildings";
 import { LAGOON, baseColor, daylight, shade, skyColor, treeColor, type RGB } from "./palette";
 
 export const TW = 32;
@@ -89,7 +89,7 @@ export class WorldRenderer {
           this.towerAt[tile] = p.id;
           this.towerFloors[tile] = t.heights[k];
         });
-      else this.houseAt[p.anchor.y * world.size + p.anchor.x] = p.id;
+      else if (hasHouse(p)) this.houseAt[p.anchor.y * world.size + p.anchor.x] = p.id;
     }
     this.refreshDaylight();
   }
@@ -380,7 +380,7 @@ export class WorldRenderer {
         // plot borders
         const pid = w.plotOf[i];
         if (pid >= 0) {
-          ctx.strokeStyle = "rgba(20,24,30,0.35)";
+          ctx.strokeStyle = w.plots[pid].water ? "rgba(255,255,255,0.22)" : "rgba(20,24,30,0.35)";
           ctx.lineWidth = 0.9;
           ctx.beginPath();
           if (x + 1 >= n || w.plotOf[i + 1] !== pid) {
@@ -1262,6 +1262,7 @@ export class WorldRenderer {
       ctx.font = font(10, 600);
       ctx.fillStyle = "rgba(10,20,30,0.8)";
       for (const p of w.plots) {
+        if (p.water) continue;
         const { x, y } = p.anchor;
         if (x < r.x0 || x > r.x1 || y < r.y0 || y > r.y1) continue;
         const { px, py } = at(x, y);

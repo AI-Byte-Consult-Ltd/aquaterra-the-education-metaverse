@@ -82,7 +82,10 @@ export interface Road {
 
 export interface Plot {
   id: number;
-  /** Postal address, e.g. "12 Coral Street", or "Isle 7, Pearl Atolls" for an island of its own. */
+  /**
+   * Postal address: "12 Coral Street" on a street, "Isle 7, Pearl Atolls" for an island of its own,
+   * "Lot 4, Driftstone Isles" for land away from the streets, "Water Plot 27-14" for water.
+   */
   address: string;
   number: number;
   /** Street of the address, -1 for an island plot. */
@@ -91,11 +94,18 @@ export interface Plot {
   tiles: number[];
   anchor: { x: number; y: number };
   /** Main landscape of the plot. */
-  landscape: "meadow" | "forest" | "hillside" | "beachfront" | "island";
+  landscape: "meadow" | "forest" | "hillside" | "beachfront" | "island" | "mountain" | WaterLandscape;
   waterView: boolean;
+  /** A plot of water (sea, lagoon or lake), not of land. */
+  water: boolean;
   /** Straight-line distance to the tower in tiles. */
   distance: number;
 }
+
+export type WaterLandscape = "lagoon" | "shallows" | "sea" | "deepSea" | "lake";
+
+/** Side of a water plot in tiles: the sea is cut on a fixed grid, so a water plot keeps its address as the world grows. */
+export const WATER_CELL = 8;
 
 export interface Airport {
   name: string;
@@ -976,6 +986,7 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
           anchor,
           landscape,
           waterView,
+          water: false,
           distance: Math.hypot(cx - center, cy - center),
         });
       }
@@ -1027,6 +1038,7 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
         anchor: { x: anchorT % size, y: Math.floor(anchorT / size) },
         landscape: "island",
         waterView: true,
+        water: false,
         distance: Math.hypot(cx - center, cy - center),
       });
     }
@@ -1265,6 +1277,209 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
       out.push({ name: ex.name, zone: z, lagoon: !!ex.lagoon, districts: mine.map((d) => d.id) });
     });
     return out;
+  }
+
+  // --- 14. the rest of the land: lots away from the streets -----------------------------------
+  // Every bit of land without a plot yet (open country, big islands, hills and mountains) is cut
+  // into lots, zone by zone, each zone with its own random numbers. These come after every
+  // street plot and island, so no earlier plot changes its id or address.
+  const LOT_KINDS = new Set<number>([K.land, K.forest, K.hill, K.beach, K.mountain, K.peak]);
+  const MOUNTAIN = new Set<number>([K.mountain, K.peak]);
+  const lotCount = new Map<number, number>();
+  const makeLots = (z: number) => {
+    const pr = rng((seed ^ Math.imul(z + 1, 0x9e3779b1) ^ 0x5bd1e995) >>> 0);
+    const cand: number[] = [];
+    for (let i = 0; i < N; i++) if (zone[i] === z && plotOf[i] < 0 && LOT_KINDS.has(kind[i]) && district[i] >= 0) cand.push(i);
+    if (!cand.length) return;
+    const owner = new Int32Array(N).fill(-2);
+    for (const i of cand) owner[i] = -1;
+    const tileW = new Float32Array(N);
+    for (const i of cand) tileW[i] = 1 + pr() * 1.1;
+    const cost = new Float64Array(N).fill(Infinity);
+    const seeds: { i: number; r: number }[] = [];
+    let pending = cand;
+    while (pending.length) {
+      // seeds by dart throwing; leftovers of a round become seeds of the next one
+      for (let s = pending.length - 1; s > 0; s--) {
+        const j = Math.floor(pr() * (s + 1));
+        [pending[s], pending[j]] = [pending[j], pending[s]];
+      }
+      const first = seeds.length;
+      const grid = new Map<number, number[]>();
+      const cell = 8;
+      for (const i of pending) {
+        const x = i % size;
+        const y = (i - x) / size;
+        const r = (MOUNTAIN.has(kind[i]) ? 4.6 : 3.3) * (0.75 + pr() * 0.6);
+        const cx = Math.floor(x / cell);
+        const cy = Math.floor(y / cell);
+        let ok = true;
+        for (let gx = cx - 1; gx <= cx + 1 && ok; gx++)
+          for (let gy = cy - 1; gy <= cy + 1 && ok; gy++)
+            for (const si of grid.get(gx * 10000 + gy) ?? []) {
+              const t = seeds[si].i;
+              if (Math.hypot((t % size) - x, Math.floor(t / size) - y) < Math.min(r, seeds[si].r) * 1.1) {
+                ok = false;
+                break;
+              }
+            }
+        if (!ok) continue;
+        const key = cx * 10000 + cy;
+        if (!grid.has(key)) grid.set(key, []);
+        grid.get(key)!.push(seeds.length);
+        seeds.push({ i, r });
+      }
+      const heap = new MinHeap();
+      for (let n2 = first; n2 < seeds.length; n2++) {
+        const t = seeds[n2].i;
+        cost[t] = 0;
+        owner[t] = n2;
+        heap.push(0, t);
+      }
+      while (heap.size) {
+        const cur = heap.pop();
+        const o = owner[cur];
+        const high = MOUNTAIN.has(kind[seeds[o].i]);
+        const x = cur % size;
+        const y = (cur - x) / size;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          if (!inb(x + dx, y + dy)) continue;
+          const j = idx(x + dx, y + dy);
+          if (owner[j] === -2 || (owner[j] >= 0 && owner[j] < first)) continue;
+          // lots keep to the lowland or to the mountains
+          const c = cost[cur] + tileW[j] * (MOUNTAIN.has(kind[j]) === high ? 1 : 2.5);
+          if (c > seeds[o].r * 2.4 || c >= cost[j]) continue;
+          cost[j] = c;
+          owner[j] = o;
+          heap.push(c, j);
+        }
+      }
+      pending = pending.filter((i) => owner[i] === -1);
+    }
+    const groups = new Map<number, number[]>();
+    for (const i of cand) {
+      if (!groups.has(owner[i])) groups.set(owner[i], []);
+      groups.get(owner[i])!.push(i);
+    }
+    // a lone tile joins a neighbouring lot
+    for (const [o, tiles] of groups) {
+      if (tiles.length !== 1) continue;
+      const t = tiles[0];
+      const x = t % size;
+      const y = (t - x) / size;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (!inb(x + dx, y + dy)) continue;
+        const o2 = owner[idx(x + dx, y + dy)];
+        if (o2 < 0 || o2 === o || !groups.get(o2)?.length) continue;
+        groups.get(o2)!.push(t);
+        owner[t] = o2;
+        groups.set(o, []);
+        break;
+      }
+    }
+    for (const [, tiles] of [...groups.entries()].sort((a, b) => a[0] - b[0])) {
+      if (!tiles.length) continue;
+      let sx = 0;
+      let sy = 0;
+      let waterView = false;
+      const counts = new Map<number, number>();
+      for (const t of tiles) {
+        const x = t % size;
+        const y = (t - x) / size;
+        sx += x;
+        sy += y;
+        const k = MOUNTAIN.has(kind[t]) ? K.mountain : kind[t];
+        counts.set(k, (counts.get(k) ?? 0) + 1);
+        if (!waterView)
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [0, 2], [-2, 0], [0, -2]])
+            if (inb(x + dx, y + dy) && isWater(kind[idx(x + dx, y + dy)])) {
+              waterView = true;
+              break;
+            }
+      }
+      const cx = sx / tiles.length;
+      const cy = sy / tiles.length;
+      const anchorT = tiles.reduce((a, t) => ((t % size) - cx) ** 2 + (Math.floor(t / size) - cy) ** 2 < ((a % size) - cx) ** 2 + (Math.floor(a / size) - cy) ** 2 ? t : a);
+      const top = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
+      const dId = district[anchorT];
+      const number = (lotCount.get(dId) ?? 0) + 1;
+      lotCount.set(dId, number);
+      const id = plots.length;
+      for (const t of tiles) plotOf[t] = id;
+      plots.push({
+        id,
+        address: `Lot ${number}, ${districts[dId].name}`,
+        number,
+        road: -1,
+        district: dId,
+        tiles,
+        anchor: { x: anchorT % size, y: Math.floor(anchorT / size) },
+        landscape: top === K.mountain ? "mountain" : top === K.forest ? "forest" : top === K.hill ? "hillside" : top === K.beach ? "beachfront" : "meadow",
+        waterView,
+        water: false,
+        distance: Math.hypot(cx - center, cy - center),
+      });
+    }
+  };
+  for (let z = 0; z < 2 + expansions.length; z++) makeLots(z);
+
+  // --- 15. water plots: the sea, lagoons and lakes on a fixed grid ---------------------------
+  // A water plot is the water inside one WATER_CELL × WATER_CELL square, named by the square
+  // ("Water Plot 27-14"), so it keeps its address whatever else changes. Rivers stay public.
+  {
+    const lagoonZones = new Set<number>([1, ...expansions.filter((e) => e.lagoon).map((e) => e.zone)]);
+    const cols = Math.ceil(size / WATER_CELL);
+    const cells = new Map<number, number[]>();
+    for (let i = 0; i < N; i++) {
+      const k = kind[i];
+      if (plotOf[i] >= 0 || (k !== K.deep && k !== K.ocean && k !== K.shallow && k !== K.lake)) continue;
+      const x = i % size;
+      const y = (i - x) / size;
+      const key = (Math.floor(y / WATER_CELL) * cols + Math.floor(x / WATER_CELL)) * 2 + (k === K.lake ? 1 : 0);
+      if (!cells.has(key)) cells.set(key, []);
+      cells.get(key)!.push(i);
+    }
+    for (const [key, tiles] of [...cells.entries()].sort((a, b) => a[0] - b[0])) {
+      if (tiles.length < 4) continue; // slivers between piers and the shore stay public
+      const lake = key % 2 === 1;
+      const c = (key - (key % 2)) / 2;
+      const col = (c % cols) + 1;
+      const row = Math.floor(c / cols) + 1;
+      let sx = 0;
+      let sy = 0;
+      const counts = new Map<number, number>();
+      const dCount = new Map<number, number>();
+      let lagoon = 0;
+      for (const t of tiles) {
+        sx += t % size;
+        sy += Math.floor(t / size);
+        counts.set(kind[t], (counts.get(kind[t]) ?? 0) + 1);
+        if (district[t] >= 0) dCount.set(district[t], (dCount.get(district[t]) ?? 0) + 1);
+        if (lagoonZones.has(zone[t]) && kind[t] !== K.deep) lagoon++;
+      }
+      const cx = sx / tiles.length;
+      const cy = sy / tiles.length;
+      const anchorT = tiles.reduce((a, t) => ((t % size) - cx) ** 2 + (Math.floor(t / size) - cy) ** 2 < ((a % size) - cx) ** 2 + (Math.floor(a / size) - cy) ** 2 ? t : a);
+      const top = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
+      const dTop = [...dCount.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
+      const landscape: WaterLandscape = lake ? "lake" : lagoon * 2 > tiles.length ? "lagoon" : top === K.shallow ? "shallows" : top === K.ocean ? "sea" : "deepSea";
+      const id = plots.length;
+      for (const t of tiles) plotOf[t] = id;
+      plots.push({
+        id,
+        address: `${lake ? "Lake" : "Water"} Plot ${col}-${row}`,
+        number: col,
+        road: -1,
+        // shallows and lakes belong to the district on their shore; open sea to none
+        district: dTop && dTop[1] * 3 >= tiles.length ? dTop[0] : -1,
+        tiles,
+        anchor: { x: anchorT % size, y: Math.floor(anchorT / size) },
+        landscape,
+        waterView: true,
+        water: true,
+        distance: Math.hypot(cx - center, cy - center),
+      });
+    }
   }
 
   // --- stats --------------------------------------------------------------------------------

@@ -241,3 +241,6 @@ export function buildingsFor(world: World): Building[] {
 }
 
 export const buildingFor = (world: World, plot: Plot): Building => buildingsFor(world)[plot.id];
+
+/** Water and mountain plots get no preview house: what is built there comes later. */
+export const hasHouse = (plot: Plot): boolean => !plot.water && plot.landscape !== "mountain";

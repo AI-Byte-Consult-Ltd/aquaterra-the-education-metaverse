@@ -24,8 +24,8 @@ const en = {
   copyLink: "Copy link",
   copied: "Link copied",
   close: "Close",
-  stats: (plots: number, districts: number, airports: number, stations: number) =>
-    `${plots.toLocaleString("en")} plots · ${districts} districts · ${airports} airports · ${stations} stations`,
+  stats: (land: number, water: number, districts: number, airports: number, stations: number) =>
+    `${land.toLocaleString("en")} land plots · ${water.toLocaleString("en")} water plots · ${districts} districts · ${airports} airports · ${stations} stations`,
   hint: "Drag to move, scroll or pinch to zoom, tap a plot",
   towerAbout:
     "The heart of the world and home of NICS AI. Apartments are the existing Radiant Residences NFTs on Cronos: one apartment, one NFT.",
@@ -59,6 +59,12 @@ const en = {
     hillside: "Hillside",
     beachfront: "Beachfront",
     island: "Private island",
+    mountain: "Mountain",
+    lagoon: "Lagoon",
+    shallows: "Shallow water",
+    sea: "Open sea",
+    deepSea: "Deep ocean",
+    lake: "Lake",
   } satisfies Record<Plot["landscape"], string>,
   tiles: {
     deep: "Deep ocean",
@@ -85,7 +91,9 @@ const en = {
     plaza: "Town square",
     tower: "First Light Tower",
   } satisfies Record<Kind, string>,
-  wild: "Not divided into plots yet",
+  wild: "Public space: roads, rivers, squares and shores belong to the whole city and are not sold as plots.",
+  openSea: "Open sea",
+  waterNote: "A plot of water. What can be built on water is decided when building opens.",
   houses: "Houses",
   housesOn: "Show houses",
   housesOff: "Hide houses",
