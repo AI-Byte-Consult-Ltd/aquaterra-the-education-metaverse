@@ -80,7 +80,20 @@ check(st["council"]["filled"] == 2 and st["council"]["need"] == 2, "council of t
 check(st["assembly"]["founding"] and st["assembly"]["total"] == 51, "founding assembly of 51 seats")
 
 # --- residence
-check(as_("Ava", action="propose", kind="resolution", title="Parks", body="x" * 30)["error"] == "no_home", "no home, no proposal")
+check(psql("SELECT d.name, r.chosen FROM aquaterra_residents r JOIN aquaterra_districts d ON d.id = r.district_id WHERE email = 'ava@x'") == "First Light City|f",
+      "a citizen who never chose lives in the capital")
+player("eve@x", "Eve")
+check(as_("Eve", action="propose", kind="resolution", title="Parks", body="x" * 30)["error"] == "no_home", "no home, no proposal")
+me = as_("Eve", action="set_residence", skip=True)
+check(me["ok"] and me["home"]["name"] == "First Light City" and me["home"]["chosen"] is False and me["home"]["canMoveAt"] is None,
+      "skipping at sign-up: First Light City, free to choose later")
+check(as_("Eve", action="set_residence", district=2)["ok"], "the first real choice has no wait")
+check(as_("Eve", action="set_residence", district=1)["error"] == "cooldown", "after choosing: 30 days before moving again")
+as_("Eve", action="set_residence", skip=True)
+check(as_("Eve", action="me")["home"]["name"] == "Coral Bay", "skip later does not move a chosen home")
+psql("DELETE FROM aquaterra_residents WHERE email = 'eve@x'; UPDATE aquaterra_players SET display_name = NULL WHERE email = 'eve@x'")  # keep the electorate at five below
+tick()
+check(psql("SELECT count(*) FROM aquaterra_residents WHERE email = 'eve@x'") == "0", "a player without a name is not made a citizen")
 for who, d in [("Alexander", 0), ("Ava", 1), ("Ben", 1), ("Cleo", 1), ("Dan", 2)]:
     check(as_(who, action="set_residence", district=d)["ok"], f"{who} moves in")
 check(as_("Ava", action="set_residence", district=2)["error"] == "cooldown", "cannot move again at once")

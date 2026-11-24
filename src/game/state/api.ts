@@ -131,7 +131,7 @@ export interface DistrictInfo {
 
 export interface CivicStatus {
   name: string | null;
-  home: { district: number; name: string; governedBy: string; since: string; canMoveAt: string } | null;
+  home: { district: number; name: string; governedBy: string; since: string; chosen: boolean; canMoveAt: string | null } | null;
   offices: { office: "council" | "deputy" | "mayor" | "director"; title: string; termEnds: string | null; seat?: number; post?: Post; district?: number }[];
   acting: Post[];
   official: boolean;
@@ -184,6 +184,8 @@ export const fetchLaws = () => call<Laws>({ action: "laws" });
 export const fetchCivic = (session: string) => call<CivicStatus & { ok: true }>({ action: "me", session });
 
 export const setResidence = (session: string, district: number) => call<CivicStatus>({ action: "set_residence", session, district });
+/** Sign-up without a choice: the citizen lives in the capital and may choose later without the 30-day wait. */
+export const skipResidence = (session: string) => call<CivicStatus>({ action: "set_residence", session, skip: true });
 export const propose = (session: string, kind: Kind, title: string, body: string, payload: Req) =>
   call<{ proposal: Proposal }>({ action: "propose", session, kind, title, body, payload });
 export const sign = (session: string, id: number) => call<{ proposal: Proposal }>({ action: "sign", session, id });

@@ -6,6 +6,7 @@ import { useAccount } from "@/game/account/AccountContext";
 import { isStaff, safeNext, saveDisplayName, validDisplayName, type AccountError } from "@/game/account/api";
 import CouncilBadge from "@/game/account/CouncilBadge";
 import { stateStrings } from "@/game/state/strings";
+import HomePicker from "@/game/state/HomePicker";
 import { accountLocale, accountStrings } from "@/game/account/strings";
 import { useEconomy } from "@/game/economy/EconomyContext";
 import { economyStrings } from "@/game/economy/strings";
@@ -25,6 +26,8 @@ const Profile = () => {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<AccountError | null>(null);
+  // sign-up: name first, then the home district
+  const [step, setStep] = useState<"name" | "home">("name");
 
   useEffect(() => {
     setName(player?.displayName ?? "");
@@ -49,12 +52,24 @@ const Profile = () => {
     }
     updatePlayer(r.data.player);
     setSaved(true);
-    if (welcome) navigate(next, { replace: true });
+    if (welcome) setStep("home");
   };
 
   const since = player.createdAt
     ? new Date(player.createdAt).toLocaleDateString(accountLocale(language), { year: "numeric", month: "long", day: "numeric" })
     : "—";
+
+  if (welcome && step === "home") {
+    return (
+      <div className="flex min-h-screen flex-col bg-background text-foreground">
+        <main className="flex flex-1 items-start justify-center px-4 py-8 md:items-center">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card/80 p-6 shadow-2xl backdrop-blur">
+            <HomePicker onDone={() => navigate(next, { replace: true })} />
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">

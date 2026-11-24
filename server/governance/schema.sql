@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS aquaterra_residents (
   since timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS aquaterra_residents_district ON aquaterra_residents(district_id);
+-- false while the home was given by default (First Light City): the first real choice is free of the 30-day wait.
+ALTER TABLE aquaterra_residents ADD COLUMN IF NOT EXISTS chosen boolean NOT NULL DEFAULT true;
 
 -- Council seats 3..11 are elected and have a term; seats 1 and 2 never end.
 ALTER TABLE aquaterra_council ADD COLUMN IF NOT EXISTS term_ends timestamptz;

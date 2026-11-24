@@ -541,6 +541,14 @@ BEGIN
     END IF;
   END IF;
 
+  -- 1b. every named citizen without a home lives in the capital until they choose
+  INSERT INTO aquaterra_residents (email, district_id, chosen)
+    SELECT p.email, (SELECT id FROM aquaterra_districts WHERE capital ORDER BY id LIMIT 1), false
+      FROM aquaterra_players p
+     WHERE p.display_name IS NOT NULL AND EXISTS (SELECT 1 FROM aquaterra_districts WHERE capital)
+       AND NOT EXISTS (SELECT 1 FROM aquaterra_residents h WHERE h.email = p.email)
+    ON CONFLICT (email) DO NOTHING;
+
   -- 2. a district seat for every governing district that has enough residents
   FOR r IN SELECT d.id, d.name FROM aquaterra_districts d
            WHERE d.merged_into IS NULL AND aquaterra_gov_residents(d.id) >= aquaterra_gov_param('district_seat_residents')
