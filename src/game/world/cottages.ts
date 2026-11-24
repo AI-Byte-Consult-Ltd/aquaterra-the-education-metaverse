@@ -254,7 +254,11 @@ const FP = 5.5;
  * Draw a cottage standing on the tile whose centre is (px, py).
  * tw/th are the tile's screen width and height.
  */
-export function drawCottage(ctx: CanvasRenderingContext2D, px: number, py: number, c: Cottage, pal: CottagePalette, tw: number, th: number) {
+/**
+ * `turn` is the map's view rotation in quarter turns (see view.ts): the cottage turns with
+ * the land, so its pool, deck and wings face the same way in the world from every side.
+ */
+export function drawCottage(ctx: CanvasRenderingContext2D, px: number, py: number, c: Cottage, pal: CottagePalette, tw: number, th: number, turn = 0) {
   const hw = tw / 2;
   const hh = th / 2;
   const P = (u: number, v: number, z: number): [number, number] => [px + (u - v) * hw, py + (u + v) * hh - z];
@@ -266,10 +270,19 @@ export function drawCottage(ctx: CanvasRenderingContext2D, px: number, py: numbe
     ctx.closePath();
     ctx.fill();
   };
-  const flipBox = (b: Box): Box => (c.flip ? { ...b, u0: b.v0, u1: b.v1, v0: b.u0, v1: b.u1 } : b);
+  // a quarter turn about the tile centre: (u, v) -> (-v, u)
+  const turnRect = <R extends { u0: number; u1: number; v0: number; v1: number }>(r: R): R => {
+    for (let k = 0; k < turn; k++) r = { ...r, u0: -r.v1, u1: -r.v0, v0: r.u0, v1: r.u1 };
+    return r;
+  };
+  const turnPt = (u: number, v: number): [number, number] => {
+    for (let k = 0; k < turn; k++) [u, v] = [-v, u];
+    return [u, v];
+  };
+  const flipBox = (b: Box): Box => turnRect(c.flip ? { ...b, u0: b.v0, u1: b.v1, v0: b.u0, v1: b.u1 } : b);
   const boxes = volumes(c).map(flipBox);
   const sw = (u0: number, u1: number, v0: number, v1: number) =>
-    c.flip ? { u0: v0, u1: v1, v0: u0, v1: u1 } : { u0, u1, v0, v1 };
+    turnRect(c.flip ? { u0: v0, u1: v1, v0: u0, v1: u1 } : { u0, u1, v0, v1 });
   const flat = (r: { u0: number; u1: number; v0: number; v1: number }, z: number, fill: string) =>
     poly([P(r.u0, r.v0, z), P(r.u1, r.v0, z), P(r.u1, r.v1, z), P(r.u0, r.v1, z)], fill);
 
@@ -281,23 +294,27 @@ export function drawCottage(ctx: CanvasRenderingContext2D, px: number, py: numbe
   }
   for (const b of boxes) flat({ u0: b.u0 + 0.06, u1: b.u1 + 0.1, v0: b.v0 + 0.02, v1: b.v1 + 0.04 }, 0.2, pal.shadow);
 
+  // shrubs behind the house (seen from a turned view) go down first, the rest in front
+  const shrubs = !c.shrubs
+    ? []
+    : (c.pool ? [[0.42, 0.3], [0.16, 0.42]] : [[0.4, -0.2], [0.42, 0.22], [0.12, 0.42]]).map(([u, v]) => (c.flip ? turnPt(v, u) : turnPt(u, v)));
+  const shrub = ([u, v]: [number, number]) => {
+    const q = P(u, v, 0);
+    ctx.fillStyle = pal.shrubDark;
+    ctx.beginPath();
+    ctx.arc(q[0], q[1] - 1.6, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = pal.shrub;
+    ctx.beginPath();
+    ctx.arc(q[0] - 0.5, q[1] - 2.2, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  shrubs.filter(([u, v]) => u + v < 0.2).forEach(shrub);
+
   const order = [...boxes].sort((a, b) => a.u0 + a.u1 + a.v0 + a.v1 - (b.u0 + b.u1 + b.v0 + b.v1) || a.z0 - b.z0);
   for (const b of order) drawBox(b);
 
-  if (c.shrubs) {
-    const spots = c.pool ? [[0.42, 0.3], [0.16, 0.42]] : [[0.4, -0.2], [0.42, 0.22], [0.12, 0.42]];
-    for (const [u, v] of spots) {
-      const q = c.flip ? P(v, u, 0) : P(u, v, 0);
-      ctx.fillStyle = pal.shrubDark;
-      ctx.beginPath();
-      ctx.arc(q[0], q[1] - 1.6, 2.2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = pal.shrub;
-      ctx.beginPath();
-      ctx.arc(q[0] - 0.5, q[1] - 2.2, 1.6, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
+  shrubs.filter(([u, v]) => u + v >= 0.2).forEach(shrub);
 
   function drawBox(b: Box) {
     const zb = b.z0 * FP;
