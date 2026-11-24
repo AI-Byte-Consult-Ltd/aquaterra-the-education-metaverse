@@ -121,7 +121,7 @@ function Citizenship({ civic, districts, onSaved, named }: { civic: CivicStatus;
   const { session, signOut } = useAccount();
   const [pick, setPick] = useState<string>("");
   const [saving, setSaving] = useState(false);
-  const canMove = !civic.home || new Date(civic.home.canMoveAt) <= new Date();
+  const canMove = !civic.home || !civic.home.canMoveAt || new Date(civic.home.canMoveAt) <= new Date();
   const save = async () => {
     if (!session || !pick) return;
     setSaving(true);
@@ -143,6 +143,7 @@ function Citizenship({ civic, districts, onSaved, named }: { civic: CivicStatus;
       ) : (
         <p className="text-muted-foreground">{t.noHome}</p>
       )}
+      {civic.home && !civic.home.chosen && <p className="text-xs text-muted-foreground">{t.defaultHome}</p>}
       {canMove ? (
         <div className="flex flex-col gap-2 sm:flex-row">
           <select value={pick} onChange={(e) => setPick(e.target.value)} className="h-9 flex-1 rounded-md border border-input bg-background px-2 text-sm">
@@ -157,7 +158,7 @@ function Citizenship({ civic, districts, onSaved, named }: { civic: CivicStatus;
           </button>
         </div>
       ) : (
-        civic.home && <p className="text-xs text-muted-foreground">{t.canMoveAt(date(civic.home.canMoveAt))}</p>
+        civic.home?.canMoveAt && <p className="text-xs text-muted-foreground">{t.canMoveAt(date(civic.home.canMoveAt))}</p>
       )}
       {civic.offices.length > 0 && (
         <div>

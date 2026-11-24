@@ -102,8 +102,8 @@ CREATE OR REPLACE FUNCTION aquaterra_gov_me(me text) RETURNS jsonb
 LANGUAGE sql STABLE AS $fn$
   SELECT jsonb_build_object('ok', true,
     'name', (SELECT display_name FROM aquaterra_players WHERE email = me),
-    'home', (SELECT jsonb_build_object('district', r.district_id, 'name', d.name, 'governedBy', aquaterra_gov_admin_name(d.id), 'since', r.since,
-        'canMoveAt', r.since + aquaterra_gov_param('residence_change_days') * interval '1 day')
+    'home', (SELECT jsonb_build_object('district', r.district_id, 'name', d.name, 'governedBy', aquaterra_gov_admin_name(d.id), 'since', r.since, 'chosen', r.chosen,
+        'canMoveAt', CASE WHEN r.chosen THEN r.since + aquaterra_gov_param('residence_change_days') * interval '1 day' END)
       FROM aquaterra_residents r JOIN aquaterra_districts d ON d.id = r.district_id WHERE r.email = me),
     'offices', COALESCE((SELECT jsonb_agg(o) FROM (
         SELECT jsonb_build_object('office', 'council', 'title', title, 'seat', seat, 'termEnds', term_ends) AS o FROM aquaterra_council
@@ -264,16 +264,23 @@ BEGIN
   IF act = 'me' THEN RETURN aquaterra_gov_me(me); END IF;
 
   IF act = 'set_residence' THEN
+    -- skip: the citizen did not choose at sign-up and lives in the capital until they do
+    IF COALESCE((req->>'skip')::boolean, false) THEN
+      INSERT INTO aquaterra_residents (email, district_id, chosen)
+        SELECT me, id, false FROM aquaterra_districts WHERE capital ORDER BY id LIMIT 1
+        ON CONFLICT (email) DO NOTHING;
+      RETURN aquaterra_gov_me(me);
+    END IF;
     IF NOT COALESCE(req->>'district', '') ~ '^\d{1,5}\Z' OR NOT EXISTS (SELECT 1 FROM aquaterra_districts WHERE id = (req->>'district')::int) THEN
       RETURN aquaterra_gov_err('district'); END IF;
-    IF EXISTS (SELECT 1 FROM aquaterra_residents WHERE email = me AND since > now() - aquaterra_gov_param('residence_change_days') * interval '1 day')
+    IF EXISTS (SELECT 1 FROM aquaterra_residents WHERE email = me AND chosen AND since > now() - aquaterra_gov_param('residence_change_days') * interval '1 day')
        AND NOT EXISTS (SELECT 1 FROM aquaterra_players WHERE email = me AND role = 'founder') THEN
       RETURN aquaterra_gov_err('cooldown'); END IF;
     IF EXISTS (SELECT 1 FROM aquaterra_districts WHERE mayor_email = me AND mayor_term_ends > now())
        OR EXISTS (SELECT 1 FROM aquaterra_gov_seats WHERE holder_email = me AND kind = 'district' AND term_ends > now()) THEN
       RETURN aquaterra_gov_err('office'); END IF;
-    INSERT INTO aquaterra_residents (email, district_id) VALUES (me, (req->>'district')::int)
-      ON CONFLICT (email) DO UPDATE SET district_id = EXCLUDED.district_id, since = now();
+    INSERT INTO aquaterra_residents (email, district_id, chosen) VALUES (me, (req->>'district')::int, true)
+      ON CONFLICT (email) DO UPDATE SET district_id = EXCLUDED.district_id, since = now(), chosen = true;
     RETURN aquaterra_gov_me(me);
   END IF;
 

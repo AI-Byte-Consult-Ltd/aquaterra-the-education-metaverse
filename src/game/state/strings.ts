@@ -21,6 +21,14 @@ const en = {
   moving: "Saving…",
   governedBy: (n: string) => `governed by ${n}`,
   canMoveAt: (d: string) => `You can move again after ${d}.`,
+  defaultHome: "You live in First Light City until you choose a home. Your first choice takes effect at once; after that you can move once every 30 days.",
+  // sign-up step after the name
+  pickHomeTitle: "Choose your home district",
+  pickHomeIntro:
+    "Your home district is where you are a citizen: you vote in its district votes and referendums, elect its Mayor and deputy, and appear there on the map. You can move later, once every 30 days.",
+  pickHomeSkip: "Skip: live in First Light City",
+  pickHomeSearch: "Search districts",
+  capitalTag: "Capital",
   yourOffices: "Your offices",
   acting: (posts: string) => `While the post is empty you act as ${posts}.`,
   toVote: (n: number) => (n === 1 ? "1 vote is waiting for you" : `${n} votes are waiting for you`),
