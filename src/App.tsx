@@ -19,6 +19,9 @@ import ChamberPage from "./pages/state/ChamberPage";
 import ProposalPage from "./pages/state/ProposalPage";
 import ProposePage from "./pages/state/ProposePage";
 import { DistrictsPage, JournalPage, LawsPage } from "./pages/state/RecordsPages";
+import ArcadeHome from "./pages/arcade/ArcadeHome";
+import PlayPage from "./pages/arcade/PlayPage";
+import SetupPage from "./pages/arcade/SetupPage";
 import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
 
@@ -54,6 +57,9 @@ const App = () => (
             <Route path="/state/districts" element={<DistrictsPage />} />
             <Route path="/state/p/:id" element={<ProposalPage />} />
             <Route path="/state/:chamber" element={<ChamberPage />} />
+            <Route path="/arcade" element={<ArcadeHome />} />
+            <Route path="/arcade/play/:plotId" element={<RequireAccount><PlayPage /></RequireAccount>} />
+            <Route path="/arcade/setup/:plotId" element={<RequireAccount><SetupPage /></RequireAccount>} />
             <Route path="/admin" element={<RequireAccount><Admin /></RequireAccount>} />
             <Route path="/city" element={<CityRedirect />} />
             <Route path="/map" element={<LandMap />} />

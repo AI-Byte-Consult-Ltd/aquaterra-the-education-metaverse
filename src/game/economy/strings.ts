@@ -42,6 +42,12 @@ const en = {
     state: "State payment",
     fare: "Travel fare",
     hub_purchase: "Transport purchase",
+    arcade_entry: "Arcade ticket",
+    arcade_prize: "Arcade prize",
+    arcade_pool: "Prize pool",
+    arcade_refund: "Prize pool back",
+    rent: "Plot rent",
+    quest: "Daily quest",
   } satisfies Record<LedgerKind, string>,
   // plot card
   price: "Price",

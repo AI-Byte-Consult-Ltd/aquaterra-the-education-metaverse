@@ -66,6 +66,8 @@ export class WorldRenderer {
   /** Seat of government picked on the map, and seats with open votes (a light on the roof). */
   selectedCivic: CivicId | null = null;
   busyCivic: Set<CivicId> = new Set();
+  /** Plots with an open arcade attraction: a pulsing sign over the plot (NICS AI's in cyan). */
+  attractions: Map<number, { ai: boolean; glyph: string }> = new Map();
   /** Names shown over the seats of government when zoomed in. */
   civicLabels: Partial<Record<CivicId, string>> = {};
   /** The signed-in resident's drop: where it stands (world tiles), its colour and label. */
@@ -412,6 +414,7 @@ export class WorldRenderer {
     this.drawTower(time);
     this.drawLabels();
     this.drawTraveller(time);
+    this.drawAttractions(time);
     if (this.turning) this.drawTurn(time);
   }
 
@@ -1420,6 +1423,41 @@ export class WorldRenderer {
       ctx.lineTo(bx, by + hh + 3);
       ctx.lineTo(bx + hw + 4, by);
       ctx.stroke();
+    }
+  }
+
+  /** Arcade signs: a round badge on a short pole over each plot with an attraction. */
+  private drawAttractions(time: number) {
+    if (!this.attractions.size) return;
+    const { ctx } = this;
+    const k = 1 / this.camera.scale;
+    const r = 11 * k;
+    const pulse = 0.5 + 0.5 * Math.sin(time / 380);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `800 ${13 * k}px Inter, system-ui, sans-serif`;
+    for (const [id, a] of this.attractions) {
+      const p = this.world.plots[id];
+      if (!p) continue;
+      const { px, py } = this.at(p.anchor.x, p.anchor.y);
+      const y = py - 34 * k;
+      const col = a.ai ? "56,232,255" : "255,92,210";
+      ctx.strokeStyle = `rgba(${col},0.9)`;
+      ctx.lineWidth = 2 * k;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(px, y + r);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(${col},${0.18 + 0.22 * pulse})`;
+      ctx.beginPath();
+      ctx.arc(px, y, r * (1.35 + 0.35 * pulse), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(${col},0.95)`;
+      ctx.beginPath();
+      ctx.arc(px, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#0b1030";
+      ctx.fillText(a.glyph, px, y + 0.5 * k);
     }
   }
 

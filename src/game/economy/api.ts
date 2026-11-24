@@ -39,7 +39,9 @@ export interface OwnedPlot {
   pending: number;
 }
 
-export type LedgerKind = "genesis" | "welcome" | "plot_purchase" | "transfer" | "fee" | "tax" | "income" | "grant" | "state" | "fare" | "hub_purchase";
+export type LedgerKind =
+  | "genesis" | "welcome" | "plot_purchase" | "transfer" | "fee" | "tax" | "income" | "grant" | "state" | "fare" | "hub_purchase"
+  | "arcade_entry" | "arcade_prize" | "arcade_pool" | "arcade_refund" | "rent" | "quest";
 
 export interface HistoryEntry {
   id: number;
