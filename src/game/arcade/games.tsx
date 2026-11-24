@@ -375,12 +375,18 @@ export function RacePlay({ run, t, onFinish }: GameProps) {
       if (done.current || started.current === false) return;
       const nl = lane.current + d;
       if (nl < 0 || nl > 2) return;
-      lane.current = nl;
       // a turn takes effect on the next row, exactly as the server replays it
       const r = Math.floor((performance.now() - t0.current) / g.tick) + 1;
-      switches.current.push([r, nl]);
+      const sw = switches.current;
+      const last = sw[sw.length - 1];
+      const before = sw.length > 1 ? sw[sw.length - 2][1] : 1;
+      // a turn and its undo on the same row cancel out; the server takes no more switches than rows
+      if (last && last[0] === r && before === nl) sw.pop();
+      else if (sw.length < g.rows) sw.push([r, nl]);
+      else return;
+      lane.current = nl;
     },
-    [g.tick],
+    [g.tick, g.rows],
   );
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
