@@ -7,7 +7,10 @@ LANGUAGE sql STABLE AS $fn$
   SELECT jsonb_build_object('id', a.id, 'plotId', a.plot_id, 'template', a.template, 'title', a.title, 'difficulty', a.difficulty,
     'entryFee', a.entry_fee, 'prize', a.prize, 'pool', a.pool, 'ai', a.operator = 'nics-ai', 'operator', aquaterra_arc_name(a.operator),
     'topic', CASE WHEN a.template = 'quiz' THEN COALESCE(a.config->>'topic', 'mixed') END,
-    'plays', a.plays, 'wins', a.wins, 'createdAt', a.created_at, 'rules', aquaterra_arc_rules(a.template, a.difficulty))
+    'plays', a.plays, 'wins', a.wins, 'createdAt', a.created_at,
+    'rules', aquaterra_arc_rules(a.template, a.difficulty) || CASE WHEN a.config ? 'questions' THEN jsonb_build_object(
+      'questions', least((aquaterra_arc_rules('quiz', a.difficulty)->>'questions')::int, jsonb_array_length(a.config->'questions')),
+      'win', least((aquaterra_arc_rules('quiz', a.difficulty)->>'win')::int, jsonb_array_length(a.config->'questions'))) ELSE '{}'::jsonb END)
 $fn$;
 
 -- Owner-written quiz: 3 to 10 questions, each with one answer and three wrong options.

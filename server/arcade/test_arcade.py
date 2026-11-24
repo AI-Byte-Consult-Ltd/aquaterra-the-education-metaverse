@@ -45,6 +45,7 @@ load(os.path.join(GOV, "base-tables.sql"))
 load(ECONOMY)
 for f in ["schema.sql", "functions.sql", "api.sql"]:
     load(os.path.join(GOV, f))
+load(os.path.join(HERE, "..", "travel", "travel.sql"))  # aquaterra_player_where: where a citizen stands
 for _ in range(2):  # the migration must be safe to run again
     for f in ["schema.sql", "bank.sql", "functions.sql", "api.sql"]:
         load(os.path.join(HERE, f))
@@ -55,8 +56,21 @@ def player(email, name, role="citizen"):
     tok = hashlib.sha256(email.encode()).hexdigest()
     psql(f"INSERT INTO aquaterra_sessions (token_hash, email, expires_at) VALUES (encode(sha256(convert_to({lit(tok)}, 'UTF8')), 'hex'), {lit(email)}, now() + interval '1 day')")
     S[name] = tok
+    EMAIL[name] = email
 
-def as_(who, **req):
+EMAIL = {}
+def stand(who, plot):
+    """Walk the citizen onto a plot, the way the travel system records it."""
+    e = EMAIL[who]
+    psql(f"SELECT aquaterra_player_where({lit(e)})")
+    psql(f"UPDATE aquaterra_locations SET spot = 'plot', plot_id = {plot} WHERE email = {lit(e)}")
+
+def as_(who, stand_there=True, **req):
+    # to play, a citizen walks to the attraction's plot first (tests of "not here" pass stand_there=False)
+    if req.get("action") == "start" and stand_there:
+        plot = psql(f"SELECT plot_id FROM aquaterra_arcade WHERE id = {int(req['id'])}")
+        if plot:
+            stand(who, int(plot))
     req["session"] = S[who]
     return arc(req)
 
@@ -118,6 +132,14 @@ check("First Light City" not in json.dumps(r), "answers never leave the server")
 check(bal("owner@x") == 5000 - 150, "deposit taken")
 r = as_("Olga", action="place", plotId=0, template="maze", title="Second")
 check(not r["ok"] and r["error"] == "exists", "one attraction per plot")
+
+# --- playing needs being on the plot
+psql("UPDATE aquaterra_locations SET plot_id = NULL, spot = 'centre'")
+r = as_("Ava", stand_there=False, action="start", id=quiz["id"])
+check(not r["ok"] and r["error"] == "not_here", "away from the plot you cannot play")
+check(arc({"action": "plot", "plotId": 0, "session": S["Ava"]})["me"]["here"] is False, "plot card says you are not here")
+stand("Ava", 0)
+check(arc({"action": "plot", "plotId": 0, "session": S["Ava"]})["me"]["here"] is True, "after walking there you are")
 
 # --- Ava plays it: ticket 20, 5% tax to the state, the rest to the owner
 st = int(psql("SELECT COALESCE((SELECT balance FROM aquaterra_wallets WHERE account = 'state:treasury'), 0)"))
@@ -335,6 +357,7 @@ psql("INSERT INTO aquaterra_players (email, display_name) VALUES ('new@x', 'Neo'
 tok = hashlib.sha256(b"new@x").hexdigest()
 psql(f"INSERT INTO aquaterra_sessions (token_hash, email, expires_at) VALUES (encode(sha256(convert_to({lit(tok)}, 'UTF8')), 'hex'), 'new@x', now() + interval '1 day')")
 S["Neo"] = tok
+EMAIL["Neo"] = "new@x"
 psql("SELECT aquaterra_economy(jsonb_build_object('action', 'wallet', 'session', " + lit(tok) + "))")
 check(bal("new@x") == 1000, "welcome coins")
 psql(f"UPDATE aquaterra_arcade SET entry_fee = 10 WHERE id = {rc['id']}")

@@ -28,6 +28,24 @@ function useSecondsLeft(until: number) {
   return left;
 }
 
+/** 3, 2, 1 before a fast game starts, so the player can get ready. */
+function useCountdown(from = 3) {
+  const [n, setN] = useState(from);
+  useEffect(() => {
+    if (n <= 0) return;
+    const id = window.setTimeout(() => setN(n - 1), 800);
+    return () => window.clearTimeout(id);
+  }, [n]);
+  return n;
+}
+
+const Countdown = ({ n }: { n: number }) =>
+  n > 0 ? (
+    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-background/40">
+      <span key={n} className="animate-in zoom-in-50 font-display text-7xl font-bold text-fuchsia-200 drop-shadow-[0_0_20px_rgba(255,92,210,0.8)]">{n}</span>
+    </div>
+  ) : null;
+
 const Bar = ({ left, total }: { left: number; total: number }) => (
   <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
     <div className="h-full rounded-full bg-gradient-to-r from-fuchsia-400 to-cyan-300 transition-all" style={{ width: `${Math.max(0, Math.min(100, (left / total) * 100))}%` }} />
@@ -273,12 +291,15 @@ const PadButton = ({ onClick, icon: Icon }: { onClick: () => void; icon: typeof 
 
 export function RangePlay({ run, t, onFinish }: GameProps) {
   const g = run.game as RangeGame;
+  const count = useCountdown();
   const t0 = useRef(performance.now());
   const hits = useRef<[number, number][]>([]);
   const [hitIds, setHitIds] = useState<Set<number>>(new Set());
   const [now, setNow] = useState(0);
   const done = useRef(false);
   useEffect(() => {
+    if (count > 0) return;
+    t0.current = performance.now();
     let raf = 0;
     const loop = () => {
       const ms = performance.now() - t0.current;
@@ -294,22 +315,23 @@ export function RangePlay({ run, t, onFinish }: GameProps) {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [g, onFinish]);
+  }, [g, onFinish, count]);
   const hit = (id: number) => {
     const ms = Math.round(performance.now() - t0.current);
     if (hitIds.has(id)) return;
     hits.current.push([id, ms]);
     setHitIds((s) => new Set(s).add(id));
   };
-  const live = g.schedule.filter((x) => now >= x.t && now <= x.t + g.window && !hitIds.has(x.id));
+  const live = count > 0 ? [] : g.schedule.filter((x) => now >= x.t && now <= x.t + g.window && !hitIds.has(x.id));
   return (
     <div className="mx-auto w-full max-w-2xl space-y-3">
       <div className="flex items-center justify-between text-sm">
         <span className="font-semibold text-cyan-200">{t.hits(hitIds.size, g.targets)}</span>
-        <span className="text-muted-foreground">{t.timeLeft(Math.max(0, Math.ceil((g.duration - now) / 1000)))}</span>
+        <span className="text-muted-foreground">{t.timeLeft(Math.max(0, Math.ceil((g.duration - (count > 0 ? 0 : now)) / 1000)))}</span>
       </div>
       <Bar left={g.duration - now} total={g.duration} />
       <div className="relative aspect-[4/3] w-full touch-none select-none overflow-hidden rounded-xl border border-border bg-[radial-gradient(ellipse_at_center,#1a1f4a,#070816)]">
+        <Countdown n={count} />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:40px_40px]" />
         {live.map((x) => {
           const life = 1 - (now - x.t) / g.window;
@@ -338,17 +360,19 @@ export function RangePlay({ run, t, onFinish }: GameProps) {
 
 export function RacePlay({ run, t, onFinish }: GameProps) {
   const g = run.game as RaceGame;
+  const count = useCountdown();
   const canvas = useRef<HTMLCanvasElement>(null);
   const lane = useRef(1);
   const switches = useRef<[number, number][]>([]);
   const t0 = useRef(performance.now());
+  const started = useRef(false);
   const done = useRef(false);
   const [row, setRow] = useState(0);
   const rocks = useRef(new Map(g.rocks.map(([r, l]) => [r, new Set(l)]))).current;
 
   const steer = useCallback(
     (d: -1 | 1) => {
-      if (done.current) return;
+      if (done.current || started.current === false) return;
       const nl = lane.current + d;
       if (nl < 0 || nl > 2) return;
       lane.current = nl;
@@ -379,12 +403,17 @@ export function RacePlay({ run, t, onFinish }: GameProps) {
     let raf = 0;
     let checked = -1;
     let shown = lane.current;
+    if (count === 0) {
+      t0.current = performance.now();
+      started.current = true;
+    }
     const loop = () => {
-      const ms = performance.now() - t0.current;
+      // during the countdown the course stands still at its start
+      const ms = started.current ? performance.now() - t0.current : 0;
       const pos = ms / g.tick;
       const cur = Math.floor(pos);
       // check each row once, when the boat enters it
-      while (checked < cur && checked < g.rows - 1 && !done.current) {
+      while (started.current && checked < cur && checked < g.rows - 1 && !done.current) {
         checked++;
         const laneAt = laneOn(switches.current, checked);
         if (rocks.get(checked)?.has(laneAt)) {
@@ -392,7 +421,7 @@ export function RacePlay({ run, t, onFinish }: GameProps) {
           onFinish({ switches: switches.current });
         }
       }
-      if (!done.current && cur >= g.rows) {
+      if (started.current && !done.current && cur >= g.rows) {
         done.current = true;
         onFinish({ switches: switches.current });
       }
@@ -479,7 +508,7 @@ export function RacePlay({ run, t, onFinish }: GameProps) {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [g, rocks, onFinish]);
+  }, [g, rocks, onFinish, count]);
 
   return (
     <div className="mx-auto w-full max-w-md space-y-3">
@@ -491,6 +520,7 @@ export function RacePlay({ run, t, onFinish }: GameProps) {
       </div>
       <div className="relative">
         <canvas ref={canvas} className="h-[60vh] max-h-[560px] w-full rounded-xl border border-border" />
+        <Countdown n={count} />
         <button aria-label="left" onPointerDown={() => steer(-1)} className="absolute inset-y-0 left-0 w-1/2" />
         <button aria-label="right" onPointerDown={() => steer(1)} className="absolute inset-y-0 right-0 w-1/2" />
       </div>
