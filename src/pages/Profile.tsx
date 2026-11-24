@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Check, Globe2, Loader2, LogOut, UserRound } from "lucide-react";
+import { ArrowLeft, Check, Crown, Globe2, Loader2, LogOut, UserRound, Users } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { useAccount } from "@/game/account/AccountContext";
-import { safeNext, saveDisplayName, validDisplayName, type AccountError } from "@/game/account/api";
+import { isStaff, safeNext, saveDisplayName, validDisplayName, type AccountError } from "@/game/account/api";
+import CouncilBadge from "@/game/account/CouncilBadge";
 import { accountLocale, accountStrings } from "@/game/account/strings";
 
 const Profile = () => {
@@ -61,11 +62,14 @@ const Profile = () => {
       <main className="flex flex-1 items-start justify-center px-4 pb-16 pt-6 md:items-center md:pt-0">
         <div className="w-full max-w-md space-y-6 rounded-2xl border border-border bg-card/80 p-6 shadow-2xl backdrop-blur">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 text-primary">
-              <UserRound className="h-6 w-6" />
+            <div
+              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${player.council ? "bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/60" : "bg-primary/15 text-primary"}`}
+            >
+              {player.council ? <Crown className="h-6 w-6" /> : <UserRound className="h-6 w-6" />}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 space-y-1">
               <h1 className="font-display text-2xl font-bold">{welcome ? t.chooseName : t.profileTitle}</h1>
+              <CouncilBadge player={player} label={t.councilBadge} />
               <p className="text-sm text-muted-foreground">{t.profileIntro}</p>
             </div>
           </div>
@@ -100,7 +104,30 @@ const Profile = () => {
             <dd className="truncate font-medium">{player.email}</dd>
             <dt className="text-muted-foreground">{t.memberSince}</dt>
             <dd className="font-medium">{since}</dd>
+            <dt className="text-muted-foreground">{t.roleLabel}</dt>
+            <dd className="font-medium">
+              {player.council ? (
+                <Link to="/council" className="text-amber-300 hover:underline">
+                  {t.councilName}, {t.councilMember(player.council.seat, player.council.title)}
+                </Link>
+              ) : (
+                t.roles[player.role ?? "citizen"]
+              )}
+            </dd>
           </dl>
+
+          <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+            <Link to="/council" className="inline-flex items-center gap-1.5 text-amber-300 hover:underline">
+              <Crown className="h-4 w-4" />
+              {t.viewCouncil}
+            </Link>
+            {isStaff(player) && (
+              <Link to="/admin" className="inline-flex items-center gap-1.5 text-primary hover:underline">
+                <Users className="h-4 w-4" />
+                {t.adminLink}
+              </Link>
+            )}
+          </div>
 
           <div className="flex flex-col gap-2 sm:flex-row">
             <Link
