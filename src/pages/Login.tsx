@@ -5,6 +5,7 @@ import { useLanguage } from "@/i18n/LanguageContext";
 import { useAccount } from "@/game/account/AccountContext";
 import { requestCode, safeNext, validEmail, verifyCode, type AccountError } from "@/game/account/api";
 import { accountStrings } from "@/game/account/strings";
+import { termsStrings } from "@/game/account/terms";
 
 const Login = () => {
   const { language } = useLanguage();
@@ -99,6 +100,9 @@ const Login = () => {
                 {busy ? t.sending : t.sendCode}
               </button>
               <p className="text-xs text-muted-foreground">{t.newHere}</p>
+              <p className="text-xs text-muted-foreground">
+                <Link to="/terms" className="hover:text-foreground hover:underline">{termsStrings(language).title}</Link>
+              </p>
             </form>
           ) : (
             <form onSubmit={verify} className="space-y-4" noValidate>

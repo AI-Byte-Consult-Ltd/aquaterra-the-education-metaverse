@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Coins, Crown, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, Building2, Coins, Cpu, Crown, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
+import { NicsChatButton } from "@/game/nics/NicsChat";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { DEFAULT_WORLD, findPlotByAddress, generateWorld, type Kind, type Plot, type World } from "@/game/world/generator";
@@ -353,6 +354,10 @@ const City = () => {
           <span className="hidden sm:inline">{ts.commonwealthShort}</span>
           {toVote > 0 && <span className="rounded-full bg-emerald-400 px-1.5 text-[11px] font-bold text-black">{toVote}</span>}
         </Link>
+        <NicsChatButton className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-cyan-300/50 bg-cyan-400/10 px-2.5 text-sm font-semibold text-cyan-200 hover:border-cyan-200">
+          <Cpu className="h-4 w-4 text-cyan-300" />
+          <span className="hidden sm:inline">NICS AI</span>
+        </NicsChatButton>
         {player && <TideChip />}
         {player && (
           <Link
@@ -466,6 +471,7 @@ const City = () => {
                   <Link2 className="h-4 w-4" />
                   {t.contract}
                 </a>
+                <NicsChatButton className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-cyan-400 text-sm font-semibold text-black hover:bg-cyan-300" />
                 <Link to="/state/council" className="flex items-center gap-1.5 text-sm text-amber-300 hover:underline">
                   <Crown className="h-4 w-4" />
                   {ta.councilName}

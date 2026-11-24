@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { BookOpen, ChevronDown, Coins, Cpu, Landmark, Loader2, MapPin, Plus, ScrollText, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { useAccount } from "@/game/account/AccountContext";
+import { NicsChatButton } from "@/game/nics/NicsChat";
 import { CHAMBERS, fetchCivic, fetchDistricts, fetchLog, fetchProposals, fetchState, setResidence, type Chamber, type CivicStatus, type DistrictInfo } from "@/game/state/api";
 import { ErrorLine, Loading, Shell, chamberIcon, chamberOf, useLoad, useStateT } from "@/game/state/ui";
 
@@ -29,7 +30,8 @@ const StateHome = () => {
   const s = state.data;
   return (
     <Shell title={t.commonwealth} icon={Landmark}>
-      <p className="mb-6 max-w-2xl text-sm text-muted-foreground">{t.intro}</p>
+      <p className="mb-3 max-w-2xl text-sm text-muted-foreground">{t.intro}</p>
+      <div className="mb-6"><NicsChatButton className="inline-flex h-9 items-center gap-2 rounded-md border border-cyan-300/50 bg-cyan-400/10 px-3 text-sm font-semibold text-cyan-200 hover:border-cyan-200" /></div>
 
       {/* citizenship */}
       <section className="mb-6 rounded-xl border border-border bg-card/40 p-4">

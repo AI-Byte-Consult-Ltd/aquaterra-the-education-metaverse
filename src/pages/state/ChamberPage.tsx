@@ -1,4 +1,5 @@
 import { Link, Navigate, useParams } from "react-router-dom";
+import { NicsChatButton } from "@/game/nics/NicsChat";
 import { Cpu, Plus, UserRound } from "lucide-react";
 import { useAccount } from "@/game/account/AccountContext";
 import { CHAMBERS, fetchProposals, fetchState, isChamber, type Proposal, type StateInfo } from "@/game/state/api";
@@ -70,6 +71,7 @@ function Members({ chamber, s }: { chamber: string; s: StateInfo }) {
             </li>
           ))}
         </ol>
+        <NicsChatButton className="mt-3 inline-flex h-9 items-center gap-2 rounded-md border border-cyan-300/50 bg-cyan-400/10 px-3 text-sm font-semibold text-cyan-200 hover:border-cyan-200" />
       </>
     );
   }
