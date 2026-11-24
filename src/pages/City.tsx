@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Home, Link2, Maximize2, MapPin, Search, UserRound, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, Building2, Crown, Home, Link2, Maximize2, MapPin, Search, UserRound, X, ZoomIn, ZoomOut } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { DEFAULT_WORLD, findPlotByAddress, generateWorld, type Kind, type Plot, type World } from "@/game/world/generator";
@@ -236,12 +236,13 @@ const City = () => {
         {player && (
           <Link
             to="/profile"
-            title={ta.profile}
+            title={player.council ? `${ta.councilName} · ${player.council.title}` : ta.profile}
             aria-label={ta.profile}
-            className="ml-auto flex h-9 max-w-[40%] items-center gap-1.5 rounded-full border border-border bg-background/60 px-2.5 text-sm hover:border-primary md:ml-0"
+            className={`ml-auto flex h-9 max-w-[45%] items-center gap-1.5 rounded-full border bg-background/60 px-2.5 text-sm md:ml-0 ${player.council ? "border-amber-400/70 text-amber-200 hover:border-amber-300" : "border-border hover:border-primary"}`}
           >
-            <UserRound className="h-4 w-4 shrink-0 text-primary" />
+            {player.council ? <Crown className="h-4 w-4 shrink-0 text-amber-300" /> : <UserRound className="h-4 w-4 shrink-0 text-primary" />}
             <span className="hidden truncate sm:inline">{player.displayName || ta.noName}</span>
+            {player.council && <span className="hidden text-[11px] font-semibold text-amber-300 lg:inline">· {player.council.title}</span>}
           </Link>
         )}
       </header>
@@ -319,6 +320,10 @@ const City = () => {
                   <Link2 className="h-4 w-4" />
                   {t.contract}
                 </a>
+                <Link to="/council" className="flex items-center gap-1.5 text-sm text-amber-300 hover:underline">
+                  <Crown className="h-4 w-4" />
+                  {ta.councilName}
+                </Link>
               </div>
             )}
           </aside>

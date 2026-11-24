@@ -8,11 +8,41 @@
 export const ACCOUNT_ENDPOINT = "https://n8n.aibyteconsult.com/webhook/aquaterra-account";
 const STORAGE_KEY = "aquaterra-account";
 
+export type Role = "citizen" | "admin" | "founder";
+
+/** A seat in the Council of First Light (11 seats). */
+export interface CouncilSeat {
+  seat: number;
+  title: string;
+}
+
 export interface Player {
   email: string;
   displayName: string | null;
   createdAt: string | null;
+  role?: Role;
+  council?: CouncilSeat | null;
 }
+
+export interface CouncilMember {
+  seat: number;
+  name: string;
+  title: string;
+  kind: "human" | "ai";
+  joinedAt: string | null;
+}
+
+export interface CouncilInfo {
+  seatsTotal: number;
+  members: CouncilMember[];
+  citizens: number;
+}
+
+export interface PlayerRow extends Player {
+  lastLoginAt: string | null;
+}
+
+export const isStaff = (p: Player | null | undefined) => p?.role === "founder" || p?.role === "admin";
 
 export interface StoredAccount {
   session: string;
@@ -27,11 +57,12 @@ export type AccountError =
   | "mail_unavailable"
   | "session"
   | "name"
+  | "forbidden"
   | "network";
 
 export type Result<T> = { ok: true; data: T; error?: undefined } | { ok: false; data?: undefined; error: AccountError };
 
-const KNOWN: AccountError[] = ["email", "code", "wrong_code", "too_many", "mail_unavailable", "session", "name"];
+const KNOWN: AccountError[] = ["email", "code", "wrong_code", "too_many", "mail_unavailable", "session", "name", "forbidden"];
 
 const call = async <T>(body: Record<string, string>): Promise<Result<T>> => {
   try {
@@ -67,6 +98,13 @@ export const fetchMe = (session: string) => call<{ player: Player }>({ action: "
 
 export const saveDisplayName = (session: string, displayName: string) =>
   call<{ player: Player }>({ action: "profile", session, displayName: displayName.replace(/\s+/g, " ").trim() });
+
+/** Public: who sits in the Council of First Light. */
+export const fetchCouncil = () => call<CouncilInfo>({ action: "council" });
+
+/** Founder and admins only: the list of citizens. */
+export const fetchPlayers = (session: string) =>
+  call<{ total: number; newToday: number; players: PlayerRow[] }>({ action: "players", session });
 
 export const endSession = (session: string) => call<{ ok: true }>({ action: "logout", session });
 

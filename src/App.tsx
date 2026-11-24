@@ -11,6 +11,8 @@ import City from "./pages/City";
 import LandMap from "./pages/LandMap";
 import Login from "./pages/Login";
 import Profile from "./pages/Profile";
+import Council from "./pages/Council";
+import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
 /** Old /city links (plot and address search params) open the world. */
@@ -34,6 +36,8 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/world" element={<RequireAccount><City /></RequireAccount>} />
             <Route path="/profile" element={<RequireAccount><Profile /></RequireAccount>} />
+            <Route path="/council" element={<Council />} />
+            <Route path="/admin" element={<RequireAccount><Admin /></RequireAccount>} />
             <Route path="/city" element={<CityRedirect />} />
             <Route path="/map" element={<LandMap />} />
             <Route path="*" element={<NotFound />} />
