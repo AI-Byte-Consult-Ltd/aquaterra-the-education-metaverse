@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Coins, Crown, Droplet, Footprints, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, Building2, Coins, Crown, Droplet, Gamepad2, Footprints, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { DEFAULT_WORLD, findPlotByAddress, generateWorld, type Kind, type Plot, type World } from "@/game/world/generator";
@@ -23,6 +23,11 @@ import { TripPlayer, dropHue } from "@/game/travel/drop";
 import type { Leg } from "@/game/travel/network";
 import { travelStrings } from "@/game/travel/strings";
 import { HubCard, TravelOptions, tripSegments } from "@/game/travel/ui";
+import PlotArcade from "@/game/arcade/PlotArcade";
+import { fetchArcadeMap, type MapAttraction } from "@/game/arcade/api";
+import { arcadeStrings } from "@/game/arcade/strings";
+
+const ARCADE_GLYPH: Record<MapAttraction["template"], string> = { quiz: "?", crystals: "◆", maze: "#", range: "◎", race: "≈" };
 
 /** One tile is 20 × 20 m in the game world. */
 const TILE_M2 = 400;
@@ -81,6 +86,24 @@ const City = () => {
   useEffect(() => {
     if (rendererRef.current) rendererRef.current.busyCivic = new Set(civicOpen.keys());
   }, [civicOpen]);
+  // arcade attractions: a sign over each plot that has one
+  const tg = arcadeStrings(language);
+  const attractionsRef = useRef<Map<number, { ai: boolean; glyph: string }>>(new Map());
+  useEffect(() => {
+    let stop = false;
+    const load = async () => {
+      const r = await fetchArcadeMap();
+      if (stop || !r.ok) return;
+      attractionsRef.current = new Map(r.data.attractions.map((a) => [a.plotId, { ai: a.ai, glyph: ARCADE_GLYPH[a.template] ?? "?" }]));
+      if (rendererRef.current) rendererRef.current.attractions = attractionsRef.current;
+    };
+    void load();
+    const id = window.setInterval(load, 120_000);
+    return () => {
+      stop = true;
+      window.clearInterval(id);
+    };
+  }, []);
   const economy = useEconomy();
   const ownedRef = useRef<Map<number, boolean>>(new Map());
   useEffect(() => {
@@ -168,6 +191,7 @@ const City = () => {
     size();
     r.setBuildingsVisible(housesRef.current);
     r.owned = ownedRef.current;
+    r.attractions = attractionsRef.current;
     r.fit();
     centred.current = false;
     if (netRef.current) r.ports = netRef.current.hubs.filter((h) => h.kind === "port").map((h) => ({ x: h.x, y: h.y }));
@@ -480,6 +504,15 @@ const City = () => {
           <Landmark className="h-4 w-4 text-amber-300" />
           <span className="hidden sm:inline">{ts.commonwealthShort}</span>
           {toVote > 0 && <span className="rounded-full bg-emerald-400 px-1.5 text-[11px] font-bold text-black">{toVote}</span>}
+        </Link>
+        <Link
+          to="/arcade"
+          title={tg.arcade}
+          aria-label={tg.arcade}
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-fuchsia-400/50 bg-fuchsia-400/10 px-2.5 text-sm font-semibold text-fuchsia-200 hover:border-fuchsia-300"
+        >
+          <Gamepad2 className="h-4 w-4 text-fuchsia-300" />
+          <span className="hidden sm:inline">{tg.arcade}</span>
         </Link>
         {player && <TideChip />}
         {player && (
@@ -829,6 +862,7 @@ function PlotCard({ plot, world, t, te, fmt, onCopy, owner, balance, incomeBp, l
       )}
       {atPlot && <p className="text-xs font-medium text-cyan-200">{tt.walked}</p>}
       {owner && !here && travel}
+      {listed && <PlotArcade key={atPlot ? "at" : "away"} plotId={plot.id} />}
       <button onClick={onCopy} className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
         <Link2 className="h-4 w-4" />
         {t.copyLink}
