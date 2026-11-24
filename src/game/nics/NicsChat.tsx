@@ -57,7 +57,9 @@ export const NicsChat = ({ open, onOpenChange }: { open: boolean; onOpenChange: 
     };
   }, [open, session]);
 
-  useEffect(() => endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" }), [lines, busy]);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+  }, [lines, busy]);
 
   const ask = useCallback(
     async (topic: Topic, question: string) => {
