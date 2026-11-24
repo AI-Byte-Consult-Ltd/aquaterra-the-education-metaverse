@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Coins, Cpu, Crown, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, Building2, Coins, Cpu, Crown, Droplet, Footprints, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
 import { NicsChatButton } from "@/game/nics/NicsChat";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -19,13 +19,27 @@ import type { CivicId } from "@/game/world/civic";
 import { fetchCivic, fetchProposals, type Proposal } from "@/game/state/api";
 import { stateStrings } from "@/game/state/strings";
 import { chamberOf } from "@/game/state/ui";
+import { buyHub, fetchNetwork, travel, type HubInfo, type Location, type NetworkInfo } from "@/game/travel/api";
+import { TripPlayer, dropHue } from "@/game/travel/drop";
+import type { Leg } from "@/game/travel/network";
+import { travelStrings } from "@/game/travel/strings";
+import { HubCard, TravelOptions, tripSegments } from "@/game/travel/ui";
 
 /** One tile is 20 × 20 m in the game world. */
 const TILE_M2 = 400;
 const TILE_M = 20;
 const TOWER_CONTRACT = "0x3720cde69e4e997bbdeaec7b4e7b5f8c3c406869";
 
-type Selection = { kind: "plot"; plot: Plot } | { kind: "tower" } | { kind: "civic"; id: CivicId } | { kind: "tile"; tile: Kind; district: number } | null;
+type Selection =
+  | { kind: "plot"; plot: Plot }
+  | { kind: "tower" }
+  | { kind: "civic"; id: CivicId }
+  | { kind: "tile"; tile: Kind; district: number }
+  | { kind: "hub"; id: string }
+  | null;
+
+/** Tiles of a station, a harbour's shore or an airport that open its card when tapped. */
+const HUB_TILES: Partial<Record<Kind, number>> = { station: 2, rail: 1, terminal: 9, apron: 12, runway: 18, pier: 4, shallow: 2, ocean: 2, beach: 2 };
 
 const City = () => {
   const { language } = useLanguage();
@@ -34,6 +48,7 @@ const City = () => {
   const { player, session, signOut } = useAccount();
   const te = economyStrings(language);
   const ts = stateStrings(language);
+  const tt = travelStrings(language);
   // open votes, for the lights on the plaza buildings and their cards
   const [openVotes, setOpenVotes] = useState<Proposal[]>([]);
   const [toVote, setToVote] = useState(0);
@@ -75,9 +90,59 @@ const City = () => {
   }, [economy.owners]);
   const city = useMemo(() => generateWorld(DEFAULT_WORLD), []);
   const [params, setParams] = useSearchParams();
+
+  // --- where the resident stands, and the transport network -----------------
+  const [net, setNet] = useState<NetworkInfo | null>(null);
+  const [me, setMe] = useState<Location | null>(null);
+  const [travelling, setTravelling] = useState(false);
+  const travellingRef = useRef(false);
+  const centred = useRef(false);
+  const hue = useMemo(() => dropHue(player?.email ?? "guest"), [player?.email]);
+  const placeDrop = useCallback(
+    (loc: Location | null) => {
+      const r = rendererRef.current;
+      if (!r) return;
+      r.player = loc ? { x: loc.x, y: loc.y, hue, label: tt.you } : null;
+    },
+    [hue, tt.you],
+  );
+  const loadNetwork = useCallback(async () => {
+    const r = await fetchNetwork(session);
+    if (!r.ok) {
+      if (r.error === "session") signOut();
+      return;
+    }
+    setNet(r.data);
+    if (rendererRef.current) rendererRef.current.ports = r.data.hubs.filter((h) => h.kind === "port").map((h) => ({ x: h.x, y: h.y }));
+    if (r.data.me && !travellingRef.current) {
+      setMe(r.data.me);
+      placeDrop(r.data.me);
+      // on arrival in the world, the camera looks at the resident's drop
+      if (!centred.current && rendererRef.current) {
+        centred.current = true;
+        if (!params.get("at") && !params.get("plot")) rendererRef.current.focusPoint(r.data.me.x, r.data.me.y, 0.7);
+      }
+    }
+  }, [session, signOut, placeDrop, params]);
+  useEffect(() => {
+    void loadNetwork();
+    const id = window.setInterval(() => void loadNetwork(), 60_000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
+
   const landPlots = useMemo(() => city.plots.filter((p) => !p.water).length, [city]);
 
   const wrapRef = useRef<HTMLDivElement>(null);
+  // the renderer is made again when the language changes: it takes the drop from these
+  const netRef = useRef(net);
+  const meRef = useRef(me);
+  const hueRef = useRef(hue);
+  const labelRef = useRef(tt.you);
+  netRef.current = net;
+  meRef.current = me;
+  hueRef.current = hue;
+  labelRef.current = tt.you;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<WorldRenderer | null>(null);
   const [selection, setSelection] = useState<Selection>(null);
@@ -105,6 +170,13 @@ const City = () => {
     r.setBuildingsVisible(housesRef.current);
     r.owned = ownedRef.current;
     r.fit();
+    centred.current = false;
+    if (netRef.current) r.ports = netRef.current.hubs.filter((h) => h.kind === "port").map((h) => ({ x: h.x, y: h.y }));
+    if (meRef.current) {
+      r.player = { x: meRef.current.x, y: meRef.current.y, hue: hueRef.current, label: labelRef.current };
+      if (!new URLSearchParams(window.location.search).get("at")) r.focusPoint(meRef.current.x, meRef.current.y, 0.7);
+      centred.current = true;
+    }
     const ro = new ResizeObserver(size);
     ro.observe(wrap);
     let raf = 0;
@@ -132,6 +204,10 @@ const City = () => {
       r.selectedPlot = s?.kind === "plot" ? s.plot.id : null;
       r.towerSelected = s?.kind === "tower";
       r.selectedCivic = s?.kind === "civic" ? s.id : null;
+      if (focus && s?.kind === "hub" && netRef.current) {
+        const h = netRef.current.hubs.find((x) => x.id === s.id);
+        if (h) r.focusPoint(h.x, h.y, 1);
+      }
       if (focus && s?.kind === "plot") r.focusTile(s.plot.anchor.x, s.plot.anchor.y, 1.4);
       if (focus && s?.kind === "tower") r.focusTower(0.6);
       const next = new URLSearchParams(params);
@@ -261,7 +337,16 @@ const City = () => {
       if (pick?.kind === "plot") select({ kind: "plot", plot: city.plots[pick.plotId] });
       else if (pick?.kind === "tower") select({ kind: "tower" });
       else if (pick?.kind === "civic") select({ kind: "civic", id: pick.id });
-      else if (pick?.kind === "tile") select({ kind: "tile", tile: pick.tile, district: pick.district });
+      else if (pick?.kind === "tile") {
+        const reach = HUB_TILES[pick.tile];
+        const hub = reach
+          ? netRef.current?.hubs
+              .filter((h) => Math.max(Math.abs(h.x - pick.x), Math.abs(h.y - pick.y)) <= reach)
+              .sort((a, b) => Math.hypot(a.x - pick.x, a.y - pick.y) - Math.hypot(b.x - pick.x, b.y - pick.y))[0]
+          : undefined;
+        if (hub) select({ kind: "hub", id: hub.id });
+        else select({ kind: "tile", tile: pick.tile, district: pick.district });
+      }
       else select(null);
     };
     const wheel = (e: WheelEvent) => {
@@ -287,6 +372,49 @@ const City = () => {
       canvas.removeEventListener("wheel", wheel);
     };
   }, [city, select]);
+
+  /** Send a trip to the server; when it is paid, play it on the map. */
+  const go = useCallback(
+    async (legs: Leg[], plot: Plot | null) => {
+      const r = rendererRef.current;
+      if (!session || !me || !net || travellingRef.current) return;
+      travellingRef.current = true;
+      setTravelling(true);
+      const body = [...legs.map((l) => ({ mode: l.mode, to: l.to })), ...(plot ? [{ mode: "walk" as const, plot: plot.id }] : [])];
+      const res = await travel(session, body);
+      if (!res.ok) {
+        travellingRef.current = false;
+        setTravelling(false);
+        if (res.error === "session") signOut();
+        else toast.error(tt.errors[res.error]);
+        return;
+      }
+      const from = r?.player ? { x: r.player.x, y: r.player.y } : { x: me.x, y: me.y };
+      const segs = tripSegments(city, net, from, legs, plot ? plot.anchor : null, me.districtId);
+      const arrive = () => {
+        travellingRef.current = false;
+        setTravelling(false);
+        setMe(res.data.me);
+        placeDrop(res.data.me);
+        if (legs.length) toast.success(tt.arrived(res.data.me.district ?? city.districts[res.data.me.districtId]?.name ?? "", res.data.fare));
+        void economy.refresh();
+        void loadNetwork();
+      };
+      if (r && segs.length) {
+        // long trips are watched from above, walks from where the camera is
+        if (legs.length && r.camera.scale > 0.45) r.camera.scale = 0.45;
+        r.follow = true;
+        r.trip = new TripPlayer(segs, arrive);
+      } else arrive();
+    },
+    [session, me, net, city, signOut, tt, placeDrop, economy, loadNetwork],
+  );
+
+  const findMe = () => {
+    const r = rendererRef.current;
+    if (!r?.player) return;
+    r.focusPoint(r.player.x, r.player.y, Math.max(r.camera.scale, 0.7));
+  };
 
   const zoom = (f: number) => {
     const r = rendererRef.current;
@@ -383,6 +511,17 @@ const City = () => {
           {houses && <div className="hidden max-w-xs md:block">{t.housesNote}</div>}
         </div>
 
+        {me && (
+          <button
+            onClick={findMe}
+            title={tt.findMe}
+            className="absolute bottom-3 left-3 flex max-w-[70%] items-center gap-2 rounded-full border border-cyan-300/50 bg-background/85 px-3 py-1.5 text-sm backdrop-blur hover:border-cyan-200"
+          >
+            <Droplet className="h-4 w-4 shrink-0" style={{ color: `hsl(${hue},95%,65%)`, fill: `hsl(${hue},95%,55%)` }} />
+            <span className="truncate">{travelling ? tt.going : tt.youAreIn(me.district ?? city.districts[me.districtId]?.name ?? "")}</span>
+          </button>
+        )}
+
         <div className="absolute right-3 top-3 flex flex-col gap-1.5">
           {[
             { icon: ZoomIn, label: "+", on: () => zoom(1.4) },
@@ -425,16 +564,70 @@ const City = () => {
                 balance={economy.wallet?.balance ?? null}
                 incomeBp={economy.wallet?.params?.income_bp_per_day ?? 100}
                 listed={economy.catalog === 0 || selection.plot.id < economy.catalog}
+                here={me ? canBuyHere(city, net, me, selection.plot) : true}
+                atPlot={me?.plotId === selection.plot.id}
+                myDistrict={me ? me.district ?? city.districts[me.districtId]?.name ?? "" : ""}
+                onWalk={() => void go([], selection.plot)}
+                busy={travelling}
+                tt={tt}
+                travel={
+                  me && net ? (
+                    <TravelOptions
+                      world={city}
+                      net={net}
+                      me={me}
+                      target={plotDistrict(city, net, me, selection.plot)}
+                      balance={economy.wallet?.balance ?? null}
+                      busy={travelling}
+                      t={tt}
+                      onGo={(legs) => void go(legs, selection.plot)}
+                    />
+                  ) : null
+                }
                 onBuy={async (plot) => {
                   if (!session) return;
                   const r = await buyPlot(session, plot.id);
                   if (!r.ok) {
                     if (r.error === "session") signOut();
                     else toast.error(te.errors[r.error]);
-                  } else toast.success(te.bought(plot.address));
+                  } else {
+                    toast.success(te.bought(plot.address));
+                    // walk onto the new land
+                    if (me?.plotId !== plot.id) void go([], plot);
+                  }
                   await economy.refresh();
                 }}
               />
+            ) : selection.kind === "hub" ? (
+              (() => {
+                const hub = net?.hubs.find((h) => h.id === selection.id);
+                if (!hub || !net) return null;
+                return (
+                  <HubCard
+                    hub={hub}
+                    world={city}
+                    net={net}
+                    me={me}
+                    balance={economy.wallet?.balance ?? null}
+                    busy={travelling}
+                    t={tt}
+                    onBuy={async (h: HubInfo) => {
+                      if (!session) return;
+                      const r = await buyHub(session, h.id);
+                      if (!r.ok) {
+                        if (r.error === "session") signOut();
+                        else toast.error(tt.errors[r.error]);
+                      } else toast.success(tt.bought(h.name));
+                      await Promise.all([economy.refresh(), loadNetwork()]);
+                    }}
+                    travel={
+                      me ? (
+                        <TravelOptions world={city} net={net} me={me} target={hub.district} balance={economy.wallet?.balance ?? null} busy={travelling} t={tt} onGo={(legs) => void go(legs, null)} />
+                      ) : null
+                    }
+                  />
+                );
+              })()
             ) : selection.kind === "civic" ? (
               <CivicCard id={selection.id} open={civicOpen.get(selection.id) ?? []} ts={ts} />
             ) : selection.kind === "tile" ? (
@@ -446,6 +639,16 @@ const City = () => {
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">{t.wild}</p>
+                {selection.district >= 0 && me && net && net.here[String(selection.district)] ? (
+                  <p className="text-xs text-cyan-200">{tt.people(net.here[String(selection.district)])}</p>
+                ) : null}
+                {selection.district >= 0 && me && net && (
+                  me.districtId === selection.district ? (
+                    <p className="text-xs font-medium text-cyan-200">{tt.here}</p>
+                  ) : (
+                    <TravelOptions world={city} net={net} me={me} target={selection.district} balance={economy.wallet?.balance ?? null} busy={travelling} t={tt} onGo={(legs) => void go(legs, null)} />
+                  )
+                )}
               </div>
             ) : (
               <div className="space-y-3 pr-6">
@@ -529,9 +732,18 @@ interface PlotCardProps {
   /** In the server's land registry, so it can be bought. */
   listed: boolean;
   onBuy: (plot: Plot) => Promise<void>;
+  /** The resident stands in this plot's district (land is bought only there). */
+  here: boolean;
+  atPlot: boolean;
+  myDistrict: string;
+  onWalk: () => void;
+  busy: boolean;
+  tt: ReturnType<typeof travelStrings>;
+  /** Ways to get here, when the resident is elsewhere. */
+  travel: React.ReactNode;
 }
 
-function PlotCard({ plot, world, t, te, fmt, onCopy, owner, balance, incomeBp, listed, onBuy }: PlotCardProps) {
+function PlotCard({ plot, world, t, te, fmt, onCopy, owner, balance, incomeBp, listed, onBuy, here, atPlot, myDistrict, onWalk, busy, tt, travel }: PlotCardProps) {
   const d = plot.district >= 0 ? world.districts[plot.district] : undefined;
   const house = hasHouse(plot) ? buildingFor(world, plot) : null;
   const price = plotPrice(world, plot);
@@ -593,6 +805,11 @@ function PlotCard({ plot, world, t, te, fmt, onCopy, owner, balance, incomeBp, l
         <p className="rounded-md bg-muted/60 p-2.5 text-xs text-muted-foreground">{te.yieldNote(dailyIncome(price, incomeBp))}</p>
       ) : !listed ? (
         <p className="rounded-md bg-muted/60 p-2.5 text-xs text-muted-foreground">{te.notListed}</p>
+      ) : !here ? (
+        <div className="space-y-2">
+          <p className="rounded-md bg-muted/60 p-2.5 text-xs text-muted-foreground">{tt.buyHereFirst(myDistrict)}</p>
+          {travel}
+        </div>
       ) : (
         <div className="space-y-1.5">
           <button
@@ -610,12 +827,35 @@ function PlotCard({ plot, world, t, te, fmt, onCopy, owner, balance, incomeBp, l
           <p className="text-xs text-muted-foreground">{short > 0 ? te.needMore(short) : te.yieldNote(dailyIncome(price, incomeBp))}</p>
         </div>
       )}
+      {here && !atPlot && (
+        <button disabled={busy} onClick={onWalk} className="flex items-center gap-1.5 text-sm text-cyan-200 hover:underline disabled:opacity-50">
+          <Footprints className="h-4 w-4" />
+          {tt.walkHere}
+        </button>
+      )}
+      {atPlot && <p className="text-xs font-medium text-cyan-200">{tt.walked}</p>}
+      {owner && !here && travel}
       <button onClick={onCopy} className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
         <Link2 className="h-4 w-4" />
         {t.copyLink}
       </button>
     </div>
   );
+}
+
+/** District a plot is reached through: its own, or for open water the nearest town with a harbour. */
+function plotDistrict(world: World, net: NetworkInfo | null, me: Location, plot: Plot): number {
+  if (plot.district >= 0) return plot.district;
+  const ports = net?.hubs.filter((h) => h.kind === "port") ?? [];
+  if (ports.some((h) => h.district === me.districtId)) return me.districtId;
+  const near = ports.sort((a, b) => Math.hypot(a.x - plot.anchor.x, a.y - plot.anchor.y) - Math.hypot(b.x - plot.anchor.x, b.y - plot.anchor.y))[0];
+  return near?.district ?? 0;
+}
+
+/** Same rule as the server: land of this district, or open water from a town with a harbour. */
+function canBuyHere(world: World, net: NetworkInfo | null, me: Location, plot: Plot): boolean {
+  if (plot.district >= 0) return plot.district === me.districtId;
+  return !!net?.hubs.some((h) => h.kind === "port" && h.district === me.districtId);
 }
 
 export default City;

@@ -40,7 +40,7 @@ export const TOPIC_FACTS = {
   vote: ["to_vote", "open_proposals", "signatures_needed"],
   home: ["home_district", "can_move", "move_days"],
   tower: ["floors", "apartments", "chain"],
-  travel: [],
+  travel: ["location", "tax_pct", "trips", "hubs"],
   help: [],
   unknown: [],
 } as const satisfies Record<Topic, readonly string[]>;
@@ -51,8 +51,8 @@ export type Facts = Partial<Record<FactKey, string>>;
 /** Topics a resident can pick on the card, in this order. */
 export const MENU: Topic[] = ["wallet", "my_plots", "buy_land", "earn", "treasury", "laws", "council", "elections", "vote", "home", "tower", "travel", "about_nics"];
 
-/** Topics whose facts need a signed-in resident. */
-export const PERSONAL: ReadonlySet<Topic> = new Set<Topic>(["wallet", "my_plots", "vote", "home"]);
+/** Topics whose facts need a signed-in resident (their own records, or rules the server shows only to residents). */
+export const PERSONAL: ReadonlySet<Topic> = new Set<Topic>(["wallet", "my_plots", "buy_land", "earn", "vote", "home", "travel"]);
 
 /*
  * Free text is only matched against these words to pick a topic. The text

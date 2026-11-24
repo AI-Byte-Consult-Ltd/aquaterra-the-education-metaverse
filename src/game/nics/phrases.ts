@@ -82,7 +82,8 @@ const en: PhraseBank = {
     { text: "I live in First Light Tower: {floors}, {apartments}. Every apartment is an NFT on {chain}, and the Commonwealth's chambers stand on the plaza around it." },
   ],
   travel: [
-    { text: "Travel by car, train, plane and ferry is being built. When it opens, each trip will cost Tide and part of it will go to the State Treasury as tax. Until then you can explore the whole map freely." },
+    { text: "You are in {location}. Travel by car, train, ferry or plane: tap a district on the map and choose a route. Fares are paid in Tide, and {tax_pct} of every fare goes to the State Treasury as travel tax. Trips so far: {trips}." },
+    { text: "Your drop is in {location}. The city has {hubs} you can leave from. Each fare is paid in Tide; the travel tax of {tax_pct} goes to the State Treasury. You have made {trips}." },
   ],
   help: [
     { text: "I can tell you about your wallet, your plots, how to buy land and earn Tide, the treasury, the laws, the Council, elections, votes waiting for you, your home district and First Light Tower. Pick a topic or ask in your own words." },

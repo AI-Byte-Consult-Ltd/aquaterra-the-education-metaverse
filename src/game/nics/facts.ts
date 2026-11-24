@@ -5,6 +5,7 @@
  */
 import { fetchLand, fetchWallet, dailyIncome } from "@/game/economy/api";
 import { fetchCivic, fetchLaws, fetchProposals, fetchState, type StateInfo } from "@/game/state/api";
+import { fetchNetwork, fetchWhere } from "@/game/travel/api";
 import type { Facts, Topic } from "./topics";
 
 export interface FactContext {
@@ -40,10 +41,21 @@ export const gatherFacts = async (topic: Topic, ctx: FactContext): Promise<Facts
       return { name: ctx.name || "citizen" };
     case "tower":
       return { floors: f.plural(TOWER.floors, "floor", "floors"), apartments: f.plural(TOWER.apartments, "apartment", "apartments"), chain: TOWER.chain };
-    case "travel":
     case "help":
     case "unknown":
       return {};
+  }
+
+  if (topic === "travel") {
+    if (!session) return null;
+    const [where, net] = await Promise.all([fetchWhere(session), fetchNetwork(session)]);
+    if (!where.ok || !net.ok) return null;
+    return {
+      location: where.data.me.district ?? "the open sea",
+      tax_pct: f.pct(net.data.taxPct),
+      trips: f.plural(where.data.me.trips, "trip", "trips", "none yet"),
+      hubs: f.plural(net.data.hubs.length, "station, harbour or airport", "stations, harbours and airports"),
+    };
   }
 
   if (topic === "wallet" || topic === "my_plots" || topic === "buy_land" || topic === "earn") {
