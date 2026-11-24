@@ -8,97 +8,97 @@
 -- ---------------------------------------------------------------- helpers
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_param(k text) RETURNS numeric
-LANGUAGE sql STABLE AS $$ SELECT value FROM aquaterra_gov_params WHERE key = k $$;
+LANGUAGE sql STABLE AS $fn$ SELECT value FROM aquaterra_gov_params WHERE key = k $fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_name(e text) RETURNS text
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE AS $fn$
   SELECT CASE WHEN e = 'nics-ai' THEN 'NICS AI'
     ELSE COALESCE((SELECT display_name FROM aquaterra_players WHERE email = e), 'Citizen') END
-$$;
+$fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_session(token text) RETURNS text
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE AS $fn$
   SELECT email FROM aquaterra_sessions
   WHERE token_hash = encode(sha256(convert_to(COALESCE(token, ''), 'UTF8')), 'hex') AND expires_at > now()
-$$;
+$fn$;
 
 -- The district that governs a district (itself unless merged).
 CREATE OR REPLACE FUNCTION aquaterra_gov_admin(d int) RETURNS int
-LANGUAGE sql STABLE AS $$ SELECT COALESCE(merged_into, id) FROM aquaterra_districts WHERE id = d $$;
+LANGUAGE sql STABLE AS $fn$ SELECT COALESCE(merged_into, id) FROM aquaterra_districts WHERE id = d $fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_admin_name(d int) RETURNS text
-LANGUAGE sql STABLE AS $$ SELECT COALESCE(admin_name, name) FROM aquaterra_districts WHERE id = aquaterra_gov_admin(d) $$;
+LANGUAGE sql STABLE AS $fn$ SELECT COALESCE(admin_name, name) FROM aquaterra_districts WHERE id = aquaterra_gov_admin(d) $fn$;
 
 -- Residents of a governing district, merged parts included.
 CREATE OR REPLACE FUNCTION aquaterra_gov_residents(admin int) RETURNS int
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE AS $fn$
   SELECT count(*)::int FROM aquaterra_residents r JOIN aquaterra_districts d ON d.id = r.district_id
   WHERE COALESCE(d.merged_into, d.id) = admin
-$$;
+$fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_deputies() RETURNS int
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE AS $fn$
   SELECT count(*)::int FROM aquaterra_gov_seats WHERE holder_email IS NOT NULL AND (term_ends IS NULL OR term_ends > now())
-$$;
+$fn$;
 
 -- Founding Assembly: until enough deputies are elected, every resident sits in the Assembly.
 CREATE OR REPLACE FUNCTION aquaterra_gov_founding() RETURNS boolean
-LANGUAGE sql STABLE AS $$ SELECT aquaterra_gov_deputies() < aquaterra_gov_param('founding_deputies') $$;
+LANGUAGE sql STABLE AS $fn$ SELECT aquaterra_gov_deputies() < aquaterra_gov_param('founding_deputies') $fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_treasury() RETURNS bigint
-LANGUAGE plpgsql STABLE AS $$
+LANGUAGE plpgsql STABLE AS $fn$
 DECLARE b bigint;
 BEGIN
   IF to_regclass('aquaterra_wallets') IS NULL THEN RETURN 0; END IF;
   EXECUTE format('SELECT balance::bigint FROM aquaterra_wallets WHERE account = %L', 'state:treasury') INTO b;
   RETURN COALESCE(b, 0);
-END $$;
+END $fn$;
 
 -- Moves TIDE through the economy's ledger (aquaterra_tide_transfer, owned by
 -- "[64 PUBLIC] AquaTerra Economy"). Raises its exception when it cannot pay.
 CREATE OR REPLACE FUNCTION aquaterra_gov_pay(from_acc text, to_acc text, amount bigint, memo text, ref text) RETURNS void
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql AS $fn$
 BEGIN
   IF to_regprocedure('aquaterra_tide_transfer(text,text,bigint,text,text)') IS NULL THEN RAISE EXCEPTION 'ledger not live'; END IF;
   EXECUTE format('SELECT aquaterra_tide_transfer(%L, %L, %s::bigint, %L, %L)', from_acc, to_acc, amount, memo, ref);
-END $$;
+END $fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_log_add(k text, pid int, t text) RETURNS void
-LANGUAGE sql AS $$ INSERT INTO aquaterra_gov_log (kind, proposal_id, text) VALUES (k, pid, t) $$;
+LANGUAGE sql AS $fn$ INSERT INTO aquaterra_gov_log (kind, proposal_id, text) VALUES (k, pid, t) $fn$;
 
 -- Council members who may vote: seats with a person or the AI, terms not ended.
 CREATE OR REPLACE FUNCTION aquaterra_gov_council_voters() RETURNS TABLE (voter text)
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE AS $fn$
   SELECT CASE WHEN kind = 'ai' THEN 'nics-ai' ELSE email END FROM aquaterra_council
   WHERE (kind = 'ai' OR email IS NOT NULL) AND (term_ends IS NULL OR term_ends > now())
-$$;
+$fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_assembly_voters() RETURNS TABLE (voter text)
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE AS $fn$
   SELECT email FROM aquaterra_residents WHERE aquaterra_gov_founding()
   UNION
   SELECT holder_email FROM aquaterra_gov_seats
   WHERE NOT aquaterra_gov_founding() AND holder_email IS NOT NULL AND (term_ends IS NULL OR term_ends > now())
-$$;
+$fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_district_voters(admins int[]) RETURNS TABLE (voter text)
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE AS $fn$
   SELECT r.email FROM aquaterra_residents r JOIN aquaterra_districts d ON d.id = r.district_id
   WHERE admins IS NULL OR COALESCE(d.merged_into, d.id) = ANY (admins)
-$$;
+$fn$;
 
 -- Districts a proposal concerns, as governing districts.
 CREATE OR REPLACE FUNCTION aquaterra_gov_scope(payload jsonb) RETURNS int[]
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE AS $fn$
   SELECT CASE
     WHEN payload ? 'districts' THEN ARRAY(SELECT DISTINCT aquaterra_gov_admin(x::int) FROM jsonb_array_elements_text(payload->'districts') x)
     WHEN payload ? 'district' THEN ARRAY[aquaterra_gov_admin((payload->>'district')::int)]
     ELSE NULL END
-$$;
+$fn$;
 
 -- Who may vote in the current stage of a proposal.
 CREATE OR REPLACE FUNCTION aquaterra_gov_electorate(pid int) RETURNS TABLE (voter text)
-LANGUAGE plpgsql STABLE AS $$
+LANGUAGE plpgsql STABLE AS $fn$
 DECLARE p aquaterra_gov_proposals; v_body text;
 BEGIN
   SELECT * INTO p FROM aquaterra_gov_proposals WHERE id = pid;
@@ -116,11 +116,11 @@ BEGIN
     IF p.payload->>'office' = 'council' THEN RETURN QUERY SELECT * FROM aquaterra_gov_assembly_voters();
     ELSE RETURN QUERY SELECT * FROM aquaterra_gov_district_voters(aquaterra_gov_scope(p.payload)); END IF;
   END IF;
-END $$;
+END $fn$;
 
 -- Which bodies decide each kind of proposal, in order, and by what majority.
 CREATE OR REPLACE FUNCTION aquaterra_gov_pipeline(kind text) RETURNS jsonb
-LANGUAGE sql IMMUTABLE AS $$
+LANGUAGE sql IMMUTABLE AS $fn$
   SELECT CASE kind
     WHEN 'resolution' THEN '[{"body":"assembly","rule":"majority"},{"body":"council","rule":"council"}]'
     WHEN 'set_param' THEN '[{"body":"assembly","rule":"majority"},{"body":"council","rule":"council"}]'
@@ -136,36 +136,36 @@ LANGUAGE sql IMMUTABLE AS $$
     WHEN 'dismiss' THEN '[{"body":"assembly","rule":"3/5"},{"body":"council","rule":"council"}]'
     WHEN 'election' THEN '[{"body":"nomination"},{"body":"ballot"}]'
   END::jsonb
-$$;
+$fn$;
 
 -- Holds any public office (these skip the signature stage).
 CREATE OR REPLACE FUNCTION aquaterra_gov_official(e text) RETURNS boolean
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE AS $fn$
   SELECT EXISTS (SELECT 1 FROM aquaterra_players WHERE email = e AND role IN ('founder', 'admin'))
       OR EXISTS (SELECT 1 FROM aquaterra_council WHERE email = e AND (term_ends IS NULL OR term_ends > now()))
       OR EXISTS (SELECT 1 FROM aquaterra_gov_seats WHERE holder_email = e AND (term_ends IS NULL OR term_ends > now()))
       OR EXISTS (SELECT 1 FROM aquaterra_districts WHERE mayor_email = e AND mayor_term_ends > now())
       OR EXISTS (SELECT 1 FROM aquaterra_gov_directorate WHERE holder_email = e AND term_ends > now())
-$$;
+$fn$;
 
 -- May act for a Directorate post: its holder, or the founder while the post is empty.
 CREATE OR REPLACE FUNCTION aquaterra_gov_can_act(e text, post_name text) RETURNS boolean
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE AS $fn$
   SELECT EXISTS (SELECT 1 FROM aquaterra_gov_directorate WHERE post = post_name AND holder_email = e AND term_ends > now())
       OR (EXISTS (SELECT 1 FROM aquaterra_players WHERE email = e AND role = 'founder')
           AND NOT EXISTS (SELECT 1 FROM aquaterra_gov_directorate WHERE post = post_name AND holder_email IS NOT NULL AND term_ends > now()))
-$$;
+$fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_signatures_needed() RETURNS int
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE AS $fn$
   SELECT GREATEST(1, LEAST((SELECT count(*) FROM aquaterra_residents)::int,
     GREATEST(aquaterra_gov_param('signatures_min'), ceil((SELECT count(*) FROM aquaterra_residents) * aquaterra_gov_param('signatures_pct') / 100))::int))
-$$;
+$fn$;
 
 -- ---------------------------------------------------------------- tallies
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_tally(pid int, st int) RETURNS jsonb
-LANGUAGE plpgsql STABLE AS $$
+LANGUAGE plpgsql STABLE AS $fn$
 DECLARE p aquaterra_gov_proposals; n int; y int; no_ int; ab int; v_body text; rule text; need int; quorum int; passed boolean; decided boolean;
 BEGIN
   SELECT * INTO p FROM aquaterra_gov_proposals WHERE id = pid;
@@ -195,13 +195,13 @@ BEGIN
   END IF;
   RETURN jsonb_build_object('body', v_body, 'rule', rule, 'electorate', n, 'yes', y, 'no', no_, 'abstain', ab,
     'quorum', quorum, 'need', need, 'passing', passed, 'decided', decided);
-END $$;
+END $fn$;
 
 -- ---------------------------------------------------------------- NICS AI
 
 -- NICS AI's vote in the Council: fixed public rules, no language model.
 CREATE OR REPLACE FUNCTION aquaterra_gov_nics_ai(pid int) RETURNS TABLE (choice text, reason text)
-LANGUAGE plpgsql STABLE AS $$
+LANGUAGE plpgsql STABLE AS $fn$
 DECLARE p aquaterra_gov_proposals; v numeric; n numeric; cap numeric; waiting int; prev jsonb;
 BEGIN
   SELECT * INTO p FROM aquaterra_gov_proposals WHERE id = pid;
@@ -238,10 +238,10 @@ BEGIN
     RETURN QUERY SELECT 'no', 'Rule W3: First Light City stays a district of its own.'; RETURN;
   END IF;
   RETURN QUERY SELECT 'yes', 'Rule G1: the citizens'' bodies approved it and it breaks no rule of the Charter.';
-END $$;
+END $fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_nics_vote(pid int) RETURNS void
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql AS $fn$
 DECLARE p aquaterra_gov_proposals; c text; r text;
 BEGIN
   SELECT * INTO p FROM aquaterra_gov_proposals WHERE id = pid;
@@ -252,19 +252,19 @@ BEGIN
   INSERT INTO aquaterra_gov_votes (proposal_id, stage, voter, choice, reason) VALUES (pid, p.stage, 'nics-ai', c, r);
   PERFORM aquaterra_gov_log_add('vote', pid, format('NICS AI voted %s on "%s". %s', upper(c), p.title, r));
   IF (aquaterra_gov_tally(pid, p.stage)->>'decided')::boolean THEN PERFORM aquaterra_gov_close_stage(pid); END IF;
-END $$;
+END $fn$;
 
 -- ---------------------------------------------------------------- stages
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_body_title(b text) RETURNS text
-LANGUAGE sql IMMUTABLE AS $$
+LANGUAGE sql IMMUTABLE AS $fn$
   SELECT CASE b WHEN 'council' THEN 'Council of First Light' WHEN 'assembly' THEN 'Citizens'' Assembly'
     WHEN 'mayors' THEN 'Conference of Mayors' WHEN 'district' THEN 'district vote' WHEN 'referendum' THEN 'referendum'
     WHEN 'nomination' THEN 'nominations' WHEN 'ballot' THEN 'ballot' ELSE b END
-$$;
+$fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_open_stage(pid int, idx int) RETURNS void
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql AS $fn$
 DECLARE p aquaterra_gov_proposals; v_body text; days numeric; n int;
 BEGIN
   SELECT * INTO p FROM aquaterra_gov_proposals WHERE id = pid FOR UPDATE;
@@ -291,10 +291,10 @@ BEGIN
       to_char(now() + days * interval '1 day', 'YYYY-MM-DD HH24:MI')));
   END IF;
   IF v_body = 'council' THEN PERFORM aquaterra_gov_nics_vote(pid); END IF;
-END $$;
+END $fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_close_stage(pid int) RETURNS void
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql AS $fn$
 DECLARE p aquaterra_gov_proposals; t jsonb; v_body text;
 BEGIN
   SELECT * INTO p FROM aquaterra_gov_proposals WHERE id = pid FOR UPDATE;
@@ -308,12 +308,12 @@ BEGIN
     CASE WHEN t->>'rule' = 'advisory' THEN 'Opinion recorded' WHEN (t->>'passing')::boolean THEN 'Approved' ELSE 'Rejected' END));
   IF (t->>'passing')::boolean THEN PERFORM aquaterra_gov_open_stage(pid, p.stage + 1);
   ELSE PERFORM aquaterra_gov_finish(pid, false); END IF;
-END $$;
+END $fn$;
 
 -- ---------------------------------------------------------------- outcome
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_finish(pid int, passed boolean) RETURNS void
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql AS $fn$
 DECLARE p aquaterra_gov_proposals; v_outcome text;
 BEGIN
   SELECT * INTO p FROM aquaterra_gov_proposals WHERE id = pid FOR UPDATE;
@@ -325,11 +325,11 @@ BEGIN
   v_outcome := aquaterra_gov_execute(pid);
   UPDATE aquaterra_gov_proposals SET status = 'passed', outcome = v_outcome, closed_at = now(), stage_ends = NULL WHERE id = pid;
   PERFORM aquaterra_gov_log_add('passed', pid, format('Adopted: "%s". %s', p.title, v_outcome));
-END $$;
+END $fn$;
 
 -- Puts a passed decision into effect. Returns what happened, in plain words.
 CREATE OR REPLACE FUNCTION aquaterra_gov_execute(pid int) RETURNS text
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql AS $fn$
 DECLARE p aquaterra_gov_proposals; line int; amount bigint; d int; into_d int; e text; days numeric; s int;
 BEGIN
   SELECT * INTO p FROM aquaterra_gov_proposals WHERE id = pid;
@@ -392,20 +392,20 @@ BEGIN
     RETURN 'The office is vacant. A new holder will be chosen.';
   ELSE RETURN 'Recorded.';
   END CASE;
-END $$;
+END $fn$;
 
 -- ---------------------------------------------------------------- elections
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_office_title(payload jsonb) RETURNS text
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE AS $fn$
   SELECT CASE payload->>'office'
     WHEN 'deputy' THEN 'Deputy for ' || aquaterra_gov_admin_name((payload->>'district')::int)
     WHEN 'mayor' THEN 'Mayor of ' || aquaterra_gov_admin_name((payload->>'district')::int)
     WHEN 'council' THEN 'Council of First Light' END
-$$;
+$fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_open_election(payload jsonb) RETURNS int
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql AS $fn$
 DECLARE pid int; title text;
 BEGIN
   title := 'Election: ' || aquaterra_gov_office_title(payload) ||
@@ -416,10 +416,10 @@ BEGIN
   PERFORM aquaterra_gov_log_add('election', pid, format('%s is open. Candidates may stand until %s UTC.', title,
     to_char((SELECT stage_ends FROM aquaterra_gov_proposals WHERE id = pid), 'YYYY-MM-DD HH24:MI')));
   RETURN pid;
-END $$;
+END $fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_seat_winner(p aquaterra_gov_proposals, e text) RETURNS void
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql AS $fn$
 DECLARE days numeric; s int;
 BEGIN
   IF p.payload->>'office' = 'deputy' THEN
@@ -439,10 +439,10 @@ BEGIN
       ON CONFLICT (seat) DO UPDATE SET name = EXCLUDED.name, title = EXCLUDED.title, kind = 'human', email = EXCLUDED.email,
         joined_at = EXCLUDED.joined_at, term_ends = EXCLUDED.term_ends;
   END IF;
-END $$;
+END $fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_close_election(pid int) RETURNS void
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql AS $fn$
 DECLARE p aquaterra_gov_proposals; seats int; c int; w record; names text[] := '{}'; res jsonb;
 BEGIN
   SELECT * INTO p FROM aquaterra_gov_proposals WHERE id = pid FOR UPDATE;
@@ -480,13 +480,13 @@ BEGIN
     results = jsonb_build_array(jsonb_build_object('body', 'ballot', 'candidates', res, 'winners', to_jsonb(names), 'at', now())) WHERE id = pid;
   PERFORM aquaterra_gov_log_add('elected', pid, CASE WHEN cardinality(names) > 0 THEN format('%s: %s elected.', p.title, array_to_string(names, ', '))
     ELSE format('%s: nobody voted.', p.title) END);
-END $$;
+END $fn$;
 
 -- Land tax: every 30 days each owner pays land_tax_pct a year of what their
 -- plots cost, pro rata (30/365), to the State Treasury. Owners who cannot pay
 -- are skipped and counted. Needs the TIDE ledger (economy thread).
 CREATE OR REPLACE FUNCTION aquaterra_gov_collect_land_tax() RETURNS void
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql AS $fn$
 DECLARE r record; due bigint; v_total bigint := 0; v_payers int := 0; v_unpaid int := 0; run int;
 BEGIN
   IF to_regclass('aquaterra_plot_owners') IS NULL OR to_regprocedure('aquaterra_tide_transfer(text,text,bigint,text,text)') IS NULL THEN RETURN; END IF;
@@ -506,14 +506,14 @@ BEGIN
     PERFORM aquaterra_gov_log_add('tax', NULL, format('Land tax collected: %s TIDE from %s owners at %s%% a year.%s', v_total, v_payers,
       aquaterra_gov_param('land_tax_pct'), CASE WHEN v_unpaid > 0 THEN format(' %s owners could not pay.', v_unpaid) ELSE '' END));
   END IF;
-END $$;
+END $fn$;
 
 -- ---------------------------------------------------------------- tick
 
 -- Runs every few minutes. districts: the site's /world/districts.json
 -- ([{id, name, biome, land, capital}]), or null to skip the sync.
 CREATE OR REPLACE FUNCTION aquaterra_gov_tick(districts jsonb DEFAULT NULL) RETURNS jsonb
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql AS $fn$
 DECLARE r record; who text; added int := 0; seats_added int := 0; closed int := 0; elections int := 0; total int; dseats int; lots int; want_lots int; residents int; vacant int;
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtext('aquaterra_gov_tick'));
@@ -623,4 +623,4 @@ BEGIN
   PERFORM aquaterra_gov_collect_land_tax();
 
   RETURN jsonb_build_object('districtsAdded', added, 'seatsAdded', seats_added, 'stagesClosed', closed, 'electionsOpened', elections);
-END $$;
+END $fn$;

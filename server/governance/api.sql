@@ -3,27 +3,27 @@
 -- Public answers carry citizen names only, never emails.
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_err(code text) RETURNS jsonb
-LANGUAGE sql IMMUTABLE AS $$ SELECT jsonb_build_object('ok', false, 'error', code) $$;
+LANGUAGE sql IMMUTABLE AS $fn$ SELECT jsonb_build_object('ok', false, 'error', code) $fn$;
 
 -- A citizen by their exact citizen name. NULL if nobody or more than one has it.
 CREATE OR REPLACE FUNCTION aquaterra_gov_find(n text) RETURNS text
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE AS $fn$
   SELECT CASE WHEN count(*) = 1 THEN min(email) END FROM aquaterra_players
   WHERE lower(display_name) = lower(btrim(COALESCE(n, '')))
-$$;
+$fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_public_payload(p aquaterra_gov_proposals) RETURNS jsonb
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE AS $fn$
   SELECT (p.payload - 'email')
     || CASE WHEN p.payload ? 'district' THEN jsonb_build_object('districtName', aquaterra_gov_admin_name((p.payload->>'district')::int)) ELSE '{}'::jsonb END
     || CASE WHEN p.payload ? 'into' THEN jsonb_build_object('intoName', aquaterra_gov_admin_name((p.payload->>'into')::int)) ELSE '{}'::jsonb END
     || CASE WHEN p.payload ? 'key' THEN jsonb_build_object('label', (SELECT label FROM aquaterra_gov_params WHERE key = p.payload->>'key'),
          'current', aquaterra_gov_param(p.payload->>'key')) ELSE '{}'::jsonb END
-$$;
+$fn$;
 
 -- One proposal as the site shows it. me: the viewer's email or NULL. full: add roll call and candidates.
 CREATE OR REPLACE FUNCTION aquaterra_gov_proposal_json(pid int, me text, with_detail boolean) RETURNS jsonb
-LANGUAGE plpgsql STABLE AS $$
+LANGUAGE plpgsql STABLE AS $fn$
 DECLARE p aquaterra_gov_proposals; j jsonb; cur text; mine text; elig boolean := false; sigs int; roll jsonb; cands jsonb;
 BEGIN
   SELECT * INTO p FROM aquaterra_gov_proposals WHERE id = pid;
@@ -62,10 +62,10 @@ BEGIN
     j := j || jsonb_build_object('rollCall', roll, 'candidateList', cands);
   END IF;
   RETURN j;
-END $$;
+END $fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_state() RETURNS jsonb
-LANGUAGE plpgsql STABLE AS $$
+LANGUAGE plpgsql STABLE AS $fn$
 DECLARE dseats int; total int; filled int;
 BEGIN
   SELECT count(*) INTO dseats FROM aquaterra_gov_seats WHERE kind = 'district';
@@ -96,10 +96,10 @@ BEGIN
     'open', (SELECT count(*) FROM aquaterra_gov_proposals WHERE status IN ('voting', 'signatures')),
     'params', (SELECT jsonb_agg(jsonb_build_object('key', key, 'value', value, 'min', min_value, 'max', max_value, 'label', label, 'updatedAt', updated_at) ORDER BY key)
       FROM aquaterra_gov_params));
-END $$;
+END $fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov_me(me text) RETURNS jsonb
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE AS $fn$
   SELECT jsonb_build_object('ok', true,
     'name', (SELECT display_name FROM aquaterra_players WHERE email = me),
     'home', (SELECT jsonb_build_object('district', r.district_id, 'name', d.name, 'governedBy', aquaterra_gov_admin_name(d.id), 'since', r.since,
@@ -120,11 +120,11 @@ LANGUAGE sql STABLE AS $$
     'toVote', (SELECT count(*) FROM aquaterra_gov_proposals p WHERE p.status = 'voting' AND p.stages->p.stage->>'body' <> 'nomination'
         AND EXISTS (SELECT 1 FROM aquaterra_gov_electorate(p.id) WHERE voter = me)
         AND NOT EXISTS (SELECT 1 FROM aquaterra_gov_votes v WHERE v.proposal_id = p.id AND v.stage = p.stage AND v.voter = me)))
-$$;
+$fn$;
 
 -- Checks a new proposal. Returns NULL when fine, else an error code; fills payload.
 CREATE OR REPLACE FUNCTION aquaterra_gov_check(kind text, title text, body text, INOUT payload jsonb, OUT err text)
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql AS $fn$
 DECLARE prm aquaterra_gov_params; v numeric; f int; d int; e text;
 BEGIN
   err := NULL;
@@ -197,10 +197,10 @@ BEGIN
   ELSE
     payload := '{}'::jsonb;
   END CASE;
-END $$;
+END $fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_gov(req jsonb) RETURNS jsonb
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql AS $fn$
 DECLARE
   act text := req->>'action';
   me text;
@@ -389,4 +389,4 @@ BEGIN
   END IF;
 
   RETURN aquaterra_gov_err('action');
-END $$;
+END $fn$;
