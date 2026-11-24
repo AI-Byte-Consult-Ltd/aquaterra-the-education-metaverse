@@ -1,5 +1,6 @@
 import { KINDS, type Kind, type World } from "./generator";
 import { buildingsFor, hasHouse, type Building, type BuildingStyle, type Tower } from "./buildings";
+import { cottagePalette, drawCottage, type CottagePalette } from "./cottages";
 import { LAGOON, baseColor, daylight, shade, skyColor, treeColor, type RGB } from "./palette";
 
 export const TW = 32;
@@ -62,6 +63,7 @@ export class WorldRenderer {
   private towerAt: Int32Array;
   private towerFloors: Int16Array;
   /** Colours of each building at the current daylight, by plot id. */
+  private cottageColors: (CottagePalette | null)[] = [];
   private houseColors: { wl: string; wr: string; roof: string; roofDark: string; win: string; post: string; trim: string }[] = [];
 
   constructor(
@@ -160,6 +162,7 @@ export class WorldRenderer {
         trim: shade([212, 172, 76], this.day, 1.05),
       };
     });
+    this.cottageColors = this.buildings.map((b) => (b.cottage ? cottagePalette(b.cottage, this.day) : null));
     this.groundKey = "";
     this.overview = null;
   }
@@ -650,6 +653,7 @@ export class WorldRenderer {
   /** An isometric house standing on the centre (px, py) of a tile. */
   private drawBuilding(ctx: CanvasRenderingContext2D, px: number, py: number, id: number) {
     const b: Building = this.buildings[id];
+    if (b.cottage) return drawCottage(ctx, px, py, b.cottage, this.cottageColors[id]!, TW, TH);
     const st: BuildingStyle = b.style;
     const col = this.houseColors[id];
     const a = (TW / 2) * st.footprint;

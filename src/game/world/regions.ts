@@ -88,7 +88,7 @@ export const REGIONS = {
     forest: -9,
     lakes: 0,
     area: 0.25,
-    houses: ["treehouse", "cabin"],
+    houses: ["cottage"],
     // the wettest district well away from the capital is woods from edge to edge
     landmark: { count: 1, score: (s) => (s.dist > 60 ? s.moist : -Infinity) },
   },
@@ -98,7 +98,7 @@ export const REGIONS = {
     forest: 9,
     lakes: -9,
     area: 0.2,
-    houses: ["sandhouse"],
+    houses: ["cottage"],
     // the driest southern district is sand from edge to edge
     landmark: { count: 1, score: (s) => (s.dist > 60 && s.lat > -0.2 ? -s.moist : -Infinity) },
   },
@@ -217,7 +217,7 @@ export const REGIONS = {
     forest: 0.1,
     lakes: -9,
     area: 1,
-    houses: ["bungalow", "bungalow", "villa"],
+    houses: ["cottage"],
     sea: true,
   },
   isles: {
@@ -226,7 +226,7 @@ export const REGIONS = {
     forest: 0.05,
     lakes: -9,
     area: 1,
-    houses: ["villa", "lodge", "bungalow"],
+    houses: ["cottage"],
     coastHouse: "resort",
     // a land added later (see expansions.ts): rugged green islands with mountains
     sea: true,
