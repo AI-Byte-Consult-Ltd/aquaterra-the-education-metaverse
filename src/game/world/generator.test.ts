@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_WORLD, KINDS, findPlotByAddress, generateWorld, type Kind } from "./generator";
+import { DEFAULT_WORLD, KINDS, WATER_CELL, findPlotByAddress, generateWorld, type Kind } from "./generator";
 
 const world = generateWorld(DEFAULT_WORLD);
 const n = world.size;
@@ -123,14 +123,65 @@ describe("world generator", () => {
       expect(after.plots.length).toBeGreaterThan(before.plots.length);
       expect(after.districts.slice(0, before.districts.length)).toEqual(before.districts);
       expect(after.roads.slice(0, before.roads.length)).toEqual(before.roads);
-      expect(after.plots.slice(0, before.plots.length).map((p) => [p.address, p.tiles.join()])).toEqual(before.plots.map((p) => [p.address, p.tiles.join()]));
+      // every land plot keeps its address and its tiles
+      const byAddress = new Map(after.plots.map((p) => [p.address, p]));
+      for (const p of before.plots) {
+        const q = byAddress.get(p.address);
+        if (p.water) {
+          // a water plot may only lose the tiles that new land rose from
+          if (q) for (const t of q.tiles) expect(p.tiles).toContain(t);
+          continue;
+        }
+        expect(q?.tiles.join(), p.address).toBe(p.tiles.join());
+      }
       for (let i = 0; i < n * n; i++) {
         if (after.kind[i] === before.kind[i]) continue;
         // only open sea may change: into new land, or into a bridge over it
         expect(["deep", "ocean", "shallow"]).toContain(KINDS[before.kind[i]]);
-        expect(before.plotOf[i]).toBe(-1);
+        expect(before.plotOf[i] < 0 || before.plots[before.plotOf[i]].water).toBe(true);
       }
     }
+  });
+
+  it("keeps the ids of the plots that existed before lots and water plots", () => {
+    // street plots and islands come first, in the same order as before, so old ?plot=<id> links still work
+    const firstLot = world.plots.findIndex((p) => p.address.startsWith("Lot ") || p.water);
+    expect(firstLot).toBe(1669);
+    expect(world.plots.slice(firstLot).every((p) => p.address.startsWith("Lot ") || p.water)).toBe(true);
+  });
+
+  it("divides all land into plots: nothing buildable is left without one", () => {
+    const land = new Set<Kind>(["land", "forest", "hill", "beach", "mountain", "peak"]);
+    let left = 0;
+    for (let i = 0; i < n * n; i++) if (land.has(kindAt(i)) && world.plotOf[i] < 0) left++;
+    expect(left).toBe(0);
+    const lots = world.plots.filter((p) => p.address.startsWith("Lot "));
+    expect(lots.length).toBeGreaterThan(500);
+    expect(lots.some((p) => p.landscape === "mountain")).toBe(true);
+    const sizes = lots.map((p) => p.tiles.length);
+    expect(Math.max(...sizes)).toBeLessThan(120);
+  });
+
+  it("divides the sea, lagoons and lakes into water plots on a fixed grid", () => {
+    const water = world.plots.filter((p) => p.water);
+    expect(water.length).toBeGreaterThan(1500);
+    for (const p of water) {
+      expect(p.address).toMatch(/^(Water|Lake) Plot \d+-\d+$/);
+      expect(p.tiles.length).toBeLessThanOrEqual(WATER_CELL * WATER_CELL);
+    }
+    let sea = 0;
+    let plotted = 0;
+    for (let i = 0; i < n * n; i++)
+      if (["deep", "ocean", "shallow"].includes(kindAt(i))) {
+        sea++;
+        if (world.plotOf[i] >= 0) plotted++;
+      }
+    expect(plotted / sea).toBeGreaterThan(0.99);
+    const kinds = new Set(water.map((p) => p.landscape));
+    for (const k of ["lagoon", "shallows", "sea", "deepSea", "lake"]) expect(kinds.has(k as never), k).toBe(true);
+    expect(new Set(world.plots.map((p) => p.address)).size).toBe(world.plots.length);
+    const p = water[200];
+    expect(findPlotByAddress(world, p.address.toLowerCase())?.id).toBe(p.id);
   });
 
   it("adds Greenhaven meadows, Mistmarsh wetlands and a northern archipelago", () => {
