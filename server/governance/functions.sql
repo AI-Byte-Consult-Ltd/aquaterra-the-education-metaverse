@@ -523,7 +523,7 @@ BEGIN
     FOR r IN SELECT (x->>'id')::int AS id, x->>'name' AS name, COALESCE(x->>'biome', '') AS biome, COALESCE(x->>'land', '') AS land,
                COALESCE((x->>'capital')::boolean, false) AS capital
              FROM jsonb_array_elements(districts) x
-             WHERE (x->>'id') ~ '^\d{1,5}$' AND length(COALESCE(x->>'name', '')) BETWEEN 1 AND 80 LOOP
+             WHERE (x->>'id') ~ '^\d{1,5}\Z' AND length(COALESCE(x->>'name', '')) BETWEEN 1 AND 80 LOOP
       INSERT INTO aquaterra_districts (id, name, biome, land, capital) VALUES (r.id, r.name, r.biome, r.land, r.capital)
         ON CONFLICT (id) DO NOTHING;
       IF FOUND THEN
