@@ -4,6 +4,7 @@ import { cottagePalette, drawCottage, type CottagePalette } from "./cottages";
 import { LAGOON, baseColor, daylight, shade, skyColor, treeColor, type RGB } from "./palette";
 import { groundTurnMatrix, toViewPoint, turn, viewMaps, type Rotation } from "./view";
 import { CIVIC, civicHit, drawCivic, type CivicId } from "./civic";
+import { drawDrop, drawTrail, type Point, type TripPlayer } from "../travel/drop";
 
 export const TW = 32;
 export const TH = 16;
@@ -67,6 +68,13 @@ export class WorldRenderer {
   busyCivic: Set<CivicId> = new Set();
   /** Names shown over the seats of government when zoomed in. */
   civicLabels: Partial<Record<CivicId, string>> = {};
+  /** The signed-in resident's drop: where it stands (world tiles), its colour and label. */
+  player: { x: number; y: number; hue: number; label: string } | null = null;
+  /** A trip being played: the drop moves along it, the camera follows while `follow` is on. */
+  trip: TripPlayer | null = null;
+  follow = false;
+  /** Harbours, marked on the shore when zoomed in. */
+  ports: Point[] = [];
   /** Draw a preview house on every plot. */
   private showBuildings = true;
   private buildings: Building[];
@@ -245,6 +253,21 @@ export class WorldRenderer {
     return { px: isoX(vx, vy), py: isoY(vx, vy) - this.elev[y * n + x] };
   }
 
+  /** Screen position (at scale 1) of a point of the world plane in tile units, e.g. a drop between two tiles. */
+  private atPoint(fx: number, fy: number) {
+    const n = this.world.size;
+    const [vx, vy] = toViewPoint(fx + 0.5, fy + 0.5, n, this.rot);
+    const tx = clamp(Math.round(fx), 0, n - 1);
+    const ty = clamp(Math.round(fy), 0, n - 1);
+    return { px: isoX(vx, vy), py: isoY(vx, vy) - this.elev[ty * n + tx] };
+  }
+
+  /** Centre the camera on a point of the world (tile units). */
+  focusPoint(x: number, y: number, scale = this.camera.scale) {
+    const { px, py } = this.atPoint(x, y);
+    this.camera = { cx: px, cy: py, scale: clamp(scale, MIN_SCALE, MAX_SCALE) };
+  }
+
   /** View tile of a world tile. */
   private viewTile(x: number, y: number) {
     const n = this.world.size;
@@ -300,6 +323,7 @@ export class WorldRenderer {
   }
 
   pan(dx: number, dy: number) {
+    this.follow = false;
     this.camera.cx -= dx / this.camera.scale;
     this.camera.cy -= dy / this.camera.scale;
   }
@@ -387,7 +411,46 @@ export class WorldRenderer {
     this.highlight(this.selectedPlot, "rgba(120,240,255,0.5)", "rgba(160,250,255,0.95)");
     this.drawTower(time);
     this.drawLabels();
+    this.drawTraveller(time);
     if (this.turning) this.drawTurn(time);
+  }
+
+  /** Harbour marks, the route ahead and the resident's drop, on top of everything. */
+  private drawTraveller(time: number) {
+    const { ctx } = this;
+    const s = this.camera.scale;
+    const k = 1 / s;
+    if (s > 0.35) {
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      for (const p of this.ports) {
+        const { px, py } = this.atPoint(p.x, p.y);
+        ctx.fillStyle = "rgba(20,90,160,0.88)";
+        ctx.beginPath();
+        ctx.arc(px, py - 10 * k, 8 * k, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.font = `700 ${10 * k}px Inter, system-ui, sans-serif`;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText("⚓", px, py - 9.5 * k);
+      }
+    }
+    const me = this.player;
+    if (!me) return;
+    let lift = 0;
+    if (this.trip) {
+      const st = this.trip.at(time);
+      me.x = st.pos.x;
+      me.y = st.pos.y;
+      lift = st.lift;
+      drawTrail(ctx, st.ahead.map((q) => this.atPoint(q.x, q.y)), s, me.hue, time);
+      if (this.trip.done) this.trip = null;
+    }
+    const { px, py } = this.atPoint(me.x, me.y);
+    if (this.follow && !this.turning) {
+      this.camera.cx += (px - this.camera.cx) * 0.12;
+      this.camera.cy += (py - this.camera.cy) * 0.12;
+    }
+    drawDrop(ctx, px, py, s, me.hue, time, lift, me.label);
   }
 
   /** Blend the old view into the new one while the ground swings round by 90°. */

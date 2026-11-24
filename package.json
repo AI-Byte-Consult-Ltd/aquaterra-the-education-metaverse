@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite-node scripts/land-registry.ts && vite-node scripts/export-districts.ts && vite build",
+    "build": "vite-node scripts/land-registry.ts && vite-node scripts/export-districts.ts && vite-node scripts/export-travel.ts && vite build",
     "postbuild": "node -e \"require('fs').copyFileSync('dist/index.html','dist/404.html')\"",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
