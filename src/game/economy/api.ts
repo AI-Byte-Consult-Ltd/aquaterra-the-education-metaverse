@@ -11,6 +11,7 @@ export type EconomyError =
   | "insufficient"
   | "taken"
   | "not_for_sale"
+  | "not_here"
   | "plot_limit"
   | "no_citizen"
   | "ambiguous"
@@ -23,7 +24,7 @@ export type EconomyError =
   | "network";
 
 const KNOWN: EconomyError[] = [
-  "session", "insufficient", "taken", "not_for_sale", "plot_limit", "no_citizen", "ambiguous", "self",
+  "session", "insufficient", "taken", "not_for_sale", "not_here", "plot_limit", "no_citizen", "ambiguous", "self",
   "amount", "nothing_to_claim", "treasury_empty", "forbidden", "param",
 ];
 
@@ -38,7 +39,7 @@ export interface OwnedPlot {
   pending: number;
 }
 
-export type LedgerKind = "genesis" | "welcome" | "plot_purchase" | "transfer" | "fee" | "tax" | "income" | "grant" | "state";
+export type LedgerKind = "genesis" | "welcome" | "plot_purchase" | "transfer" | "fee" | "tax" | "income" | "grant" | "state" | "fare" | "hub_purchase";
 
 export interface HistoryEntry {
   id: number;
