@@ -58,6 +58,8 @@ export class WorldRenderer {
   camera: Camera = { cx: 0, cy: 0, scale: 0.2 };
   selectedPlot: number | null = null;
   hoverPlot: number | null = null;
+  /** Plots with an owner: true for the signed-in resident's own land. */
+  owned: Map<number, boolean> = new Map();
   towerSelected = false;
   /** Draw a preview house on every plot. */
   private showBuildings = true;
@@ -369,6 +371,7 @@ export class WorldRenderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(this.ground, 0, 0);
     ctx.setTransform(...world);
+    for (const [id, mine] of this.owned) this.highlight(id, mine ? "rgba(255,196,60,0.42)" : "rgba(255,110,90,0.24)", null);
     this.highlight(this.hoverPlot, "rgba(255,255,255,0.28)", null);
     this.highlight(this.selectedPlot, "rgba(120,240,255,0.5)", "rgba(160,250,255,0.95)");
     this.drawTower(time);

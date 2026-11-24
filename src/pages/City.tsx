@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Crown, Home, Link2, Maximize2, MapPin, RotateCcw, RotateCw, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, Building2, Coins, Crown, Home, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { DEFAULT_WORLD, findPlotByAddress, generateWorld, type Kind, type Plot, type World } from "@/game/world/generator";
@@ -9,6 +9,11 @@ import { WorldRenderer } from "@/game/world/renderer";
 import { worldLocale, worldStrings } from "@/game/world/strings";
 import { useAccount } from "@/game/account/AccountContext";
 import { accountStrings } from "@/game/account/strings";
+import { useEconomy, type PlotOwner } from "@/game/economy/EconomyContext";
+import { buyPlot, dailyIncome } from "@/game/economy/api";
+import { plotPrice } from "@/game/economy/pricing";
+import { economyStrings } from "@/game/economy/strings";
+import TideChip from "@/game/economy/TideChip";
 
 /** One tile is 20 × 20 m in the game world. */
 const TILE_M2 = 400;
@@ -21,7 +26,14 @@ const City = () => {
   const { language } = useLanguage();
   const t = worldStrings(language);
   const ta = accountStrings(language);
-  const { player } = useAccount();
+  const { player, session, signOut } = useAccount();
+  const te = economyStrings(language);
+  const economy = useEconomy();
+  const ownedRef = useRef<Map<number, boolean>>(new Map());
+  useEffect(() => {
+    ownedRef.current = new Map([...economy.owners].map(([id, o]) => [id, o.mine]));
+    if (rendererRef.current) rendererRef.current.owned = ownedRef.current;
+  }, [economy.owners]);
   const city = useMemo(() => generateWorld(DEFAULT_WORLD), []);
   const [params, setParams] = useSearchParams();
   const landPlots = useMemo(() => city.plots.filter((p) => !p.water).length, [city]);
@@ -51,6 +63,7 @@ const City = () => {
     };
     size();
     r.setBuildingsVisible(housesRef.current);
+    r.owned = ownedRef.current;
     r.fit();
     const ro = new ResizeObserver(size);
     ro.observe(wrap);
@@ -289,12 +302,13 @@ const City = () => {
             {t.searchGo}
           </button>
         </form>
+        {player && <TideChip className="ml-auto md:ml-0" />}
         {player && (
           <Link
             to="/profile"
             title={player.council ? `${ta.councilName} · ${player.council.title}` : ta.profile}
             aria-label={ta.profile}
-            className={`ml-auto flex h-9 max-w-[45%] items-center gap-1.5 rounded-full border bg-background/60 px-2.5 text-sm md:ml-0 ${player.council ? "border-amber-400/70 text-amber-200 hover:border-amber-300" : "border-border hover:border-primary"}`}
+            className={`flex h-9 max-w-[45%] items-center gap-1.5 rounded-full border bg-background/60 px-2.5 text-sm md:ml-0 ${player.council ? "border-amber-400/70 text-amber-200 hover:border-amber-300" : "border-border hover:border-primary"}`}
           >
             {player.council ? <Crown className="h-4 w-4 shrink-0 text-amber-300" /> : <UserRound className="h-4 w-4 shrink-0 text-primary" />}
             <span className="hidden truncate sm:inline">{player.displayName || ta.noName}</span>
@@ -343,7 +357,28 @@ const City = () => {
               <X className="h-4 w-4" />
             </button>
             {selection.kind === "plot" ? (
-              <PlotCard plot={selection.plot} world={city} t={t} fmt={fmt} onCopy={copyLink} />
+              <PlotCard
+                key={selection.plot.id}
+                plot={selection.plot}
+                world={city}
+                t={t}
+                te={te}
+                fmt={fmt}
+                onCopy={copyLink}
+                owner={economy.owners.get(selection.plot.id) ?? null}
+                balance={economy.wallet?.balance ?? null}
+                incomeBp={economy.wallet?.params?.income_bp_per_day ?? 100}
+                listed={economy.catalog === 0 || selection.plot.id < economy.catalog}
+                onBuy={async (plot) => {
+                  if (!session) return;
+                  const r = await buyPlot(session, plot.id);
+                  if (!r.ok) {
+                    if (r.error === "session") signOut();
+                    else toast.error(te.errors[r.error]);
+                  } else toast.success(te.bought(plot.address));
+                  await economy.refresh();
+                }}
+              />
             ) : selection.kind === "tile" ? (
               <div className="space-y-2 pr-6">
                 <h2 className="font-display text-lg font-bold">{t.tiles[selection.tile]}</h2>
@@ -391,9 +426,27 @@ const City = () => {
   );
 };
 
-function PlotCard({ plot, world, t, fmt, onCopy }: { plot: Plot; world: World; t: ReturnType<typeof worldStrings>; fmt: (n: number) => string; onCopy: () => void }) {
+interface PlotCardProps {
+  plot: Plot;
+  world: World;
+  t: ReturnType<typeof worldStrings>;
+  te: ReturnType<typeof economyStrings>;
+  fmt: (n: number) => string;
+  onCopy: () => void;
+  owner: PlotOwner | null;
+  balance: number | null;
+  incomeBp: number;
+  /** In the server's land registry, so it can be bought. */
+  listed: boolean;
+  onBuy: (plot: Plot) => Promise<void>;
+}
+
+function PlotCard({ plot, world, t, te, fmt, onCopy, owner, balance, incomeBp, listed, onBuy }: PlotCardProps) {
   const d = plot.district >= 0 ? world.districts[plot.district] : undefined;
   const house = hasHouse(plot) ? buildingFor(world, plot) : null;
+  const price = plotPrice(world, plot);
+  const [buying, setBuying] = useState(false);
+  const short = balance !== null && balance < price ? price - balance : 0;
   return (
     <div className="space-y-3 pr-6">
       <div className="flex items-center gap-2">
@@ -439,10 +492,34 @@ function PlotCard({ plot, world, t, fmt, onCopy }: { plot: Plot; world: World; t
           </>
         )}
         <dt className="text-muted-foreground">{t.status}</dt>
-        <dd className="font-medium text-emerald-500">{t.free}</dd>
+        <dd className={`font-medium ${owner ? (owner.mine ? "text-amber-300" : "text-rose-300") : "text-emerald-500"}`}>
+          {owner ? (owner.mine ? te.yours : te.ownedBy(owner.name)) : t.free}
+        </dd>
+        <dt className="text-muted-foreground">{te.price}</dt>
+        <dd className="font-semibold text-cyan-200">{te.tide(price)}</dd>
       </dl>
       {plot.water && <p className="text-xs text-muted-foreground">{t.waterNote}</p>}
-      <p className="rounded-md bg-muted/60 p-2.5 text-xs text-muted-foreground">{t.buyLater}</p>
+      {owner ? (
+        <p className="rounded-md bg-muted/60 p-2.5 text-xs text-muted-foreground">{te.yieldNote(dailyIncome(price, incomeBp))}</p>
+      ) : !listed ? (
+        <p className="rounded-md bg-muted/60 p-2.5 text-xs text-muted-foreground">{te.notListed}</p>
+      ) : (
+        <div className="space-y-1.5">
+          <button
+            disabled={buying || short > 0}
+            onClick={async () => {
+              setBuying(true);
+              await onBuy(plot);
+              setBuying(false);
+            }}
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-cyan-400 text-sm font-semibold text-black hover:bg-cyan-300 disabled:opacity-50"
+          >
+            {buying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}
+            {buying ? te.buying : te.buy(te.tide(price))}
+          </button>
+          <p className="text-xs text-muted-foreground">{short > 0 ? te.needMore(short) : te.yieldNote(dailyIncome(price, incomeBp))}</p>
+        </div>
+      )}
       <button onClick={onCopy} className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
         <Link2 className="h-4 w-4" />
         {t.copyLink}

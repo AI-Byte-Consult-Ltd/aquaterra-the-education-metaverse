@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# generated before each build (scripts/land-registry.ts)
+public/land-registry.json
