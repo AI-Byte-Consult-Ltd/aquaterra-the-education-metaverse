@@ -1,5 +1,6 @@
 import type { Language } from "@/i18n/translations";
 import type { STYLES } from "./buildings";
+import type { CottageForm, MaterialId } from "./cottages";
 import type { Biome, Kind, Plot } from "./generator";
 
 const en = {
@@ -114,18 +115,36 @@ const en = {
     basalt: "Basalt Bunker",
     cedar: "Cedar Cottage",
     pagoda: "Blossom Pagoda",
-    villa: "Beach Villa",
-    bungalow: "Lagoon Bungalow",
-    treehouse: "Forest Treehouse",
     factory: "Factory",
     warehouse: "Warehouse",
     hangar: "Hangar",
     resort: "Seaside Residence",
-    sandhouse: "Desert Dome House",
-    cabin: "Forest Cabin",
     mansion: "Deco Mansion",
     decotower: "Deco Tower",
+    cottage: "Modern Cottage",
   } satisfies Record<keyof typeof STYLES, string>,
+  cottageForms: {
+    cube: "Cube House",
+    long: "Long House",
+    ell: "L-House",
+    split: "Split-Level House",
+    cantilever: "Cantilever House",
+    pavilion: "Glass Pavilion",
+    barn: "Modern Barn",
+    twin: "Twin House",
+  } satisfies Record<CottageForm, string>,
+  cottageMaterials: {
+    white: "White",
+    graphite: "Graphite",
+    cedar: "Cedar",
+    charred: "Black Timber",
+    concrete: "Concrete",
+    sandstone: "Sandstone",
+    brick: "Brick",
+    sage: "Sage",
+    terracotta: "Terracotta",
+    cream: "Cream",
+  } satisfies Record<MaterialId, string>,
   m2: "m²",
   km: "km",
 };

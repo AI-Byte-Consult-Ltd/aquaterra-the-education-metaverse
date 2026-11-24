@@ -375,8 +375,12 @@ function PlotCard({ plot, world, t, fmt, onCopy }: { plot: Plot; world: World; t
           <>
             <dt className="text-muted-foreground">{t.fitsHere}</dt>
             <dd className="font-medium">
-              {house.tower ? `${house.tower.name} (${t.styles[house.style.id as keyof typeof t.styles]})` : t.styles[house.style.id as keyof typeof t.styles]} ·{" "}
-              {t.floorsShort(house.floors)}
+              {house.tower
+                ? `${house.tower.name} (${t.styles[house.style.id as keyof typeof t.styles]})`
+                : house.cottage
+                  ? `${t.cottageMaterials[house.cottage.material]} ${t.cottageForms[house.cottage.form]}`
+                  : t.styles[house.style.id as keyof typeof t.styles]}{" "}
+              · {t.floorsShort(house.floors)}
             </dd>
           </>
         )}

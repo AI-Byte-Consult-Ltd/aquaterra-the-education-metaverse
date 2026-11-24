@@ -1,6 +1,7 @@
 import type { Plot, World } from "./generator";
 import { region } from "./regions";
 import type { RGB } from "./palette";
+import { designCottages, type Cottage } from "./cottages";
 
 export type Roof = "flat" | "gable" | "dome" | "cone" | "pagoda" | "factory" | "mansion" | "deco";
 
@@ -37,13 +38,9 @@ export const STYLES: Record<string, BuildingStyle> = {
   warehouse: { id: "warehouse", roof: "flat", wall: [140, 156, 172], roofColor: [176, 182, 190], window: [255, 214, 150], floors: [2, 3], footprint: 0.92 },
   hangar: { id: "hangar", roof: "dome", wall: [206, 212, 220], roofColor: [176, 186, 198], window: [190, 230, 255], floors: [2, 3], footprint: 0.9 },
   resort: { id: "resort", roof: "flat", wall: [248, 248, 242], roofColor: [214, 222, 230], window: [150, 230, 255], floors: [3, 10], footprint: 0.78 },
-  sandhouse: { id: "sandhouse", roof: "dome", wall: [226, 186, 128], roofColor: [236, 204, 150], window: [255, 214, 140], floors: [1, 2], footprint: 0.6 },
-  cabin: { id: "cabin", roof: "gable", wall: [132, 92, 64], roofColor: [70, 96, 70], window: [255, 196, 110], floors: [1, 2], footprint: 0.6 },
   mansion: { id: "mansion", roof: "mansion", wall: [244, 232, 206], roofColor: [58, 64, 80], window: [255, 222, 150], floors: [2, 3], footprint: 0.9 },
+  cottage: { id: "cottage", roof: "flat", wall: [244, 244, 240], roofColor: [62, 66, 74], window: [255, 214, 150], floors: [1, 2], footprint: 0.8 },
   decotower: { id: "decotower", roof: "deco", wall: [226, 210, 178], roofColor: [206, 166, 72], window: [255, 220, 150], floors: [8, 22], footprint: 0.74 },
-  treehouse: { id: "treehouse", roof: "cone", wall: [150, 110, 72], roofColor: [56, 120, 60], window: [255, 214, 130], stilts: true, floors: [1, 2], footprint: 0.5 },
-  bungalow: { id: "bungalow", roof: "cone", wall: [236, 214, 170], roofColor: [190, 150, 84], window: [255, 220, 150], stilts: true, floors: [1, 2], footprint: 0.6 },
-  villa: { id: "villa", roof: "flat", wall: [250, 250, 246], roofColor: [230, 232, 236], window: [150, 230, 255], floors: [1, 2], footprint: 0.74 },
 };
 
 
@@ -77,6 +74,8 @@ export interface Building {
   balconies: boolean;
   setback: boolean;
   tower?: Tower;
+  /** Modern 1–2 storey cottage design, for cottage plots. */
+  cottage?: Cottage;
 }
 
 /** Smallest plot for a skyscraper: 5 tiles = 2,000 m². */
@@ -201,6 +200,10 @@ export function buildingsFor(world: World): Building[] {
   const hit = cache.get(world);
   if (hit) return hit;
   const out = world.plots.map((p) => houseFor(world, p));
+  // every cottage gets its own design; neighbours never look alike
+  const biomeOf = (p: Plot) => (p.district >= 0 ? world.districts[p.district].biome : "temperate");
+  const cottages = designCottages(world.plots.filter((p) => hasHouse(p) && out[p.id].style.id === "cottage"), biomeOf);
+  for (const [id, c] of cottages) out[id] = { ...out[id], floors: c.floors, wall: c.wall, roofColor: c.roofColor, cottage: c };
   const downtown = world.plots.filter((p) => isDowntown(world, p)).sort((a, b) => a.distance - b.distance);
   // every combination of glass, facade, top and profile is used at most once
   const combos: number[] = [];
