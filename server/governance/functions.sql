@@ -557,7 +557,7 @@ BEGIN
   -- 3. the Assembly keeps 60% district seats, 20% guild, 20% by lot; at least 51 seats
   SELECT count(*) INTO dseats FROM aquaterra_gov_seats WHERE kind = 'district';
   total := GREATEST(51, ceil(dseats / 0.6))::int;
-  want_lots := total - dseats - round(total * 0.2)::int;
+  want_lots := round(total * 0.2)::int;
   SELECT count(*) INTO lots FROM aquaterra_gov_seats WHERE kind = 'lot';
   SELECT count(*) INTO residents FROM aquaterra_residents;
   want_lots := LEAST(want_lots, floor(residents / aquaterra_gov_param('lot_residents_per_seat'))::int);

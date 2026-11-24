@@ -80,8 +80,8 @@ BEGIN
          'joinedAt', c.joined_at, 'termEnds', c.term_ends) ORDER BY c.seat)
         FROM aquaterra_council c LEFT JOIN aquaterra_players pl ON pl.email = c.email
         WHERE c.kind = 'ai' OR (c.email IS NOT NULL AND (c.term_ends IS NULL OR c.term_ends > now()))), '[]'::jsonb)),
-    'assembly', jsonb_build_object('total', total, 'districtSeats', dseats, 'guildSeats', round(total * 0.2)::int,
-      'lotSeats', total - dseats - round(total * 0.2)::int, 'lotDrawn', (SELECT count(*) FROM aquaterra_gov_seats WHERE kind = 'lot' AND holder_email IS NOT NULL),
+    'assembly', jsonb_build_object('total', total, 'districtSeats', total - 2 * round(total * 0.2)::int, 'districtSeatsOpen', dseats,
+      'guildSeats', round(total * 0.2)::int, 'lotSeats', round(total * 0.2)::int, 'lotDrawn', (SELECT count(*) FROM aquaterra_gov_seats WHERE kind = 'lot' AND holder_email IS NOT NULL),
       'seated', aquaterra_gov_deputies(), 'founding', aquaterra_gov_founding(), 'foundingUntil', aquaterra_gov_param('founding_deputies'),
       'members', COALESCE((SELECT jsonb_agg(jsonb_build_object('name', aquaterra_gov_name(s.holder_email), 'kind', s.kind,
          'district', CASE WHEN s.district_id IS NOT NULL THEN aquaterra_gov_admin_name(s.district_id) END, 'termEnds', s.term_ends) ORDER BY s.kind, s.id)
