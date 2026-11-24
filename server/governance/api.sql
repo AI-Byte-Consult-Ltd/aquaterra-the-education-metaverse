@@ -133,32 +133,32 @@ BEGIN
   IF length(COALESCE(body, '')) > 4000 THEN err := 'body'; RETURN; END IF;
   IF kind IN ('resolution', 'strategy', 'charter') AND length(btrim(COALESCE(body, ''))) < 20 THEN err := 'body'; RETURN; END IF;
   IF payload ? 'district' THEN
-    IF NOT (payload->>'district') ~ '^\d{1,5}$' OR NOT EXISTS (SELECT 1 FROM aquaterra_districts WHERE id = (payload->>'district')::int) THEN err := 'district'; RETURN; END IF;
+    IF NOT (payload->>'district') ~ '^\d{1,5}\Z' OR NOT EXISTS (SELECT 1 FROM aquaterra_districts WHERE id = (payload->>'district')::int) THEN err := 'district'; RETURN; END IF;
   END IF;
   CASE kind
   WHEN 'set_param' THEN
     SELECT * INTO prm FROM aquaterra_gov_params WHERE key = payload->>'key';
-    IF prm.key IS NULL OR NOT (payload->>'value') ~ '^-?\d+(\.\d+)?$' THEN err := 'param'; RETURN; END IF;
+    IF prm.key IS NULL OR NOT (payload->>'value') ~ '^-?\d+(\.\d+)?\Z' THEN err := 'param'; RETURN; END IF;
     v := (payload->>'value')::numeric;
     IF v < prm.min_value OR v > prm.max_value OR v = prm.value THEN err := 'param'; RETURN; END IF;
     payload := jsonb_build_object('key', prm.key, 'value', v);
   WHEN 'budget' THEN
-    IF NOT COALESCE(payload->>'amount', '') ~ '^\d{1,10}$' OR (payload->>'amount')::bigint < 1 THEN err := 'amount'; RETURN; END IF;
+    IF NOT COALESCE(payload->>'amount', '') ~ '^\d{1,10}\Z' OR (payload->>'amount')::bigint < 1 THEN err := 'amount'; RETURN; END IF;
     payload := jsonb_build_object('amount', (payload->>'amount')::bigint) || CASE WHEN payload ? 'district' THEN jsonb_build_object('district', (payload->>'district')::int) ELSE '{}'::jsonb END;
   WHEN 'building', 'skyscraper' THEN
     IF NOT payload ? 'district' THEN err := 'district'; RETURN; END IF;
     IF length(btrim(COALESCE(payload->>'address', ''))) NOT BETWEEN 3 AND 80 THEN err := 'address'; RETURN; END IF;
-    IF NOT COALESCE(payload->>'floors', '') ~ '^\d{1,4}$' THEN err := 'floors'; RETURN; END IF;
+    IF NOT COALESCE(payload->>'floors', '') ~ '^\d{1,4}\Z' THEN err := 'floors'; RETURN; END IF;
     f := (payload->>'floors')::int;
     IF kind = 'building' AND (f <= aquaterra_gov_param('permit_free_floors') OR f >= aquaterra_gov_param('skyscraper_floors')) THEN err := 'floors'; RETURN; END IF;
     IF kind = 'skyscraper' AND (f < aquaterra_gov_param('skyscraper_floors') OR f > 1200) THEN err := 'floors'; RETURN; END IF;
     payload := jsonb_build_object('district', (payload->>'district')::int, 'address', btrim(payload->>'address'), 'floors', f);
   WHEN 'new_district' THEN
-    IF NOT COALESCE(payload->>'name', '') ~ '^[A-Za-z][A-Za-z '' -]{1,38}[A-Za-z]$' THEN err := 'name'; RETURN; END IF;
+    IF NOT COALESCE(payload->>'name', '') ~ '^[A-Za-z][A-Za-z '' -]{1,38}[A-Za-z]\Z' THEN err := 'name'; RETURN; END IF;
     IF EXISTS (SELECT 1 FROM aquaterra_districts WHERE lower(name) = lower(payload->>'name')) THEN err := 'name'; RETURN; END IF;
     payload := jsonb_build_object('name', btrim(payload->>'name'), 'land', left(btrim(COALESCE(payload->>'land', '')), 60), 'climate', left(btrim(COALESCE(payload->>'climate', '')), 40));
   WHEN 'district_merge' THEN
-    IF NOT payload ? 'district' OR NOT COALESCE(payload->>'into', '') ~ '^\d{1,5}$' THEN err := 'district'; RETURN; END IF;
+    IF NOT payload ? 'district' OR NOT COALESCE(payload->>'into', '') ~ '^\d{1,5}\Z' THEN err := 'district'; RETURN; END IF;
     d := (payload->>'district')::int;
     IF NOT EXISTS (SELECT 1 FROM aquaterra_districts WHERE id = d AND merged_into IS NULL)
        OR NOT EXISTS (SELECT 1 FROM aquaterra_districts WHERE id = (payload->>'into')::int AND merged_into IS NULL)
@@ -183,12 +183,12 @@ BEGIN
       payload := jsonb_build_object('office', 'mayor', 'district', (payload->>'district')::int,
         'name', aquaterra_gov_name((SELECT mayor_email FROM aquaterra_districts WHERE id = (payload->>'district')::int)));
     ELSIF payload->>'office' = 'councillor' THEN
-      IF NOT COALESCE(payload->>'seat', '') ~ '^\d{1,2}$' OR (payload->>'seat')::int < 3
+      IF NOT COALESCE(payload->>'seat', '') ~ '^\d{1,2}\Z' OR (payload->>'seat')::int < 3
          OR NOT EXISTS (SELECT 1 FROM aquaterra_council WHERE seat = (payload->>'seat')::int AND email IS NOT NULL) THEN err := 'office'; RETURN; END IF;
       payload := jsonb_build_object('office', 'councillor', 'seat', (payload->>'seat')::int,
         'name', aquaterra_gov_name((SELECT email FROM aquaterra_council WHERE seat = (payload->>'seat')::int)));
     ELSIF payload->>'office' = 'deputy' THEN
-      IF NOT COALESCE(payload->>'seat', '') ~ '^\d{1,6}$'
+      IF NOT COALESCE(payload->>'seat', '') ~ '^\d{1,6}\Z'
          OR NOT EXISTS (SELECT 1 FROM aquaterra_gov_seats WHERE id = (payload->>'seat')::int AND holder_email IS NOT NULL) THEN err := 'office'; RETURN; END IF;
       payload := jsonb_build_object('office', 'deputy', 'seat', (payload->>'seat')::int,
         'name', aquaterra_gov_name((SELECT holder_email FROM aquaterra_gov_seats WHERE id = (payload->>'seat')::int)));
@@ -235,7 +235,7 @@ BEGIN
       ORDER BY CASE WHEN status IN ('voting', 'signatures') THEN 0 ELSE 1 END, id DESC LIMIT 100) x), '[]'::jsonb));
   END IF;
   IF act = 'proposal' THEN
-    IF NOT COALESCE(req->>'id', '') ~ '^\d{1,9}$' THEN RETURN aquaterra_gov_err('not_found'); END IF;
+    IF NOT COALESCE(req->>'id', '') ~ '^\d{1,9}\Z' THEN RETURN aquaterra_gov_err('not_found'); END IF;
     t := aquaterra_gov_proposal_json((req->>'id')::int, me, true);
     RETURN CASE WHEN t IS NULL THEN aquaterra_gov_err('not_found') ELSE jsonb_build_object('ok', true, 'proposal', t) END;
   END IF;
@@ -264,7 +264,7 @@ BEGIN
   IF act = 'me' THEN RETURN aquaterra_gov_me(me); END IF;
 
   IF act = 'set_residence' THEN
-    IF NOT COALESCE(req->>'district', '') ~ '^\d{1,5}$' OR NOT EXISTS (SELECT 1 FROM aquaterra_districts WHERE id = (req->>'district')::int) THEN
+    IF NOT COALESCE(req->>'district', '') ~ '^\d{1,5}\Z' OR NOT EXISTS (SELECT 1 FROM aquaterra_districts WHERE id = (req->>'district')::int) THEN
       RETURN aquaterra_gov_err('district'); END IF;
     IF EXISTS (SELECT 1 FROM aquaterra_residents WHERE email = me AND since > now() - aquaterra_gov_param('residence_change_days') * interval '1 day')
        AND NOT EXISTS (SELECT 1 FROM aquaterra_players WHERE email = me AND role = 'founder') THEN
@@ -301,7 +301,7 @@ BEGIN
 
   -- actions on one proposal
   IF act IN ('sign', 'withdraw', 'vote', 'stand') THEN
-    IF NOT COALESCE(req->>'id', '') ~ '^\d{1,9}$' THEN RETURN aquaterra_gov_err('not_found'); END IF;
+    IF NOT COALESCE(req->>'id', '') ~ '^\d{1,9}\Z' THEN RETURN aquaterra_gov_err('not_found'); END IF;
     SELECT * INTO p FROM aquaterra_gov_proposals WHERE id = (req->>'id')::int FOR UPDATE;
     IF p.id IS NULL THEN RETURN aquaterra_gov_err('not_found'); END IF;
 
@@ -356,7 +356,7 @@ BEGIN
   -- the Directorate at work
   IF act = 'disburse' THEN
     IF NOT aquaterra_gov_can_act(me, 'treasury') THEN RETURN aquaterra_gov_err('forbidden'); END IF;
-    IF NOT COALESCE(req->>'line', '') ~ '^\d{1,9}$' OR NOT COALESCE(req->>'amount', '') ~ '^\d{1,10}$' THEN RETURN aquaterra_gov_err('amount'); END IF;
+    IF NOT COALESCE(req->>'line', '') ~ '^\d{1,9}\Z' OR NOT COALESCE(req->>'amount', '') ~ '^\d{1,10}\Z' THEN RETURN aquaterra_gov_err('amount'); END IF;
     SELECT * INTO line FROM aquaterra_gov_budget WHERE id = (req->>'line')::int FOR UPDATE;
     amount := (req->>'amount')::bigint;
     IF line.id IS NULL THEN RETURN aquaterra_gov_err('not_found'); END IF;
