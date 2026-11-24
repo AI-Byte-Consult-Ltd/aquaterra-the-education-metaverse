@@ -25,3 +25,5 @@ dist-ssr
 
 # generated before each build (scripts/land-registry.ts)
 public/land-registry.json
+# generated before each build (scripts/export-districts.ts)
+public/world/
