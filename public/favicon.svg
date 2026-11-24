@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#101a3a"/>
+      <stop offset="1" stop-color="#070b16"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#45dccb"/>
+      <stop offset="1" stop-color="#1f8fb8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="32" cy="15" r="16" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#bafff6" stop-opacity="0.9"/>
+      <stop offset="0.35" stop-color="#45dccb" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#45dccb" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="c"><rect width="64" height="64" rx="14"/></clipPath>
+  </defs>
+  <g clip-path="url(#c)">
+  <rect width="64" height="64" rx="14" fill="url(#sky)"/>
+  <circle cx="32" cy="15" r="16" fill="url(#glow)"/>
+  <!-- island -->
+  <path d="M10 44 C16 31 48 31 54 44 Z" fill="#2a9d7e"/>
+  <!-- First Light tower -->
+  <path d="M28.5 42 L29.8 20 L32 13 L34.2 20 L35.5 42 Z" fill="#e8fffb"/>
+  <circle cx="32" cy="13.5" r="3" fill="#ffffff"/>
+  <!-- ocean -->
+  <path d="M0 43 C8 39 14 39 22 43 S36 47 44 43 S56 39 64 43 V64 H0 Z" fill="url(#sea)"/>
+  <path d="M6 54 C12 51 18 51 24 54 S36 57 42 54 S52 51 58 54" fill="none" stroke="#070b16" stroke-opacity="0.35" stroke-width="3" stroke-linecap="round"/>
+  </g>
+</svg>
