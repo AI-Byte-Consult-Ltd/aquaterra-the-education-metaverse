@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Crown, Home, Link2, Maximize2, MapPin, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, Building2, Crown, Home, Link2, Maximize2, MapPin, RotateCcw, RotateCw, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { DEFAULT_WORLD, findPlotByAddress, generateWorld, type Kind, type Plot, type World } from "@/game/world/generator";
@@ -79,7 +79,7 @@ const City = () => {
       r.selectedPlot = s?.kind === "plot" ? s.plot.id : null;
       r.towerSelected = s?.kind === "tower";
       if (focus && s?.kind === "plot") r.focusTile(s.plot.anchor.x, s.plot.anchor.y, 1.4);
-      if (focus && s?.kind === "tower") r.focusTile(city.center - 8, city.center - 8, 0.6);
+      if (focus && s?.kind === "tower") r.focusTower(0.6);
       const next = new URLSearchParams(params);
       // links name the address, which never changes; ids may shift as the world grows
       next.delete("plot");
@@ -87,7 +87,7 @@ const City = () => {
       else next.delete("at");
       setParams(next, { replace: true });
     },
-    [city, params, setParams],
+    [params, setParams],
   );
 
   // deep link: /world?at=12 Coral Street (older links: ?plot=123)
@@ -101,6 +101,20 @@ const City = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // --- rotation: buttons, Q / E keys, right-drag, two-finger twist -----------
+  const rotate = useCallback((dir: 1 | -1) => rendererRef.current?.rotate(dir), []);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      const el = e.target;
+      if (e.ctrlKey || e.metaKey || e.altKey || (el instanceof Element && el.closest("input, textarea, select, [contenteditable]"))) return;
+      const k = e.key.toLowerCase();
+      if (k === "q") rotate(-1);
+      else if (k === "e") rotate(1);
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [rotate]);
+
   // --- pointer input: drag, wheel, pinch, tap --------------------------------
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -108,23 +122,44 @@ const City = () => {
     const pointers = new Map<number, { x: number; y: number }>();
     let moved = 0;
     let pinchDist = 0;
+    /** Right mouse button held: horizontal drag turns the map. */
+    let spin: { x: number } | null = null;
+    /** Two fingers: the angle between them, and how far they have twisted since the last turn. */
+    let twistAngle = 0;
+    let twisted = 0;
+    const SPIN_PX = 90;
+    const TWIST_RAD = (35 * Math.PI) / 180;
     const local = (e: PointerEvent | WheelEvent) => {
       const rect = canvas.getBoundingClientRect();
       return { x: e.clientX - rect.left, y: e.clientY - rect.top };
     };
     const down = (e: PointerEvent) => {
       canvas.setPointerCapture(e.pointerId);
+      if (e.pointerType === "mouse" && e.button === 2) {
+        spin = { x: local(e).x };
+        return;
+      }
       pointers.set(e.pointerId, local(e));
       moved = 0;
       if (pointers.size === 2) {
         const [a, b] = [...pointers.values()];
         pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
+        twistAngle = Math.atan2(b.y - a.y, b.x - a.x);
+        twisted = 0;
       }
     };
     const move = (e: PointerEvent) => {
       const r = rendererRef.current;
       if (!r) return;
       const p = local(e);
+      if (spin) {
+        const dx = p.x - spin.x;
+        if (Math.abs(dx) >= SPIN_PX && !r.isTurning) {
+          r.rotate(dx > 0 ? 1 : -1);
+          spin.x = p.x;
+        }
+        return;
+      }
       const prev = pointers.get(e.pointerId);
       if (!prev) {
         // hover (mouse only)
@@ -142,12 +177,26 @@ const City = () => {
         const d = Math.hypot(a.x - b.x, a.y - b.y);
         if (pinchDist > 0) r.zoomAt(d / pinchDist, (a.x + b.x) / 2, (a.y + b.y) / 2);
         pinchDist = d;
+        const ang = Math.atan2(b.y - a.y, b.x - a.x);
+        let da = ang - twistAngle;
+        if (da > Math.PI) da -= 2 * Math.PI;
+        if (da < -Math.PI) da += 2 * Math.PI;
+        twistAngle = ang;
+        twisted += da;
+        if (Math.abs(twisted) >= TWIST_RAD && !r.isTurning) {
+          r.rotate(twisted > 0 ? 1 : -1);
+          twisted = 0;
+        }
         moved += 10;
         return;
       }
       pointers.set(e.pointerId, p);
     };
     const up = (e: PointerEvent) => {
+      if (spin && e.pointerType === "mouse" && !pointers.has(e.pointerId)) {
+        spin = null;
+        return;
+      }
       const r = rendererRef.current;
       const p = local(e);
       const wasTap = pointers.size === 1 && moved < 6;
@@ -172,7 +221,10 @@ const City = () => {
     canvas.addEventListener("pointerup", up);
     canvas.addEventListener("pointercancel", up);
     canvas.addEventListener("wheel", wheel, { passive: false });
+    const menu = (e: MouseEvent) => e.preventDefault();
+    canvas.addEventListener("contextmenu", menu);
     return () => {
+      canvas.removeEventListener("contextmenu", menu);
       canvas.removeEventListener("pointerdown", down);
       canvas.removeEventListener("pointermove", move);
       canvas.removeEventListener("pointerup", up);
@@ -266,6 +318,8 @@ const City = () => {
             { icon: ZoomIn, label: "+", on: () => zoom(1.4) },
             { icon: ZoomOut, label: "−", on: () => zoom(1 / 1.4) },
             { icon: Maximize2, label: "fit", on: () => rendererRef.current?.fit() },
+            { icon: RotateCcw, label: t.rotateLeft, on: () => rotate(-1) },
+            { icon: RotateCw, label: t.rotateRight, on: () => rotate(1) },
             { icon: Building2, label: t.tower, on: () => select({ kind: "tower" }, true) },
             { icon: Home, label: houses ? t.housesOff : t.housesOn, on: () => setHouses((h) => !h), active: houses },
           ].map(({ icon: Icon, label, on, active }) => (

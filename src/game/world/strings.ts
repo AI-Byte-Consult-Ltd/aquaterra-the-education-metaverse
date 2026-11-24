@@ -27,7 +27,9 @@ const en = {
   close: "Close",
   stats: (land: number, water: number, districts: number, airports: number, stations: number) =>
     `${land.toLocaleString("en")} land plots · ${water.toLocaleString("en")} water plots · ${districts} districts · ${airports} airports · ${stations} stations`,
-  hint: "Drag to move, scroll or pinch to zoom, tap a plot",
+  hint: "Drag to move, scroll or pinch to zoom, Q / E or right-drag to turn the map, tap a plot",
+  rotateLeft: "Turn map left (Q)",
+  rotateRight: "Turn map right (E)",
   towerAbout:
     "The heart of the world and home of NICS AI. Apartments are the existing Radiant Residences NFTs on Cronos: one apartment, one NFT.",
   floors: "Floors",

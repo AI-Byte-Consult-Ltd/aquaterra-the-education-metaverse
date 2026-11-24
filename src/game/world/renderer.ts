@@ -2,6 +2,7 @@ import { KINDS, type Kind, type World } from "./generator";
 import { buildingsFor, hasHouse, type Building, type BuildingStyle, type Tower } from "./buildings";
 import { cottagePalette, drawCottage, type CottagePalette } from "./cottages";
 import { LAGOON, baseColor, daylight, shade, skyColor, treeColor, type RGB } from "./palette";
+import { groundTurnMatrix, toViewPoint, turn, viewMaps, type Rotation } from "./view";
 
 export const TW = 32;
 export const TH = 16;
@@ -30,6 +31,8 @@ const TOWER_FLOOR_PX = TOWER_HEIGHT / 108;
 const TOWER_INSET = 0.14;
 
 const WATER: Kind[] = ["deep", "ocean", "shallow", "lake", "river"];
+/** Length of the animated 90° turn of the map, ms. */
+const TURN_MS = 420;
 
 /** Isometric renderer for an AquaTerra World on a 2D canvas. */
 export class WorldRenderer {
@@ -38,6 +41,8 @@ export class WorldRenderer {
   private gctx: CanvasRenderingContext2D;
   private groundKey = "";
   private overview: HTMLCanvasElement | null = null;
+  /** Overview of the previous rotation, so turning back is instant. */
+  private prevOverview: { rot: Rotation; img: HTMLCanvasElement } | null = null;
   private overviewOrigin = { x: 0, y: 0 };
   private kinds: Kind[];
   private elev: Float32Array;
@@ -65,6 +70,14 @@ export class WorldRenderer {
   /** Colours of each building at the current daylight, by plot id. */
   private cottageColors: (CottagePalette | null)[] = [];
   private houseColors: { wl: string; wr: string; roof: string; roofDark: string; win: string; post: string; trim: string }[] = [];
+  /** Which side the map is seen from, in 90° steps. Plots and addresses never change. */
+  private rot: Rotation = 0;
+  /** View tile index → world tile index, and back, for the current rotation. */
+  private vmap: Int32Array;
+  private wmap: Int32Array;
+  /** The running turn animation: the last frame of the old view and the direction. */
+  private turning: { from: HTMLCanvasElement; dir: 1 | -1; start: number } | null = null;
+  private frame: HTMLCanvasElement | null = null;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -81,6 +94,7 @@ export class WorldRenderer {
     this.elev = new Float32Array(n);
     for (let i = 0; i < n; i++) this.elev[i] = this.elevationOf(i);
     this.buildings = buildingsFor(world);
+    ({ toWorld: this.vmap, toView: this.wmap } = viewMaps(world.size, 0));
     this.houseAt = new Int32Array(n).fill(-1);
     this.towerAt = new Int32Array(n).fill(-1);
     this.towerFloors = new Int16Array(n);
@@ -165,6 +179,7 @@ export class WorldRenderer {
     this.cottageColors = this.buildings.map((b) => (b.cottage ? cottagePalette(b.cottage, this.day) : null));
     this.groundKey = "";
     this.overview = null;
+    this.prevOverview = null;
   }
 
   get buildingsVisible() {
@@ -204,7 +219,76 @@ export class WorldRenderer {
   }
 
   focusTile(x: number, y: number, scale = 1.4) {
-    this.camera = { cx: isoX(x + 0.5, y + 0.5), cy: isoY(x + 0.5, y + 0.5) - this.elev[y * this.world.size + x], scale: clamp(scale, MIN_SCALE, MAX_SCALE) };
+    const { px, py } = this.at(x, y);
+    this.camera = { cx: px, cy: py, scale: clamp(scale, MIN_SCALE, MAX_SCALE) };
+  }
+
+  /** Centre on the First Light Tower, a little above it so the whole tower shows from any side. */
+  focusTower(scale = 0.6) {
+    const c = this.world.center;
+    const { px, py } = this.at(c, c);
+    this.camera = { cx: px, cy: py - 8 * TH, scale: clamp(scale, MIN_SCALE, MAX_SCALE) };
+  }
+
+  /** Screen position (at scale 1) of the centre of world tile (x, y), standing on its ground. */
+  private at(x: number, y: number) {
+    const n = this.world.size;
+    const [vx, vy] = toViewPoint(x + 0.5, y + 0.5, n, this.rot);
+    return { px: isoX(vx, vy), py: isoY(vx, vy) - this.elev[y * n + x] };
+  }
+
+  /** View tile of a world tile. */
+  private viewTile(x: number, y: number) {
+    const n = this.world.size;
+    const v = this.wmap[y * n + x];
+    return { x: v % n, y: (v / n) | 0 };
+  }
+
+  get rotation(): Rotation {
+    return this.rot;
+  }
+
+  get isTurning() {
+    return this.turning !== null;
+  }
+
+  /**
+   * Turn the map 90° around the point in the middle of the screen; +1 clockwise.
+   * The turn is animated; the plots, districts and addresses stay where they are.
+   */
+  rotate(dir: 1 | -1) {
+    if (this.width === 0) return;
+    const n = this.world.size;
+    // keep the same spot of land in the middle of the screen
+    let e = 0;
+    let t = this.worldToTile(this.camera.cx, this.camera.cy);
+    for (let k = 0; k < 2; k++) {
+      const vx = clamp(Math.floor(t.x), 0, n - 1);
+      const vy = clamp(Math.floor(t.y), 0, n - 1);
+      e = this.elev[this.vmap[vy * n + vx]];
+      t = this.worldToTile(this.camera.cx, this.camera.cy + e);
+    }
+    const [nx, ny] = toViewPoint(t.x, t.y, n, dir > 0 ? 1 : 3);
+    // the last frame of the old view slides into the new one
+    const from = document.createElement("canvas");
+    from.width = this.canvas.width;
+    from.height = this.canvas.height;
+    from.getContext("2d")!.drawImage(this.turning ? this.frameOrCanvas() : this.canvas, 0, 0);
+    this.rot = turn(this.rot, dir);
+    ({ toWorld: this.vmap, toView: this.wmap } = viewMaps(n, this.rot));
+    this.camera.cx = isoX(nx, ny);
+    this.camera.cy = isoY(nx, ny) - e;
+    this.groundKey = "";
+    const prev = this.prevOverview;
+    this.prevOverview = this.overview ? { rot: turn(this.rot, dir === 1 ? -1 : 1), img: this.overview } : null;
+    this.overview = prev?.rot === this.rot ? prev.img : null;
+    this.hoverPlot = null;
+    // the clock starts on the first frame of the new view, which can take a moment to draw
+    this.turning = { from, dir, start: -1 };
+  }
+
+  private frameOrCanvas() {
+    return this.frame ?? this.canvas;
   }
 
   pan(dx: number, dy: number) {
@@ -235,8 +319,7 @@ export class WorldRenderer {
     const w = this.world;
     const n = w.size;
     const c = w.center;
-    const tx = isoX(c + 0.5, c + 0.5);
-    const ty = isoY(c + 0.5, c + 0.5) - this.elev[c * n + c];
+    const { px: tx, py: ty } = this.at(c, c);
     if (Math.abs(wx - tx) < TW * 1.6 && wy < ty + TH && wy > ty - TOWER_HEIGHT - 60) return { kind: "tower" };
     // Walk from the front tile at sea level backwards; the first tile whose raised top contains the point wins.
     const t0 = this.worldToTile(wx, wy);
@@ -244,12 +327,14 @@ export class WorldRenderer {
     const by = Math.floor(t0.y);
     for (let k = -1; k <= 12; k++) {
       for (const [ox, oy] of [[0, 0], [1, 0], [0, 1]]) {
-        const x = bx + k + ox;
-        const y = by + k + oy;
-        if (x < 0 || y < 0 || x >= n || y >= n) continue;
-        const i = y * n + x;
+        const vx = bx + k + ox;
+        const vy = by + k + oy;
+        if (vx < 0 || vy < 0 || vx >= n || vy >= n) continue;
+        const i = this.vmap[vy * n + vx];
         const t = this.worldToTile(wx, wy + this.elev[i]);
-        if (Math.floor(t.x) !== x || Math.floor(t.y) !== y) continue;
+        if (Math.floor(t.x) !== vx || Math.floor(t.y) !== vy) continue;
+        const x = i % n;
+        const y = (i - x) / n;
         const plot = w.plotOf[i];
         if (plot >= 0) return { kind: "plot", plotId: plot };
         const kind = this.kinds[i];
@@ -288,6 +373,48 @@ export class WorldRenderer {
     this.highlight(this.selectedPlot, "rgba(120,240,255,0.5)", "rgba(160,250,255,0.95)");
     this.drawTower(time);
     this.drawLabels();
+    if (this.turning) this.drawTurn(time);
+  }
+
+  /** Blend the old view into the new one while the ground swings round by 90°. */
+  private drawTurn(time: number) {
+    const tr = this.turning!;
+    // the first frame of a new view can be slow (the overview is redrawn), so start the clock after it
+    if (tr.start < 0) tr.start = performance.now();
+    time = Math.max(time, tr.start);
+    const p = clamp((time - tr.start) / TURN_MS, 0, 1);
+    if (p >= 1) {
+      this.turning = null;
+      return;
+    }
+    const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+    const { ctx, canvas } = this;
+    if (!this.frame || this.frame.width !== canvas.width || this.frame.height !== canvas.height) {
+      this.frame = document.createElement("canvas");
+      this.frame.width = canvas.width;
+      this.frame.height = canvas.height;
+    }
+    const f = this.frame.getContext("2d")!;
+    f.setTransform(1, 0, 0, 1, 0, 0);
+    f.clearRect(0, 0, canvas.width, canvas.height);
+    f.drawImage(canvas, 0, 0);
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const phi = tr.dir * (Math.PI / 2) * e;
+    const put = (img: HTMLCanvasElement, angle: number, alpha: number) => {
+      const [a, b, c, d] = groundTurnMatrix(angle, TW, TH);
+      ctx.setTransform(a, b, c, d, cx - a * cx - c * cy, cy - b * cx - d * cy);
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(img, 0, 0);
+    };
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = this.sky;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    put(tr.from, phi, 1);
+    put(this.frame, phi - tr.dir * (Math.PI / 2), clamp((e - 0.2) / 0.6, 0, 1));
+    ctx.globalAlpha = 1;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
   /** The whole world rendered once at a small scale. */
@@ -340,15 +467,18 @@ export class WorldRenderer {
     const hw = TW / 2;
     const hh = TH / 2;
     const night = this.isNight;
+    const vmap = this.vmap;
+    // x and y below are view tiles; i is the world tile drawn there
     for (let y = r.y0; y <= r.y1; y++) {
       for (let x = r.x0; x <= r.x1; x++) {
-        const i = y * n + x;
+        const v = y * n + x;
+        const i = vmap[v];
         const e = elev[i];
         const px = ((x - y) * TW) / 2;
         const py = ((x + y) * TH) / 2 - e;
         // side faces down to the front neighbours
-        const eL = y + 1 < n ? elev[i + n] : 0;
-        const eR = x + 1 < n ? elev[i + 1] : 0;
+        const eL = y + 1 < n ? elev[vmap[v + n]] : 0;
+        const eR = x + 1 < n ? elev[vmap[v + 1]] : 0;
         if (e > eL) {
           ctx.fillStyle = left[i];
           ctx.beginPath();
@@ -386,31 +516,34 @@ export class WorldRenderer {
           ctx.strokeStyle = w.plots[pid].water ? "rgba(255,255,255,0.22)" : "rgba(20,24,30,0.35)";
           ctx.lineWidth = 0.9;
           ctx.beginPath();
-          if (x + 1 >= n || w.plotOf[i + 1] !== pid) {
+          if (x + 1 >= n || w.plotOf[vmap[v + 1]] !== pid) {
             ctx.moveTo(px + hw, py + hh);
             ctx.lineTo(px, py + TH);
           }
-          if (y + 1 >= n || w.plotOf[i + n] !== pid) {
+          if (y + 1 >= n || w.plotOf[vmap[v + n]] !== pid) {
             ctx.moveTo(px, py + TH);
             ctx.lineTo(px - hw, py + hh);
           }
-          if (x === 0 || w.plotOf[i - 1] !== pid) {
+          if (x === 0 || w.plotOf[vmap[v - 1]] !== pid) {
             ctx.moveTo(px - hw, py + hh);
             ctx.lineTo(px, py);
           }
-          if (y === 0 || w.plotOf[i - n] !== pid) {
+          if (y === 0 || w.plotOf[vmap[v - n]] !== pid) {
             ctx.moveTo(px, py);
             ctx.lineTo(px + hw, py + hh);
           }
           ctx.stroke();
         }
+        // world tile, for details that depend on where the tile is, not where it is drawn
+        const wx = i % n;
+        const wy = (i - wx) / n;
         if (k === "forest") this.drawTree(ctx, px, py + hh, i);
-        else if (k === "rail" || k === "railbridge" || k === "station") this.drawRail(ctx, px, py, x, y);
+        else if (k === "rail" || k === "railbridge" || k === "station") this.drawRail(ctx, px, py, wx, wy);
         else if (k === "runway") {
-          this.drawRunway(ctx, px, py, x, y);
-          if ((x * 31 + y * 17) % 41 === 0) this.drawPlane(ctx, px, py + hh, this.axis(x, y, ["runway"]), 1.25);
-        } else if (k === "apron" && (x * 7 + y * 13) % 6 === 0) this.drawPlane(ctx, px, py + hh, (x + y) % 2 ? "x" : "y", 1);
-        else if ((k === "road" || k === "bridge") && night && (x + y) % 3 === 0) {
+          this.drawRunway(ctx, px, py, wx, wy);
+          if ((wx * 31 + wy * 17) % 41 === 0) this.drawPlane(ctx, px, py + hh, this.viewAxis(this.axis(wx, wy, ["runway"])), 1.25);
+        } else if (k === "apron" && (wx * 7 + wy * 13) % 6 === 0) this.drawPlane(ctx, px, py + hh, (wx + wy) % 2 ? "x" : "y", 1);
+        else if ((k === "road" || k === "bridge") && night && (wx + wy) % 3 === 0) {
           ctx.fillStyle = "rgba(255,214,140,0.85)";
           ctx.fillRect(px - 1.3, py + hh - 1.3, 2.6, 2.6);
         } else if (k === "terminal") {
@@ -431,10 +564,11 @@ export class WorldRenderer {
   private drawTowerColumn(ctx: CanvasRenderingContext2D, px: number, py: number, x: number, y: number, t: Tower) {
     const w = this.world;
     const n = w.size;
-    const i = y * n + x;
+    // x, y are view tiles: the neighbours that matter are the ones next to it on screen
+    const i = this.vmap[y * n + x];
     const id = this.towerAt[i];
-    const same = (xx: number, yy: number) => xx >= 0 && yy >= 0 && xx < n && yy < n && this.towerAt[yy * n + xx] === id;
-    const floorsAt = (xx: number, yy: number) => (same(xx, yy) ? this.towerFloors[yy * n + xx] : 0);
+    const same = (xx: number, yy: number) => xx >= 0 && yy >= 0 && xx < n && yy < n && this.towerAt[this.vmap[yy * n + xx]] === id;
+    const floorsAt = (xx: number, yy: number) => (same(xx, yy) ? this.towerFloors[this.vmap[yy * n + xx]] : 0);
     const u0 = same(x - 1, y) ? 0 : TOWER_INSET;
     const u1 = same(x + 1, y) ? 1 : 1 - TOWER_INSET;
     const v0 = same(x, y - 1) ? 0 : TOWER_INSET;
@@ -653,7 +787,7 @@ export class WorldRenderer {
   /** An isometric house standing on the centre (px, py) of a tile. */
   private drawBuilding(ctx: CanvasRenderingContext2D, px: number, py: number, id: number) {
     const b: Building = this.buildings[id];
-    if (b.cottage) return drawCottage(ctx, px, py, b.cottage, this.cottageColors[id]!, TW, TH);
+    if (b.cottage) return drawCottage(ctx, px, py, b.cottage, this.cottageColors[id]!, TW, TH, this.rot);
     const st: BuildingStyle = b.style;
     const col = this.houseColors[id];
     const a = (TW / 2) * st.footprint;
@@ -1040,8 +1174,13 @@ export class WorldRenderer {
     return horiz >= vert ? "x" : "y";
   }
 
+  /** A world axis as seen on screen: a quarter turn swaps x and y. */
+  private viewAxis(ax: "x" | "y"): "x" | "y" {
+    return this.rot % 2 ? (ax === "x" ? "y" : "x") : ax;
+  }
+
   private drawRail(ctx: CanvasRenderingContext2D, px: number, py: number, x: number, y: number) {
-    const ax = this.axis(x, y, ["rail", "railbridge", "station"]);
+    const ax = this.viewAxis(this.axis(x, y, ["rail", "railbridge", "station"]));
     // unit vectors of the tile's x and y axes on screen
     const ux = ax === "x" ? [TW / 2, TH / 2] : [-TW / 2, TH / 2];
     const vx = ax === "x" ? [-TW / 2, TH / 2] : [TW / 2, TH / 2];
@@ -1065,8 +1204,9 @@ export class WorldRenderer {
   }
 
   private drawRunway(ctx: CanvasRenderingContext2D, px: number, py: number, x: number, y: number) {
-    const ax = this.axis(x, y, ["runway"]);
-    if ((ax === "x" ? x : y) % 2) return;
+    const wax = this.axis(x, y, ["runway"]);
+    if ((wax === "x" ? x : y) % 2) return;
+    const ax = this.viewAxis(wax);
     const u = ax === "x" ? [TW / 2, TH / 2] : [-TW / 2, TH / 2];
     ctx.strokeStyle = "rgba(255,255,255,0.8)";
     ctx.lineWidth = 1.2;
@@ -1084,8 +1224,9 @@ export class WorldRenderer {
     const n = this.world.size;
     ctx.fillStyle = fill;
     for (const t of plot.tiles) {
-      const x = t % n;
-      const y = (t - x) / n;
+      const v = this.wmap[t];
+      const x = v % n;
+      const y = (v - x) / n;
       const px = ((x - y) * TW) / 2;
       const py = ((x + y) * TH) / 2 - this.elev[t];
       ctx.beginPath();
@@ -1097,9 +1238,7 @@ export class WorldRenderer {
       ctx.fill();
     }
     if (stroke) {
-      const { x, y } = plot.anchor;
-      const px = isoX(x + 0.5, y + 0.5);
-      const py = isoY(x + 0.5, y + 0.5) - this.elev[y * n + x];
+      const { px, py } = this.at(plot.anchor.x, plot.anchor.y);
       const k = 1 / Math.max(this.camera.scale, 0.25);
       ctx.strokeStyle = stroke;
       ctx.lineWidth = 2 * k;
@@ -1118,8 +1257,8 @@ export class WorldRenderer {
     const { ctx } = this;
     const n = this.world.size;
     const c = this.world.center;
-    const bx = isoX(c + 0.5, c + 0.5);
-    const by = isoY(c + 0.5, c + 0.5) - this.elev[c * n + c] + TH / 2;
+    const { px: bx, py: ty } = this.at(c, c);
+    const by = ty + TH / 2;
     const hw = 1.6 * (TW / 2);
     const hh = 1.6 * (TH / 2);
     const H = TOWER_HEIGHT;
@@ -1217,7 +1356,7 @@ export class WorldRenderer {
       ctx.fillStyle = fg;
       ctx.fillText(text, x, y + 0.5 * k);
     };
-    const at = (x: number, y: number) => ({ px: isoX(x + 0.5, y + 0.5), py: isoY(x + 0.5, y + 0.5) - this.elev[y * n + x] });
+    const at = (x: number, y: number) => this.at(x, y);
 
     // district names
     if (s < 1.2) {
@@ -1256,9 +1395,9 @@ export class WorldRenderer {
       // skip labels that would overlap one already drawn
       const placed: { x: number; y: number }[] = [];
       for (const road of w.roads) {
-        const { x, y } = road.mid;
+        const { x, y } = this.viewTile(road.mid.x, road.mid.y);
         if (x < r.x0 || x > r.x1 || y < r.y0 || y > r.y1) continue;
-        const { px, py } = at(x, y);
+        const { px, py } = at(road.mid.x, road.mid.y);
         if (placed.some((q) => Math.abs(q.x - px) * s < 130 && Math.abs(q.y - py) * s < 26)) continue;
         placed.push({ x: px, y: py });
         pill(road.name, px, py, 10, "#ffffff", "rgba(40,44,60,0.85)");
@@ -1267,9 +1406,9 @@ export class WorldRenderer {
       ctx.fillStyle = "rgba(10,20,30,0.8)";
       for (const p of w.plots) {
         if (p.water) continue;
-        const { x, y } = p.anchor;
+        const { x, y } = this.viewTile(p.anchor.x, p.anchor.y);
         if (x < r.x0 || x > r.x1 || y < r.y0 || y > r.y1) continue;
-        const { px, py } = at(x, y);
+        const { px, py } = at(p.anchor.x, p.anchor.y);
         ctx.fillText(String(p.number), px, py + TH / 2);
       }
     }
