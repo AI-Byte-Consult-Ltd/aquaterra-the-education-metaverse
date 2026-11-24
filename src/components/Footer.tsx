@@ -49,9 +49,7 @@ const Footer = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8">
           <div className="col-span-2 md:col-span-4 lg:col-span-1">
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-                <span className="font-display font-bold text-primary-foreground text-lg">A</span>
-              </div>
+              <img src="/favicon.svg" alt="AquaTerra" className="w-10 h-10" />
               <span className="font-display font-bold text-xl text-foreground">AquaTerra World</span>
             </div>
             <p className="text-muted-foreground text-sm mb-6">

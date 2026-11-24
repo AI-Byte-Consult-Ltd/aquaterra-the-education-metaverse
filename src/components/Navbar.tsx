@@ -36,9 +36,7 @@ const Navbar = () => {
     >
       <div className="container flex items-center justify-between">
         <a href="#" className="flex items-center gap-2">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-            <span className="font-display font-bold text-primary-foreground text-lg">A</span>
-          </div>
+          <img src="/favicon.svg" alt="AquaTerra" className="w-10 h-10" />
           <span className="font-display font-bold text-xl text-foreground">Aquaterra</span>
         </a>
 

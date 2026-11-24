@@ -66,9 +66,7 @@ const Login = () => {
       <main className="flex flex-1 items-center justify-center px-4 pb-16">
         <div className="w-full max-w-sm rounded-2xl border border-border bg-card/80 p-6 shadow-2xl backdrop-blur">
           <div className="mb-5 flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary">
-              <span className="font-display text-base font-bold text-primary-foreground">A</span>
-            </div>
+            <img src="/favicon.svg" alt="" className="h-9 w-9" />
             <span className="font-display text-lg font-bold">{t.brand}</span>
           </div>
 
