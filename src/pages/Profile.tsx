@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Check, Coins, Crown, Globe2, Loader2, LogOut, UserRound, Users } from "lucide-react";
+import { ArrowLeft, Check, Coins, Crown, Globe2, Loader2, LogOut, UserRound, Users, Landmark } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { useAccount } from "@/game/account/AccountContext";
 import { isStaff, safeNext, saveDisplayName, validDisplayName, type AccountError } from "@/game/account/api";
 import CouncilBadge from "@/game/account/CouncilBadge";
+import { stateStrings } from "@/game/state/strings";
 import { accountLocale, accountStrings } from "@/game/account/strings";
 import { useEconomy } from "@/game/economy/EconomyContext";
 import { economyStrings } from "@/game/economy/strings";
@@ -127,7 +128,7 @@ const Profile = () => {
             <dt className="text-muted-foreground">{t.roleLabel}</dt>
             <dd className="font-medium">
               {player.council ? (
-                <Link to="/council" className="text-amber-300 hover:underline">
+                <Link to="/state/council" className="text-amber-300 hover:underline">
                   {t.councilName}, {t.councilMember(player.council.seat, player.council.title)}
                 </Link>
               ) : (
@@ -137,9 +138,13 @@ const Profile = () => {
           </dl>
 
           <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
-            <Link to="/council" className="inline-flex items-center gap-1.5 text-amber-300 hover:underline">
+            <Link to="/state/council" className="inline-flex items-center gap-1.5 text-amber-300 hover:underline">
               <Crown className="h-4 w-4" />
               {t.viewCouncil}
+            </Link>
+            <Link to="/state" className="inline-flex items-center gap-1.5 text-primary hover:underline">
+              <Landmark className="h-4 w-4" />
+              {stateStrings(language).commonwealth}
             </Link>
             {isStaff(player) && (
               <Link to="/admin" className="inline-flex items-center gap-1.5 text-primary hover:underline">

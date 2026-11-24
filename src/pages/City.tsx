@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Coins, Crown, Home, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, Building2, Coins, Crown, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { DEFAULT_WORLD, findPlotByAddress, generateWorld, type Kind, type Plot, type World } from "@/game/world/generator";
@@ -14,13 +14,17 @@ import { buyPlot, dailyIncome } from "@/game/economy/api";
 import { plotPrice } from "@/game/economy/pricing";
 import { economyStrings } from "@/game/economy/strings";
 import TideChip from "@/game/economy/TideChip";
+import type { CivicId } from "@/game/world/civic";
+import { fetchCivic, fetchProposals, type Proposal } from "@/game/state/api";
+import { stateStrings } from "@/game/state/strings";
+import { chamberOf } from "@/game/state/ui";
 
 /** One tile is 20 × 20 m in the game world. */
 const TILE_M2 = 400;
 const TILE_M = 20;
 const TOWER_CONTRACT = "0x3720cde69e4e997bbdeaec7b4e7b5f8c3c406869";
 
-type Selection = { kind: "plot"; plot: Plot } | { kind: "tower" } | { kind: "tile"; tile: Kind; district: number } | null;
+type Selection = { kind: "plot"; plot: Plot } | { kind: "tower" } | { kind: "civic"; id: CivicId } | { kind: "tile"; tile: Kind; district: number } | null;
 
 const City = () => {
   const { language } = useLanguage();
@@ -28,6 +32,40 @@ const City = () => {
   const ta = accountStrings(language);
   const { player, session, signOut } = useAccount();
   const te = economyStrings(language);
+  const ts = stateStrings(language);
+  // open votes, for the lights on the plaza buildings and their cards
+  const [openVotes, setOpenVotes] = useState<Proposal[]>([]);
+  const [toVote, setToVote] = useState(0);
+  useEffect(() => {
+    let stop = false;
+    const load = async () => {
+      const r = await fetchProposals(session, "open");
+      if (!stop && r.ok) setOpenVotes(r.data.proposals);
+      if (session) {
+        const c = await fetchCivic(session);
+        if (!stop && c.ok) setToVote(c.data.toVote);
+      }
+    };
+    void load();
+    const id = window.setInterval(load, 60_000);
+    return () => {
+      stop = true;
+      window.clearInterval(id);
+    };
+  }, [session]);
+  const civicOpen = useMemo(() => {
+    const m = new Map<CivicId, Proposal[]>();
+    for (const p of openVotes) {
+      if (p.status !== "voting") continue;
+      const ch = chamberOf(p.stageBody);
+      const id: CivicId | null = ch === "council" || ch === "assembly" || ch === "mayors" ? ch : null;
+      if (id) m.set(id, [...(m.get(id) ?? []), p]);
+    }
+    return m;
+  }, [openVotes]);
+  useEffect(() => {
+    if (rendererRef.current) rendererRef.current.busyCivic = new Set(civicOpen.keys());
+  }, [civicOpen]);
   const economy = useEconomy();
   const ownedRef = useRef<Map<number, boolean>>(new Map());
   useEffect(() => {
@@ -57,6 +95,7 @@ const City = () => {
     if (!canvas || !wrap) return;
     const r = new WorldRenderer(canvas, city, { tower: t.tower });
     rendererRef.current = r;
+    r.civicLabels = { council: ts.chambers.council, assembly: ts.chambers.assembly, directorate: ts.chambers.directorate, mayors: ts.chambers.mayors };
     const size = () => {
       const rect = wrap.getBoundingClientRect();
       r.resize(rect.width, rect.height, Math.min(window.devicePixelRatio || 1, 2));
@@ -91,6 +130,7 @@ const City = () => {
       if (!r) return;
       r.selectedPlot = s?.kind === "plot" ? s.plot.id : null;
       r.towerSelected = s?.kind === "tower";
+      r.selectedCivic = s?.kind === "civic" ? s.id : null;
       if (focus && s?.kind === "plot") r.focusTile(s.plot.anchor.x, s.plot.anchor.y, 1.4);
       if (focus && s?.kind === "tower") r.focusTower(0.6);
       const next = new URLSearchParams(params);
@@ -178,7 +218,7 @@ const City = () => {
         // hover (mouse only)
         const pick = r.pick(p.x, p.y);
         r.hoverPlot = pick?.kind === "plot" ? pick.plotId : null;
-        canvas.style.cursor = pick?.kind === "plot" || pick?.kind === "tower" ? "pointer" : "grab";
+        canvas.style.cursor = pick?.kind === "plot" || pick?.kind === "tower" || pick?.kind === "civic" ? "pointer" : "grab";
         return;
       }
       if (pointers.size === 1) {
@@ -219,6 +259,7 @@ const City = () => {
       const pick = r.pick(p.x, p.y);
       if (pick?.kind === "plot") select({ kind: "plot", plot: city.plots[pick.plotId] });
       else if (pick?.kind === "tower") select({ kind: "tower" });
+      else if (pick?.kind === "civic") select({ kind: "civic", id: pick.id });
       else if (pick?.kind === "tile") select({ kind: "tile", tile: pick.tile, district: pick.district });
       else select(null);
     };
@@ -302,7 +343,17 @@ const City = () => {
             {t.searchGo}
           </button>
         </form>
-        {player && <TideChip className="ml-auto md:ml-0" />}
+        <Link
+          to="/state"
+          title={ts.commonwealth}
+          aria-label={ts.commonwealth}
+          className="relative ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-amber-400/50 bg-amber-400/10 px-2.5 text-sm font-semibold text-amber-200 hover:border-amber-300 md:ml-0"
+        >
+          <Landmark className="h-4 w-4 text-amber-300" />
+          <span className="hidden sm:inline">{ts.commonwealthShort}</span>
+          {toVote > 0 && <span className="rounded-full bg-emerald-400 px-1.5 text-[11px] font-bold text-black">{toVote}</span>}
+        </Link>
+        {player && <TideChip />}
         {player && (
           <Link
             to="/profile"
@@ -379,6 +430,8 @@ const City = () => {
                   await economy.refresh();
                 }}
               />
+            ) : selection.kind === "civic" ? (
+              <CivicCard id={selection.id} open={civicOpen.get(selection.id) ?? []} ts={ts} />
             ) : selection.kind === "tile" ? (
               <div className="space-y-2 pr-6">
                 <h2 className="font-display text-lg font-bold">{t.tiles[selection.tile]}</h2>
@@ -413,7 +466,7 @@ const City = () => {
                   <Link2 className="h-4 w-4" />
                   {t.contract}
                 </a>
-                <Link to="/council" className="flex items-center gap-1.5 text-sm text-amber-300 hover:underline">
+                <Link to="/state/council" className="flex items-center gap-1.5 text-sm text-amber-300 hover:underline">
                   <Crown className="h-4 w-4" />
                   {ta.councilName}
                 </Link>
@@ -425,6 +478,37 @@ const City = () => {
     </div>
   );
 };
+
+const CIVIC_CHAMBER: Record<CivicId, string> = { council: "council", assembly: "assembly", directorate: "directorate", mayors: "mayors" };
+
+/** Card of a seat of government on the plaza: what it is, what is open, the way in. */
+function CivicCard({ id, open, ts }: { id: CivicId; open: Proposal[]; ts: ReturnType<typeof stateStrings> }) {
+  return (
+    <div className="space-y-3 pr-6">
+      <div className="flex items-center gap-2">
+        <Landmark className={`h-5 w-5 ${id === "council" ? "text-amber-300" : "text-primary"}`} />
+        <h2 className="font-display text-lg font-bold">{ts.chambers[id]}</h2>
+      </div>
+      <p className="text-sm text-muted-foreground">{ts.chamberAbout[id]}</p>
+      {id !== "directorate" && (
+        <div>
+          <div className={`mb-1 text-sm font-semibold ${open.length ? "text-emerald-300" : "text-muted-foreground"}`}>{ts.openItems(open.length)}</div>
+          <ul className="space-y-1 text-sm">
+            {open.slice(0, 4).map((p) => (
+              <li key={p.id}>
+                <Link to={`/state/p/${p.id}`} className="hover:text-primary">· {p.title}</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <Link to={`/state/${CIVIC_CHAMBER[id]}`} className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-amber-400 text-sm font-semibold text-black hover:bg-amber-300">
+        <Landmark className="h-4 w-4" />
+        {ts.enterChamber}
+      </Link>
+    </div>
+  );
+}
 
 interface PlotCardProps {
   plot: Plot;

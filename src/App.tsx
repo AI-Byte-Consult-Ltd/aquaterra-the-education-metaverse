@@ -12,9 +12,13 @@ import City from "./pages/City";
 import LandMap from "./pages/LandMap";
 import Login from "./pages/Login";
 import Profile from "./pages/Profile";
-import Council from "./pages/Council";
 import Admin from "./pages/Admin";
 import Wallet from "./pages/Wallet";
+import StateHome from "./pages/state/StateHome";
+import ChamberPage from "./pages/state/ChamberPage";
+import ProposalPage from "./pages/state/ProposalPage";
+import ProposePage from "./pages/state/ProposePage";
+import { DistrictsPage, JournalPage, LawsPage } from "./pages/state/RecordsPages";
 import NotFound from "./pages/NotFound";
 
 /** Old /city links (plot and address search params) open the world. */
@@ -40,7 +44,14 @@ const App = () => (
             <Route path="/world" element={<RequireAccount><City /></RequireAccount>} />
             <Route path="/profile" element={<RequireAccount><Profile /></RequireAccount>} />
             <Route path="/wallet" element={<RequireAccount><Wallet /></RequireAccount>} />
-            <Route path="/council" element={<Council />} />
+            <Route path="/council" element={<Navigate to="/state/council" replace />} />
+            <Route path="/state" element={<StateHome />} />
+            <Route path="/state/new" element={<RequireAccount><ProposePage /></RequireAccount>} />
+            <Route path="/state/laws" element={<LawsPage />} />
+            <Route path="/state/journal" element={<JournalPage />} />
+            <Route path="/state/districts" element={<DistrictsPage />} />
+            <Route path="/state/p/:id" element={<ProposalPage />} />
+            <Route path="/state/:chamber" element={<ChamberPage />} />
             <Route path="/admin" element={<RequireAccount><Admin /></RequireAccount>} />
             <Route path="/city" element={<CityRedirect />} />
             <Route path="/map" element={<LandMap />} />

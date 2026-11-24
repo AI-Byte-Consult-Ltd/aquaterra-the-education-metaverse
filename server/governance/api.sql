@@ -223,7 +223,7 @@ BEGIN
           FROM aquaterra_gov_seats s WHERE s.kind = 'district' AND s.district_id = d.id)) ORDER BY d.id) FROM aquaterra_districts d), '[]'::jsonb));
   END IF;
   IF act = 'proposals' THEN
-    RETURN jsonb_build_object('ok', true, 'proposals', COALESCE((SELECT jsonb_agg(aquaterra_gov_proposal_json(x.id, me, false) ORDER BY x.ord, x.id DESC) FROM (
+    RETURN jsonb_build_object('ok', true, 'proposals', COALESCE((SELECT jsonb_agg(aquaterra_gov_proposal_json(x.id, me, true) ORDER BY x.ord, x.id DESC) FROM (
       SELECT id, CASE WHEN status IN ('voting', 'signatures') THEN 0 ELSE 1 END AS ord FROM aquaterra_gov_proposals
       WHERE CASE COALESCE(req->>'filter', 'open')
         WHEN 'open' THEN status IN ('voting', 'signatures')
@@ -332,7 +332,7 @@ BEGIN
         RETURN aquaterra_gov_err('not_eligible'); END IF;
       INSERT INTO aquaterra_gov_candidates (proposal_id, email, statement) VALUES (p.id, me, left(btrim(COALESCE(req->>'statement', '')), 280))
         ON CONFLICT (proposal_id, email) DO UPDATE SET statement = EXCLUDED.statement;
-      PERFORM aquaterra_gov_log_add('candidate', p.id, format('%s stands in the %s.', aquaterra_gov_name(me), lower(p.title)));
+      PERFORM aquaterra_gov_log_add('candidate', p.id, format('%s stands as a candidate. %s.', aquaterra_gov_name(me), p.title));
     ELSIF act = 'vote' THEN
       IF p.status <> 'voting' OR p.stages->p.stage->>'body' = 'nomination' THEN RETURN aquaterra_gov_err('closed'); END IF;
       IF NOT EXISTS (SELECT 1 FROM aquaterra_gov_electorate(p.id) WHERE voter = me) THEN RETURN aquaterra_gov_err('not_eligible'); END IF;

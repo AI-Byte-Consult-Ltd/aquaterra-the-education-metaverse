@@ -3,6 +3,7 @@ import { buildingsFor, hasHouse, type Building, type BuildingStyle, type Tower }
 import { cottagePalette, drawCottage, type CottagePalette } from "./cottages";
 import { LAGOON, baseColor, daylight, shade, skyColor, treeColor, type RGB } from "./palette";
 import { groundTurnMatrix, toViewPoint, turn, viewMaps, type Rotation } from "./view";
+import { CIVIC, civicHit, drawCivic, type CivicId } from "./civic";
 
 export const TW = 32;
 export const TH = 16;
@@ -18,7 +19,7 @@ export interface Camera {
   scale: number;
 }
 
-export type Pick = { kind: "plot"; plotId: number } | { kind: "tower" } | { kind: "tile"; tile: Kind; x: number; y: number; district: number } | null;
+export type Pick = { kind: "plot"; plotId: number } | { kind: "tower" } | { kind: "civic"; id: CivicId } | { kind: "tile"; tile: Kind; x: number; y: number; district: number } | null;
 
 const isoX = (x: number, y: number) => ((x - y) * TW) / 2;
 const isoY = (x: number, y: number) => ((x + y) * TH) / 2;
@@ -61,6 +62,11 @@ export class WorldRenderer {
   /** Plots with an owner: true for the signed-in resident's own land. */
   owned: Map<number, boolean> = new Map();
   towerSelected = false;
+  /** Seat of government picked on the map, and seats with open votes (a light on the roof). */
+  selectedCivic: CivicId | null = null;
+  busyCivic: Set<CivicId> = new Set();
+  /** Names shown over the seats of government when zoomed in. */
+  civicLabels: Partial<Record<CivicId, string>> = {};
   /** Draw a preview house on every plot. */
   private showBuildings = true;
   private buildings: Building[];
@@ -321,6 +327,10 @@ export class WorldRenderer {
     const w = this.world;
     const n = w.size;
     const c = w.center;
+    for (const b of CIVIC) {
+      const { px, py } = this.at(c + b.dx, c + b.dy);
+      if (civicHit(wx, wy, px, py)) return { kind: "civic", id: b.id };
+    }
     const { px: tx, py: ty } = this.at(c, c);
     if (Math.abs(wx - tx) < TW * 1.6 && wy < ty + TH && wy > ty - TOWER_HEIGHT - 60) return { kind: "tower" };
     // Walk from the front tile at sea level backwards; the first tile whose raised top contains the point wins.
@@ -351,7 +361,7 @@ export class WorldRenderer {
     const { ctx, camera } = this;
     const s = camera.scale;
     const world = [this.dpr * s, 0, 0, this.dpr * s, this.dpr * (this.width / 2 - camera.cx * s), this.dpr * (this.height / 2 - camera.cy * s)] as const;
-    const key = `${camera.cx}|${camera.cy}|${s}|${this.width}|${this.height}|${this.dpr}|${this.day}|${this.showBuildings}`;
+    const key = `${camera.cx}|${camera.cy}|${s}|${this.width}|${this.height}|${this.dpr}|${this.day}|${this.showBuildings}|${this.selectedCivic}|${[...this.busyCivic].join()}`;
     if (key !== this.groundKey) {
       const g = this.gctx;
       g.setTransform(1, 0, 0, 1, 0, 0);
@@ -365,6 +375,7 @@ export class WorldRenderer {
       } else {
         g.setTransform(...world);
         this.drawTiles(g, this.visibleRange(), s > 0.55);
+        this.drawCivicBuildings(g);
       }
       this.groundKey = key;
     }
@@ -440,6 +451,14 @@ export class WorldRenderer {
     this.overview = c;
     this.overviewOrigin = { x: minX, y: minY };
     return c;
+  }
+
+  /** The seats of the Commonwealth on the tower plaza, back to front for the current view. */
+  private drawCivicBuildings(ctx: CanvasRenderingContext2D) {
+    const c = this.world.center;
+    const night = this.isNight;
+    const spots = CIVIC.map((b) => ({ b, ...this.at(c + b.dx, c + b.dy) })).sort((p, q) => p.py - q.py);
+    for (const { b, px, py } of spots) drawCivic(ctx, b.id, px, py, night, this.selectedCivic === b.id, this.busyCivic.has(b.id));
   }
 
   private visibleRange() {
@@ -1391,6 +1410,15 @@ export class WorldRenderer {
       ctx.font = font(13, 700);
       ctx.fillStyle = this.isNight ? "#dffbff" : "#0b1a3a";
       ctx.fillText(this.labels.tower, px, py - TOWER_HEIGHT - 110);
+    }
+    // seats of government on the plaza
+    if (s > 0.35) {
+      for (const b of CIVIC) {
+        const label = this.civicLabels[b.id];
+        if (!label) continue;
+        const { px, py } = at(w.center + b.dx, w.center + b.dy);
+        pill(label, px, py + 12 * k, 10, "#fff7dc", this.busyCivic.has(b.id) ? "rgba(10,120,90,0.88)" : "rgba(60,48,20,0.82)");
+      }
     }
     // street names and house numbers when zoomed in
     if (s > 0.9) {

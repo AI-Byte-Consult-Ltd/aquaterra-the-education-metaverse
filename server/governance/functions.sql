@@ -304,7 +304,7 @@ BEGIN
   t := aquaterra_gov_tally(pid, p.stage);
   UPDATE aquaterra_gov_proposals SET results = results || jsonb_build_array(t || jsonb_build_object('passed', (t->>'passing')::boolean, 'at', now())) WHERE id = pid;
   PERFORM aquaterra_gov_log_add('stage', pid, format('%s on "%s": %s yes, %s no, %s abstain of %s. %s.',
-    initcap(aquaterra_gov_body_title(v_body)), p.title, t->>'yes', t->>'no', t->>'abstain', t->>'electorate',
+    upper(left(aquaterra_gov_body_title(v_body), 1)) || substr(aquaterra_gov_body_title(v_body), 2), p.title, t->>'yes', t->>'no', t->>'abstain', t->>'electorate',
     CASE WHEN t->>'rule' = 'advisory' THEN 'Opinion recorded' WHEN (t->>'passing')::boolean THEN 'Approved' ELSE 'Rejected' END));
   IF (t->>'passing')::boolean THEN PERFORM aquaterra_gov_open_stage(pid, p.stage + 1);
   ELSE PERFORM aquaterra_gov_finish(pid, false); END IF;
