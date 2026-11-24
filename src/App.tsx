@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { LanguageProvider } from "@/i18n/LanguageContext";
 import { AccountProvider } from "@/game/account/AccountContext";
 import RequireAccount from "@/game/account/RequireAccount";
+import { EconomyProvider } from "@/game/economy/EconomyContext";
 import Index from "./pages/Index";
 import City from "./pages/City";
 import LandMap from "./pages/LandMap";
@@ -13,6 +14,7 @@ import Login from "./pages/Login";
 import Profile from "./pages/Profile";
 import Council from "./pages/Council";
 import Admin from "./pages/Admin";
+import Wallet from "./pages/Wallet";
 import NotFound from "./pages/NotFound";
 
 /** Old /city links (plot and address search params) open the world. */
@@ -27,6 +29,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <LanguageProvider>
       <AccountProvider>
+      <EconomyProvider>
       <TooltipProvider>
         <Toaster />
         <Sonner />
@@ -36,6 +39,7 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/world" element={<RequireAccount><City /></RequireAccount>} />
             <Route path="/profile" element={<RequireAccount><Profile /></RequireAccount>} />
+            <Route path="/wallet" element={<RequireAccount><Wallet /></RequireAccount>} />
             <Route path="/council" element={<Council />} />
             <Route path="/admin" element={<RequireAccount><Admin /></RequireAccount>} />
             <Route path="/city" element={<CityRedirect />} />
@@ -44,6 +48,7 @@ const App = () => (
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
+      </EconomyProvider>
       </AccountProvider>
     </LanguageProvider>
   </QueryClientProvider>

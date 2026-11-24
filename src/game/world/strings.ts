@@ -100,7 +100,7 @@ const en = {
   houses: "Houses",
   housesOn: "Show houses",
   housesOff: "Hide houses",
-  housesNote: "Houses on the map are a preview of what fits each plot. Nothing is built or owned yet.",
+  housesNote: "Houses on the map are a preview of what fits each plot.",
   fitsHere: "Fits here",
   floorsShort: (n: number) => (n === 1 ? "1 floor" : `${n} floors`),
   styles: {

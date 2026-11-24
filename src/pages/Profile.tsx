@@ -1,16 +1,20 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Check, Crown, Globe2, Loader2, LogOut, UserRound, Users } from "lucide-react";
+import { ArrowLeft, Check, Coins, Crown, Globe2, Loader2, LogOut, UserRound, Users } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { useAccount } from "@/game/account/AccountContext";
 import { isStaff, safeNext, saveDisplayName, validDisplayName, type AccountError } from "@/game/account/api";
 import CouncilBadge from "@/game/account/CouncilBadge";
 import { accountLocale, accountStrings } from "@/game/account/strings";
+import { useEconomy } from "@/game/economy/EconomyContext";
+import { economyStrings } from "@/game/economy/strings";
 
 const Profile = () => {
   const { language } = useLanguage();
   const t = accountStrings(language);
   const { player, session, updatePlayer, signOut } = useAccount();
+  const te = economyStrings(language);
+  const { wallet } = useEconomy();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const welcome = params.get("welcome") === "1";
@@ -98,6 +102,22 @@ const Profile = () => {
             </label>
             {error ? <p role="alert" className="text-sm text-destructive">{t.errors[error]}</p> : <p className="text-xs text-muted-foreground">{t.displayNameHint}</p>}
           </form>
+
+          <Link
+            to="/wallet"
+            className="flex items-center justify-between gap-3 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 hover:border-cyan-300"
+          >
+            <span className="flex items-center gap-2 text-sm text-cyan-200">
+              <Coins className="h-4 w-4" />
+              {te.walletTitle}
+            </span>
+            <span className="text-right">
+              <span className="block font-display text-xl font-bold tabular-nums">{wallet ? te.tide(wallet.balance) : "…"}</span>
+              <span className="block text-xs text-muted-foreground">
+                {te.myLand}: {wallet?.plots.length ?? 0} · {te.openWallet} →
+              </span>
+            </span>
+          </Link>
 
           <dl className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-2 text-sm">
             <dt className="text-muted-foreground">{t.email}</dt>

@@ -5,6 +5,7 @@ import { useLanguage } from "@/i18n/LanguageContext";
 import { useAccount } from "@/game/account/AccountContext";
 import { fetchPlayers, isStaff, type AccountError, type PlayerRow } from "@/game/account/api";
 import { accountLocale, accountStrings } from "@/game/account/strings";
+import AdminEconomy from "@/game/economy/AdminEconomy";
 
 /** Founder and admins: who has entered the world. The server checks the role too. */
 const Admin = () => {
@@ -95,6 +96,11 @@ const Admin = () => {
               </table>
             </div>
           </>
+        )}
+        {!denied && player && isStaff(player) && (
+          <section className="mt-10 border-t border-border pt-6">
+            <AdminEconomy founder={player.role === "founder"} />
+          </section>
         )}
       </main>
     </div>
