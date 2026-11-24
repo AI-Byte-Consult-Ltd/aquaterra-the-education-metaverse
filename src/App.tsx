@@ -22,6 +22,7 @@ import { DistrictsPage, JournalPage, LawsPage } from "./pages/state/RecordsPages
 import ArcadeHome from "./pages/arcade/ArcadeHome";
 import PlayPage from "./pages/arcade/PlayPage";
 import SetupPage from "./pages/arcade/SetupPage";
+import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
 
 /** Old /city links (plot and address search params) open the world. */
@@ -44,6 +45,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/terms" element={<Terms />} />
             <Route path="/world" element={<RequireAccount><City /></RequireAccount>} />
             <Route path="/profile" element={<RequireAccount><Profile /></RequireAccount>} />
             <Route path="/wallet" element={<RequireAccount><Wallet /></RequireAccount>} />
