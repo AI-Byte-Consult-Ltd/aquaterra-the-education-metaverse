@@ -128,8 +128,8 @@ export const REGIONS = {
     forest: 0.45,
     lakes: 0,
     area: 0.75,
-    houses: ["mansion", "mansion", "decotower"],
-    // Roaring Twenties mansions and towers, the next district out from the capital
+    houses: ["mansion"],
+    // Roaring Twenties mansions, the next district out from the capital
     landmark: { count: 1, score: (s) => (s.dist > 40 ? -s.dist : -Infinity) },
   },
   temperate: {

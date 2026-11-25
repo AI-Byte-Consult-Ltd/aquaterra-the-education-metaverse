@@ -39,6 +39,9 @@ INSERT INTO aquaterra_gov_params (key, value, min_value, max_value, label) VALUE
   ('loan_max_days', 180, 30, 730, 'Bank of First Light: longest loan term, days'),
   ('mortgage_pct', 80, 10, 95, 'Bank of First Light: largest mortgage, percent of the cost of a building level')
 ON CONFLICT (key) DO NOTHING;
+-- income_tax_pct may already exist (server/build adds it for building payouts): it is one law for all income.
+UPDATE aquaterra_gov_params SET label = 'Income tax on salaries, land and building income, interest, quests and bonuses, percent'
+WHERE key = 'income_tax_pct' AND label NOT LIKE 'Income tax on salaries%';
 -- The weekly land tax replaces the old yearly one (aquaterra_gov_collect_land_tax below).
 DELETE FROM aquaterra_gov_params WHERE key = 'land_tax_pct';
 

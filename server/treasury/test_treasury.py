@@ -53,6 +53,7 @@ load(os.path.join(ROOT, "server", "travel", "travel.sql"))
 for f in ["schema.sql", "bank.sql", "functions.sql", "api.sql"]:
     load(os.path.join(ARC, f))
 load(os.path.join(ROOT, "server", "exchange", "exchange.sql"))
+load(os.path.join(ROOT, "server", "build", "build.sql"))
 
 S, EMAIL = {}, {}
 
