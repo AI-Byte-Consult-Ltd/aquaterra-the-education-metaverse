@@ -128,7 +128,7 @@ export const NicsChat = ({ open, onOpenChange }: { open: boolean; onOpenChange: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(640px,92dvh)] w-[calc(100vw-1rem)] max-w-lg flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex h-[min(640px,calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem))] w-[calc(100vw-1rem)] max-w-lg flex-col gap-0 overflow-hidden p-0">
         <header className="flex items-center gap-3 border-b border-border bg-cyan-500/5 px-4 py-3 pr-10">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-cyan-300/50 bg-cyan-400/10 shadow-[0_0_18px_rgba(34,211,238,0.35)]">
             <Cpu className="h-5 w-5 text-cyan-300" />

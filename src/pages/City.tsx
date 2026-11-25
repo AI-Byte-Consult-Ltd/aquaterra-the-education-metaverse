@@ -494,16 +494,16 @@ const City = () => {
   const fmt = (n: number) => n.toLocaleString(worldLocale(language));
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-background text-foreground">
+    <div className="p-safe fixed inset-0 flex flex-col bg-background text-foreground">
       {/* top bar */}
       <header className="z-20 flex flex-wrap items-center gap-2 border-b border-border/60 bg-background/85 px-3 py-2 backdrop-blur md:gap-3 md:px-4">
         <Link to="/" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
-          {t.back}
+          <span className="sr-only sm:not-sr-only">{t.back}</span>
         </Link>
-        <div className="flex items-center gap-2">
-          <h1 className="font-display text-base font-bold md:text-lg">{t.title}</h1>
-          <span className="rounded-full border border-primary/40 px-2 py-0.5 text-[11px] font-medium text-primary">{t.badge}</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <h1 className="sr-only font-display text-base font-bold sm:not-sr-only md:text-lg">{t.title}</h1>
+          <span className="hidden rounded-full border border-primary/40 px-2 py-0.5 text-[11px] font-medium text-primary sm:inline">{t.badge}</span>
         </div>
         <form onSubmit={onSearch} className="order-last flex w-full items-center gap-2 md:order-none md:ml-auto md:w-auto">
           <div className="relative flex-1 md:w-64">
@@ -562,7 +562,7 @@ const City = () => {
       <div ref={wrapRef} className="relative min-h-0 flex-1 touch-none select-none">
         <canvas ref={canvasRef} className="absolute inset-0 cursor-grab" />
 
-        <div className="pointer-events-none absolute left-3 top-3 rounded-md bg-background/75 px-2.5 py-1.5 text-xs text-muted-foreground backdrop-blur">
+        <div className="pointer-events-none absolute left-3 right-14 top-3 rounded-md md:right-auto bg-background/75 px-2.5 py-1.5 text-xs text-muted-foreground backdrop-blur">
           <div className="font-medium text-foreground">{t.stats(landPlots, city.plots.length - landPlots, city.districts.length, city.airports.length, city.stations.length)}</div>
           <div className="hidden md:block">{t.hint}</div>
         </div>

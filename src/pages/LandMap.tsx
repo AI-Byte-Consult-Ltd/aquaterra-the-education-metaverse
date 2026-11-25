@@ -617,7 +617,7 @@ const LandMap = () => {
       <Footer />
 
       {selected && (
-        <div className="fixed inset-0 z-50 bg-background overflow-y-auto animate-in fade-in duration-150">
+        <div className="p-safe fixed inset-0 z-50 bg-background overflow-y-auto animate-in fade-in duration-150">
           <div className="min-h-full max-w-2xl mx-auto px-5 py-8 sm:py-12">
             <button
               onClick={() => setSelected(null)}
