@@ -45,7 +45,7 @@ export const CharterPage = () => {
             <table className="w-full text-sm">
               <tbody>
                 {t.salaryRows({ c: v("salary_council", 50), d: v("salary_directorate", 40), a: v("salary_assembly", 20), m: v("salary_mayor", 20), ai: v("salary_nics_ai", 50) }).map(([k, x]) => (
-                  <tr key={k} className="border-b border-border/50"><td className="py-1 text-muted-foreground">{k}</td><td className="py-1 text-right font-medium">{x}</td></tr>
+                  <tr key={k} className="border-b border-border/50"><td className="py-1 text-muted-foreground">{k}</td><td className="whitespace-nowrap py-1 text-right font-medium">{x}</td></tr>
                 ))}
               </tbody>
             </table>

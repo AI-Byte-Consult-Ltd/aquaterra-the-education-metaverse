@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useAccount } from "@/game/account/AccountContext";
 import { Shell } from "@/game/state/ui";
 import { borrow, deposit, fetchMe, fetchOverview, repay, withdraw, type Me, type Overview } from "@/game/bank/api";
+import BuyTide from "@/game/exchange/BuyTide";
 import { AuctionList, Panel, Stat, btnMain, btnSoft, input, useBankAction, useBankLoad, useBankT } from "@/game/bank/ui";
 
 /** /bank: the Bank of First Light. Public numbers for all; deposits and loans for citizens. */
@@ -89,7 +90,7 @@ const Bank = () => {
                 <p className="text-xs text-muted-foreground">{t.noFreePlots}</p>
               ) : (
                 <form
-                  className="grid gap-2 sm:grid-cols-[1fr_7rem_5rem_auto]"
+                  className="grid grid-cols-[1fr_6.5rem_auto] gap-2"
                   onSubmit={(e) => {
                     e.preventDefault();
                     const v = Math.trunc(Number(loanAmt));
@@ -97,13 +98,13 @@ const Bank = () => {
                     void run("borrow", () => borrow(session, chosen.id, v, Math.trunc(Number(days))), (d) => { toast.success(t.borrowed(v)); setLoanAmt(""); done(d); });
                   }}
                 >
-                  <select className={input} value={chosen?.id} onChange={(e) => setPlotId(Number(e.target.value))} aria-label={t.plot}>
+                  <select className={`${input} col-span-3`} value={chosen?.id} onChange={(e) => setPlotId(Number(e.target.value))} aria-label={t.plot}>
                     {freePlots.map((p) => (
                       <option key={p.id} value={p.id}>{p.address} ({t.maxLoan(p.maxLoan)})</option>
                     ))}
                   </select>
                   <input className={input} inputMode="numeric" placeholder={t.amount} value={loanAmt} onChange={(e) => setLoanAmt(e.target.value)} />
-                  <input className={input} inputMode="numeric" aria-label={t.days} value={days} onChange={(e) => setDays(e.target.value)} />
+                  <label className="flex items-center gap-1 text-xs text-muted-foreground"><input className={input} inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} />{t.days.toLowerCase()}</label>
                   <button className={btnMain} disabled={busy === "borrow"}>{t.borrow}</button>
                 </form>
               )}
@@ -118,8 +119,14 @@ const Bank = () => {
           </Panel>
         )}
 
+        {session && (
+          <div className="md:col-span-2">
+            <BuyTide />
+          </div>
+        )}
+
         {ov.data?.founderLoan && (
-          <Panel title={t.founderLoanTitle} icon={Building2}>
+          <Panel title={t.founderLoanTitle} icon={Building2} className="md:col-span-2">
             <p className="text-sm">{t.founderLoanText(ov.data.founderLoan.borrower, ov.data.founderLoan.principal, ov.data.founderLoan.outstanding)}</p>
             <div className="h-2 overflow-hidden rounded bg-muted">
               <div className="h-full bg-amber-400" style={{ width: `${Math.min(100, (100 * ov.data.founderLoan.repaid) / ov.data.founderLoan.principal)}%` }} />

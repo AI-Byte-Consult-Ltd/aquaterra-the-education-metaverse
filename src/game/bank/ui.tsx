@@ -77,7 +77,8 @@ const Spin = () => <Loader2 className="h-4 w-4 animate-spin" />;
 const btn = "inline-flex h-9 items-center justify-center gap-1.5 rounded-md px-3 text-sm font-semibold disabled:opacity-50";
 export const btnMain = `${btn} bg-amber-400 text-black hover:bg-amber-300`;
 export const btnSoft = `${btn} border border-border hover:bg-muted`;
-export const input = "h-9 w-full rounded-md border border-border bg-background px-2 text-sm";
+export const inputBase = "h-9 rounded-md border border-border bg-background px-2 text-sm";
+export const input = `${inputBase} w-full`;
 
 /** Wallet card: office and salary, land tax this week, debts, messages from the state. */
 export function TaxesCard() {
@@ -193,7 +194,7 @@ export function AuctionList({ auctions, laws, myBids, onBid }: { auctions: Aucti
                   });
                 }}
               >
-                <input className={`${input} w-32`} inputMode="numeric" value={amounts[a.id] ?? String(low)} onChange={(e) => setAmounts({ ...amounts, [a.id]: e.target.value })} />
+                <input className={`${inputBase} w-32`} inputMode="numeric" value={amounts[a.id] ?? String(low)} onChange={(e) => setAmounts({ ...amounts, [a.id]: e.target.value })} />
                 <button className={btnMain} disabled={busy === `bid${a.id}`}>
                   {busy === `bid${a.id}` ? <Spin /> : <Gavel className="h-4 w-4" />}
                   {t.doBid}

@@ -11,7 +11,7 @@
 -- shown in /admin and /state/laws, changed only by a passed set_param proposal.
 -- Decisions of Alexander (Founder), 2026-11-24: salaries Council 50, Directorate 40,
 -- Assembly and Mayors 20 TIDE a day; NICS AI's share to its fund for games and quests;
--- 10% tax on salaries and on any income; the Founder's 50,000 TIDE loan without
+-- 10% tax on salaries and on any income (key income_tax_pct, shared with server/build); the Founder's 50,000 TIDE loan without
 -- interest, repaid by 10% of his income over 12 months; the Charter and the Bank.
 
 -- ---------------------------------------------------------------- laws
@@ -142,15 +142,17 @@ ON CONFLICT DO NOTHING;
 CREATE OR REPLACE FUNCTION aquaterra_fisc(k text) RETURNS numeric
 LANGUAGE sql STABLE AS $fn$ SELECT COALESCE((SELECT value FROM aquaterra_gov_params WHERE key = k), 0) $fn$;
 
--- Wallet names in histories: economy + arcade + bank.
-CREATE OR REPLACE FUNCTION aquaterra_name(acct text) RETURNS text LANGUAGE sql STABLE AS $fn$
-  SELECT CASE WHEN acct = 'treasury' THEN 'AquaTerra Reserve' WHEN acct IS NULL THEN NULL
-    WHEN acct = 'state:treasury' THEN 'State Treasury' WHEN acct = 'state:escrow' THEN 'Land auctions'
-    WHEN acct LIKE 'state:%' THEN 'State budget'
-    WHEN acct = 'bank:first-light' THEN 'Bank of First Light'
-    WHEN acct = 'arcade:escrow' THEN 'Prize pools' WHEN acct = 'nics-ai' THEN 'NICS AI'
-    ELSE COALESCE((SELECT display_name FROM aquaterra_players WHERE email = acct), 'Citizen') END
-$fn$;
+-- Names for the bank's system accounts in every history (patches aquaterra_name once,
+-- so names added by other workflows stay).
+DO $do$
+DECLARE src text; anchor text := 'WHEN acct IS NULL THEN NULL';
+BEGIN
+  src := pg_get_functiondef('aquaterra_name(text)'::regprocedure);
+  IF position('bank:first-light' IN src) > 0 THEN RETURN; END IF;
+  IF position(anchor IN src) = 0 THEN RAISE EXCEPTION 'name patch: anchor not found'; END IF;
+  src := replace(src, anchor, anchor || E'\n    WHEN acct = ''bank:first-light'' THEN ''Bank of First Light'' WHEN acct = ''state:escrow'' THEN ''Land auctions''');
+  EXECUTE src;
+END $do$;
 
 CREATE OR REPLACE FUNCTION aquaterra_fisc_move(src text, dst text, amt bigint, k text, plot int, note text, who text, r text) RETURNS bigint
 LANGUAGE plpgsql AS $fn$
@@ -225,7 +227,7 @@ END $fn$;
 
 DROP TRIGGER IF EXISTS aquaterra_fisc_income ON aquaterra_ledger;
 CREATE TRIGGER aquaterra_fisc_income AFTER INSERT ON aquaterra_ledger FOR EACH ROW
-  WHEN (NEW.to_account LIKE '%@%' AND NEW.kind IN ('income', 'salary', 'interest', 'quest', 'civic_bonus', 'arcade_prize', 'rent', 'fare', 'auction_proceeds'))
+  WHEN (NEW.to_account LIKE '%@%' AND NEW.kind IN ('income', 'salary', 'interest', 'quest', 'civic_bonus', 'arcade_prize', 'rent', 'fare', 'auction_proceeds', 'building_income'))
   EXECUTE FUNCTION aquaterra_fisc_on_income();
 DROP TRIGGER IF EXISTS aquaterra_fisc_deal ON aquaterra_ledger;
 CREATE TRIGGER aquaterra_fisc_deal AFTER INSERT ON aquaterra_ledger FOR EACH ROW
@@ -375,7 +377,7 @@ BEGIN
     FROM (SELECT owner, price_paid, row_number() OVER (PARTITION BY owner ORDER BY bought_at, plot_id) k
           FROM aquaterra_plot_owners WHERE owner LIKE '%@%' AND bought_at < now() - interval '1 day') o
     WHERE k > aquaterra_fisc('land_tax_free_plots') GROUP BY owner ORDER BY owner LOOP
-    INSERT INTO aquaterra_debts (email, kind, amount, reason) VALUES (r.owner, 'land_tax', r.due, format('week of %s, %s plots', wk, r.n)) RETURNING id INTO did;
+    INSERT INTO aquaterra_debts (email, kind, amount, reason) VALUES (r.owner, 'land_tax', r.due, format('week of %s, %s %s', wk, r.n, CASE WHEN r.n = 1 THEN 'plot' ELSE 'plots' END)) RETURNING id INTO did;
     got := aquaterra_debt_collect(did);
     v_total := v_total + got;
     IF got >= r.due THEN v_paid := v_paid + 1;

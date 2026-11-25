@@ -7,6 +7,7 @@ import { fetchPlayers, isStaff, type AccountError, type PlayerRow } from "@/game
 import { accountLocale, accountStrings } from "@/game/account/strings";
 import AdminEconomy from "@/game/economy/AdminEconomy";
 import { AdminTreasury } from "@/game/bank/ui";
+import AdminExchange from "@/game/exchange/AdminExchange";
 
 /** Founder and admins: who has entered the world. The server checks the role too. */
 const Admin = () => {
@@ -106,6 +107,11 @@ const Admin = () => {
         {!denied && player && isStaff(player) && (
           <section className="mt-10 border-t border-border pt-6">
             <AdminTreasury />
+          </section>
+        )}
+        {!denied && player && isStaff(player) && (
+          <section className="mt-10 border-t border-border pt-6">
+            <AdminExchange founder={player.role === "founder"} />
           </section>
         )}
       </main>

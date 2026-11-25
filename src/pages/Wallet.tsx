@@ -9,6 +9,7 @@ import { useEconomy } from "@/game/economy/EconomyContext";
 import { claimIncome, dailyIncome, sendTide, transferFee, type EconomyError } from "@/game/economy/api";
 import { economyStrings } from "@/game/economy/strings";
 import { TaxesCard } from "@/game/bank/ui";
+import BuyTide from "@/game/exchange/BuyTide";
 
 /** Default rules, shown until the server sends its own. */
 const DEFAULT_RULES = { income_bp_per_day: 100, income_cap_days: 7, transfer_fee_bp: 100 };
@@ -100,6 +101,8 @@ const Wallet = () => {
           {!!wallet?.locked && <p className="mt-2 text-xs text-muted-foreground">{t.locked(wallet.locked)}</p>}
           <p className="mt-2 text-xs text-muted-foreground">{t.walletIntro}</p>
         </section>
+
+        <BuyTide />
 
         {/* land and income */}
         <section className="space-y-3 rounded-2xl border border-border bg-card/80 p-5">

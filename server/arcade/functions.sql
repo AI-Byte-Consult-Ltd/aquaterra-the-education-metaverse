@@ -26,9 +26,7 @@ $fn$;
 -- Wallet names in histories: the economy's list plus the arcade's accounts.
 CREATE OR REPLACE FUNCTION aquaterra_name(acct text) RETURNS text LANGUAGE sql STABLE AS $fn$
   SELECT CASE WHEN acct = 'treasury' THEN 'AquaTerra Reserve' WHEN acct IS NULL THEN NULL
-    WHEN acct = 'state:treasury' THEN 'State Treasury' WHEN acct = 'state:escrow' THEN 'Land auctions'
-    WHEN acct LIKE 'state:%' THEN 'State budget'
-    WHEN acct = 'bank:first-light' THEN 'Bank of First Light'
+    WHEN acct = 'state:treasury' THEN 'State Treasury' WHEN acct LIKE 'state:%' THEN 'State budget'
     WHEN acct = 'arcade:escrow' THEN 'Prize pools' WHEN acct = 'nics-ai' THEN 'NICS AI'
     ELSE COALESCE((SELECT display_name FROM aquaterra_players WHERE email = acct), 'Citizen') END
 $fn$;

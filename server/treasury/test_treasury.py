@@ -52,6 +52,7 @@ for f in ["schema.sql", "functions.sql", "api.sql"]:
 load(os.path.join(ROOT, "server", "travel", "travel.sql"))
 for f in ["schema.sql", "bank.sql", "functions.sql", "api.sql"]:
     load(os.path.join(ARC, f))
+load(os.path.join(ROOT, "server", "exchange", "exchange.sql"))
 
 S, EMAIL = {}, {}
 
@@ -113,6 +114,7 @@ check(law("arcade_prize_tax_pct") == 10 and law("rent_tax_pct") == 10, "prize an
 check(psql("SELECT count(*) FROM aquaterra_gov_params WHERE key = 'land_tax_pct'") == "0", "old yearly land tax law removed")
 check("income_tax_pct" in psql("SELECT prosrc FROM pg_proc WHERE proname = 'aquaterra_gov_nics_ai'"), "NICS rule E1 covers income tax")
 check(psql("SELECT aquaterra_name('bank:first-light')") == "Bank of First Light", "bank wallet has a name")
+check(psql("SELECT aquaterra_name('market:escrow')") == "Tide Market", "names of other workflows stay")
 
 # --- salaries: from the State Treasury, 10% tax, 10% to the founder loan
 psql("UPDATE aquaterra_wallets SET balance = 1000 WHERE account = 'state:treasury'")
