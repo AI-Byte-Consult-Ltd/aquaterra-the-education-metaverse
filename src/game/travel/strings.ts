@@ -15,6 +15,8 @@ const en = {
   cheapest: "Cheapest",
   fastest: "Fastest",
   go: (fare: number) => (fare > 0 ? `Go for ${tide(fare)}` : "Go"),
+  goShort: "Go",
+  ownHubFare: (tax: number) => `yours: ${tide(tax)} tax`,
   going: "On the way…",
   arrived: (district: string, fare: number) => (fare > 0 ? `Arrived in ${district}. Fare ${tide(fare)}.` : `Arrived in ${district}.`),
   walkHere: "Walk here (free)",

@@ -694,6 +694,7 @@ const City = () => {
                       } else toast.success(tt.bought(h.name));
                       await Promise.all([economy.refresh(), loadNetwork()]);
                     }}
+                    onGo={(legs) => void go(legs, null)}
                     travel={
                       me ? (
                         <TravelOptions world={city} net={net} me={me} target={hub.district} balance={economy.wallet?.balance ?? null} busy={travelling} t={tt} onGo={(legs) => void go(legs, null)} />
