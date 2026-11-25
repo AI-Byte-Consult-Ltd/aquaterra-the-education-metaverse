@@ -6,8 +6,8 @@
 --             Revolut says the order is completed for exactly our amount. Coins come from the Reserve.
 --  2. crypto: USDT or CRO on Cronos to the project wallet. Every order has its own exact amount
 --             (a few millionths added), so the transfer is matched by amount without asking who sent it.
---  3. market: residents sell Tide to residents for USDT on Cronos, paid straight to the seller's wallet.
---             Sold Tide wait in escrow ('market:escrow'); when the payment is seen on chain the buyer
+--  3. market: residents sell Tide to residents for USDT on Cronos, paid straight to the sellers wallet.
+--             Sold Tide wait in escrow (market:escrow); when the payment is seen on chain the buyer
 --             gets them, minus the market fee to the State Treasury. The project never holds the money.
 --  4. token:  withdraw Tide to Cronos as the TIDE token. Built, switched off (token_enabled = 0)
 --             until the legal review.
@@ -97,10 +97,10 @@ CREATE TABLE IF NOT EXISTS aquaterra_chain_transfers (
   token text NOT NULL,                  -- USDT | CRO
   from_address text,
   to_address text NOT NULL,
-  amount numeric NOT NULL,              -- in the token's smallest unit (USDT 1e-6, CRO wei)
+  amount numeric NOT NULL,              -- in the tokens smallest unit (USDT 1e-6, CRO wei)
   block bigint,
   seen_at timestamptz NOT NULL DEFAULT now(),
-  matched text,                         -- 'order:12' | 'trade:7' | NULL
+  matched text,                         -- order:12 | trade:7 | NULL
   PRIMARY KEY (tx_hash, log_index)
 );
 
@@ -448,7 +448,7 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'provider', 'status', 502);
 
   ELSIF act = 'card_settle' THEN
-    -- Revolut's own answer about its order: credit only a completed order for exactly our amount and currency.
+    -- Revoluts own answer about its order: credit only a completed order for exactly our amount and currency.
     SELECT * INTO o FROM aquaterra_tide_orders WHERE provider_id = req->>'providerId' AND method = 'card' FOR UPDATE;
     IF o.id IS NULL THEN RETURN jsonb_build_object('ok', false, 'error', 'not_found', 'status', 404); END IF;
     IF o.status IN ('pending', 'expired') AND lower(req->>'state') = 'completed'
