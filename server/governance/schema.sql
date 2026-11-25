@@ -177,7 +177,6 @@ INSERT INTO aquaterra_gov_params (key, value, min_value, max_value, label) VALUE
   ('max_open_proposals', 3, 1, 20, 'Open proposals one citizen may have at once'),
   ('permit_free_floors', 10, 1, 39, 'Floors a building may have without any vote'),
   ('skyscraper_floors', 40, 11, 200, 'Floors from which a building is a skyscraper'),
-  ('land_tax_pct', 1, 0, 10, 'Yearly land tax, percent of plot value'),
   ('sales_tax_pct', 3, 0, 15, 'Tax on plot and asset sales, percent'),
   ('budget_reserve_pct', 25, 0, 90, 'Share of the treasury one budget law may not exceed, percent')
 ON CONFLICT (key) DO NOTHING;

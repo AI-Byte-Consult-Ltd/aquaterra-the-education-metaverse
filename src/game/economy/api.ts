@@ -42,6 +42,8 @@ export interface OwnedPlot {
 export type LedgerKind =
   | "genesis" | "welcome" | "plot_purchase" | "transfer" | "fee" | "tax" | "income" | "grant" | "state" | "fare" | "hub_purchase"
   | "arcade_entry" | "arcade_prize" | "arcade_pool" | "arcade_refund" | "rent" | "quest"
+  | "salary" | "income_tax" | "duty" | "land_tax" | "fine" | "civic_bonus" | "deposit" | "withdraw" | "interest" | "loan" | "loan_repay"
+  | "bank_capital" | "auction_bid" | "auction_refund" | "auction_proceeds"
   | "build" | "permit" | "building_income" | "building_sale"
   | "tide_purchase" | "market_escrow" | "market_return" | "market_buy" | "token_withdraw";
 

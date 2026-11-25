@@ -6,6 +6,7 @@ import { useAccount } from "@/game/account/AccountContext";
 import { fetchPlayers, isStaff, type AccountError, type PlayerRow } from "@/game/account/api";
 import { accountLocale, accountStrings } from "@/game/account/strings";
 import AdminEconomy from "@/game/economy/AdminEconomy";
+import { AdminTreasury } from "@/game/bank/ui";
 import AdminBuild from "@/game/build/AdminBuild";
 import AdminExchange from "@/game/exchange/AdminExchange";
 
@@ -102,6 +103,11 @@ const Admin = () => {
         {!denied && player && isStaff(player) && (
           <section className="mt-10 border-t border-border pt-6">
             <AdminEconomy founder={player.role === "founder"} />
+          </section>
+        )}
+        {!denied && player && isStaff(player) && (
+          <section className="mt-10 border-t border-border pt-6">
+            <AdminTreasury />
           </section>
         )}
         {!denied && player && isStaff(player) && (

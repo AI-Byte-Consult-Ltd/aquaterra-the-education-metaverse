@@ -8,6 +8,7 @@ import { accountLocale, accountStrings } from "@/game/account/strings";
 import { useEconomy } from "@/game/economy/EconomyContext";
 import { claimIncome, dailyIncome, sendTide, transferFee, type EconomyError } from "@/game/economy/api";
 import { economyStrings } from "@/game/economy/strings";
+import { TaxesCard } from "@/game/bank/ui";
 import BuyTide from "@/game/exchange/BuyTide";
 
 /** Default rules, shown until the server sends its own. */
@@ -196,6 +197,8 @@ const Wallet = () => {
         </section>
 
         {/* history */}
+        <TaxesCard />
+
         <section className="rounded-2xl border border-border bg-card/80 p-5 md:col-span-2">
           <h2 className="mb-3 font-display text-lg font-bold">{t.history}</h2>
           {wallet && wallet.history.length === 0 ? (

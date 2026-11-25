@@ -30,6 +30,9 @@ import { HubCard, TravelOptions, tripSegments } from "@/game/travel/ui";
 import PlotArcade from "@/game/arcade/PlotArcade";
 import { fetchArcadeMap, type MapAttraction } from "@/game/arcade/api";
 import { arcadeStrings } from "@/game/arcade/strings";
+import { DEFAULT_LAWS, dealDuty, useLaws } from "@/game/bank/api";
+import { bankStrings } from "@/game/bank/strings";
+import { useBankT } from "@/game/bank/ui";
 
 const ARCADE_GLYPH: Record<MapAttraction["template"], string> = { quiz: "?", crystals: "◆", maze: "#", range: "◎", race: "≈" };
 
@@ -56,6 +59,7 @@ const City = () => {
   const { player, session, signOut } = useAccount();
   const te = economyStrings(language);
   const ts = stateStrings(language);
+  const tBank = bankStrings(language);
   const tt = travelStrings(language);
   // open votes, for the lights on the plaza buildings and their cards
   const [openVotes, setOpenVotes] = useState<Proposal[]>([]);
@@ -204,7 +208,7 @@ const City = () => {
     if (!canvas || !wrap) return;
     const r = new WorldRenderer(canvas, city, { tower: t.tower });
     rendererRef.current = r;
-    r.civicLabels = { council: ts.chambers.council, assembly: ts.chambers.assembly, directorate: ts.chambers.directorate, mayors: ts.chambers.mayors };
+    r.civicLabels = { council: ts.chambers.council, assembly: ts.chambers.assembly, directorate: ts.chambers.directorate, mayors: ts.chambers.mayors, bank: tBank.bankTitle };
     const size = () => {
       const rect = wrap.getBoundingClientRect();
       r.resize(rect.width, rect.height, Math.min(window.devicePixelRatio || 1, 2));
@@ -758,10 +762,29 @@ const City = () => {
   );
 };
 
-const CIVIC_CHAMBER: Record<CivicId, string> = { council: "council", assembly: "assembly", directorate: "directorate", mayors: "mayors" };
+const CIVIC_CHAMBER: Record<Exclude<CivicId, "bank">, string> = { council: "council", assembly: "assembly", directorate: "directorate", mayors: "mayors" };
+
+/** Card of the Bank of First Light on the plaza. */
+function BankCard() {
+  const { t } = useBankT();
+  return (
+    <div className="space-y-3 pr-6">
+      <div className="flex items-center gap-2">
+        <Landmark className="h-5 w-5 text-amber-300" />
+        <h2 className="font-display text-lg font-bold">{t.bankTitle}</h2>
+      </div>
+      <p className="text-sm text-muted-foreground">{t.bankIntro}</p>
+      <Link to="/bank" className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-amber-400 text-sm font-semibold text-black hover:bg-amber-300">
+        <Landmark className="h-4 w-4" />
+        {t.openBank}
+      </Link>
+    </div>
+  );
+}
 
 /** Card of a seat of government on the plaza: what it is, what is open, the way in. */
 function CivicCard({ id, open, ts }: { id: CivicId; open: Proposal[]; ts: ReturnType<typeof stateStrings> }) {
+  if (id === "bank") return <BankCard />;
   return (
     <div className="space-y-3 pr-6">
       <div className="flex items-center gap-2">
@@ -822,7 +845,10 @@ function PlotCard({ plot, world, t, te, fmt, onCopy, built, onOpen, tb, owner, b
   const house = !hasHouse(plot) ? null : built ? builtBuilding(world, plot, built) : buildingFor(world, plot);
   const price = plotPrice(world, plot);
   const [buying, setBuying] = useState(false);
-  const short = balance !== null && balance < price ? price - balance : 0;
+  const laws = useLaws();
+  const dutyPct = laws?.deal_duty_pct ?? DEFAULT_LAWS.deal_duty_pct;
+  const duty = dealDuty(price, dutyPct);
+  const short = balance !== null && balance < price + duty ? price + duty - balance : 0;
   return (
     <div className="space-y-3 pr-6">
       <div className="flex items-center gap-2">
@@ -902,6 +928,7 @@ function PlotCard({ plot, world, t, te, fmt, onCopy, built, onOpen, tb, owner, b
             {buying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}
             {buying ? te.buying : te.buy(te.tide(price))}
           </button>
+          {duty > 0 && <p className="text-xs text-muted-foreground">{te.dutyNote(duty, dutyPct)}</p>}
           <p className="text-xs text-muted-foreground">{short > 0 ? te.needMore(short) : te.yieldNote(dailyIncome(price, incomeBp))}</p>
         </div>
       )}
