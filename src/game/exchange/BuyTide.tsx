@@ -85,9 +85,11 @@ const BuyTide = () => {
     return () => window.clearInterval(id);
   }, [load, waiting]);
 
-  // Back from Revolut: /wallet?order=12. Ask until the server has the answer (it checks with Revolut itself).
+  // A card order is being paid (Revolut opens in a new tab, or the resident came back to /wallet?order=12).
+  // Ask until the server has the answer: it checks with Revolut itself. Up to 15 minutes.
+  const orderParam = params.get("order");
   useEffect(() => {
-    const id = Number(params.get("order"));
+    const id = Number(orderParam);
     if (!session || !Number.isInteger(id) || id <= 0) return;
     let tries = 0;
     let stop = false;
@@ -102,7 +104,7 @@ const BuyTide = () => {
         void load();
       } else if (r.ok && r.data.order.status === "failed") {
         toast.error(t.orderFailed);
-      } else if (tries < 30) {
+      } else if (tries < 225) {
         window.setTimeout(() => void tick(), 4000);
         return;
       }
@@ -115,7 +117,7 @@ const BuyTide = () => {
       stop = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
+  }, [session, orderParam]);
 
   if (!session) return null;
 
@@ -163,13 +165,27 @@ const BuyTide = () => {
     </div>
   );
 
-  const payCard = (p: Pack) =>
+  const payCard = (p: Pack) => {
+    // Open the tab now, while the click still counts as the resident's own action (pop-up blockers),
+    // pay there, and keep the wallet open to see the Tide arrive.
+    const tab = window.open("", "_blank");
+    if (tab) tab.opener = null;
+    let opened = false;
     void run(`pack${p.pack}`, buyByCard(session, p.pack), (d) => {
-      if (d.order.checkoutUrl) {
-        toast.message(t.redirecting);
-        window.location.assign(d.order.checkoutUrl);
-      } else toast.error(t.errors.provider);
+      if (!d.order.checkoutUrl) return void toast.error(t.errors.provider);
+      opened = true;
+      toast.message(t.redirecting);
+      if (tab) tab.location.href = d.order.checkoutUrl;
+      else window.location.assign(d.order.checkoutUrl);
+      setParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("order", String(d.order.id));
+        return next;
+      }, { replace: true });
+    }).then(() => {
+      if (!opened) tab?.close();
     });
+  };
 
   const OrderBox = ({ o }: { o: TideOrder }) => (
     <div className="space-y-2 rounded-xl border border-amber-400/40 bg-amber-400/5 p-4">
