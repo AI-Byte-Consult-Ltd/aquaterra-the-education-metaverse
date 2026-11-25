@@ -136,6 +136,28 @@ export default function PlotView({ world, plot, built, rules, mine, owner, sessi
               {plot.district >= 0 ? world.districts[plot.district].name : tw.openSea} · {(plot.tiles.length * 400).toLocaleString("en")} {tw.m2}
             </p>
           </div>
+          {/* what the map card leaves out to stay small */}
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg border border-border p-3 text-sm">
+            {plot.district >= 0 && (
+              <>
+                <dt className="text-muted-foreground">{tw.climate}</dt>
+                <dd className="font-medium">{tw.biomes[world.districts[plot.district].biome]}</dd>
+              </>
+            )}
+            <dt className="text-muted-foreground">{tw.landscape}</dt>
+            <dd className="font-medium">{tw.landscapes[plot.landscape]}</dd>
+            <dt className="text-muted-foreground">{tw.toTower}</dt>
+            <dd className="font-medium">
+              {(Math.round((plot.distance * 20) / 100) / 10).toLocaleString("en")} {tw.km}
+            </dd>
+            {!plot.water && (
+              <>
+                <dt className="text-muted-foreground">{tw.water}</dt>
+                <dd className="font-medium">{plot.waterView ? tw.yes : tw.no}</dd>
+              </>
+            )}
+          </dl>
+          {plot.water && <p className="text-xs text-muted-foreground">{tw.waterNote}</p>}
 
           <section className="space-y-1.5 rounded-lg border border-border p-3">
             <h3 className="flex items-center gap-1.5 text-sm font-semibold">
@@ -368,6 +390,7 @@ function SideView({ world, plot, built, preview }: { world: World; plot: Plot; b
       r.resize(rect.width, rect.height, Math.min(window.devicePixelRatio || 1, 2));
     };
     size();
+    r.liftSelected = false;
     r.selectedPlot = plot.id;
     const big = plot.tiles.length >= 5;
     r.focusTile(plot.anchor.x, plot.anchor.y, big ? 2.2 : 3.4);
