@@ -63,7 +63,7 @@ const en: PhraseBank = {
   ],
   council: [
     { text: "The Council of First Light has {seats_total}. Filled now: {seats_filled}. The Founder holds seat {founder_seat}, I hold seat {nics_seat}. A proposal passes the Council with {votes_needed}." },
-    { text: "Seats taken in the Council of First Light: {seats_filled} of {seats_total}. Seats {founder_seat} and {nics_seat} are permanent: the Founder and NICS AI. The rest are elected by the Assembly. Passing needs {votes_needed}." },
+    { text: "Seats taken in the Council of First Light: {seats_filled} of {seats_total}. Three seats are permanent: the Founder (seat {founder_seat}), NICS AI (seat {nics_seat}) and a founding member. The rest are elected by the Assembly. Passing needs {votes_needed}." },
   ],
   elections: [
     { when: (f) => f.open_elections === "no elections", text: "No election is open right now. The city has {residents}. A district elects a Mayor at {mayor_at} and gets its own Assembly seat at {seat_at}. The Assembly has {assembly_seated} of {assembly_total} seated." },

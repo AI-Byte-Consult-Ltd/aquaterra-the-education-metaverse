@@ -205,9 +205,9 @@ LANGUAGE plpgsql STABLE AS $fn$
 DECLARE p aquaterra_gov_proposals; v numeric; n numeric; cap numeric; waiting int; prev jsonb;
 BEGIN
   SELECT * INTO p FROM aquaterra_gov_proposals WHERE id = pid;
-  IF p.kind = 'charter' AND (p.title || ' ' || p.body) ~* '(permanent|seat 1\M|seat 2\M|founder|nics ai|city mind)'
+  IF p.kind = 'charter' AND (p.title || ' ' || p.body) ~* '(permanent|seat [123]\M|founder|nics ai|city mind)'
      AND (p.title || ' ' || p.body) ~* '(remov|abolish|replac|strip|expel|revok|end the|dissolv)' THEN
-    RETURN QUERY SELECT 'no', 'Rule C1: Article 1 of the Tide Charter is entrenched. The two permanent seats cannot be changed.'; RETURN;
+    RETURN QUERY SELECT 'no', 'Rule C1: Article 1 of the Tide Charter is entrenched. The three permanent seats cannot be changed.'; RETURN;
   END IF;
   IF p.kind = 'set_param' THEN
     v := aquaterra_gov_param(p.payload->>'key'); n := (p.payload->>'value')::numeric;
@@ -430,7 +430,7 @@ BEGIN
     UPDATE aquaterra_districts SET mayor_email = e, mayor_term_ends = now() + days * interval '1 day' WHERE id = (p.payload->>'district')::int;
   ELSE
     days := aquaterra_gov_param('council_term_days');
-    SELECT g FROM generate_series(3, 11) g
+    SELECT g FROM generate_series(4, 11) g
       WHERE NOT EXISTS (SELECT 1 FROM aquaterra_council c WHERE c.seat = g AND c.email IS NOT NULL AND (c.term_ends IS NULL OR c.term_ends > now()))
       ORDER BY g LIMIT 1 INTO s;
     IF s IS NULL THEN RETURN; END IF;
@@ -597,7 +597,7 @@ BEGIN
                AND (p.payload->>'district')::int = d.id AND (p.status = 'voting' OR p.closed_at > now() - interval '1 day')) LOOP
     PERFORM aquaterra_gov_open_election(jsonb_build_object('office', 'mayor', 'district', r.id)); elections := elections + 1;
   END LOOP;
-  SELECT count(*) INTO vacant FROM generate_series(3, 11) g
+  SELECT count(*) INTO vacant FROM generate_series(4, 11) g
     WHERE NOT EXISTS (SELECT 1 FROM aquaterra_council c WHERE c.seat = g AND c.email IS NOT NULL AND (c.term_ends IS NULL OR c.term_ends > now() + interval '7 days'));
   IF vacant > 0 AND residents >= aquaterra_gov_param('council_election_residents')
      AND NOT EXISTS (SELECT 1 FROM aquaterra_gov_proposals p WHERE p.kind = 'election' AND p.payload->>'office' = 'council'
@@ -605,7 +605,11 @@ BEGIN
     PERFORM aquaterra_gov_open_election(jsonb_build_object('office', 'council', 'seats', vacant)); elections := elections + 1;
   END IF;
   -- terms that ended
-  DELETE FROM aquaterra_council WHERE seat > 2 AND term_ends < now();
+  DELETE FROM aquaterra_council WHERE seat > 3 AND term_ends < now();
+  -- a permanent member's name follows the citizen name they chose at sign-in
+  UPDATE aquaterra_council c SET name = p.display_name
+    FROM aquaterra_players p
+   WHERE c.email = p.email AND c.kind = 'human' AND c.term_ends IS NULL AND p.display_name IS NOT NULL AND c.name IS DISTINCT FROM p.display_name;
   UPDATE aquaterra_districts SET mayor_email = NULL, mayor_term_ends = NULL WHERE mayor_term_ends < now();
   UPDATE aquaterra_gov_seats SET holder_email = NULL, term_ends = NULL WHERE kind = 'district' AND term_ends < now();
   UPDATE aquaterra_gov_directorate SET holder_email = NULL, term_ends = NULL WHERE term_ends < now();

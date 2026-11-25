@@ -59,7 +59,8 @@ def player(email, name, role="citizen"):
 player("founder@x", "Alexander", "founder")
 for n in ["Ava", "Ben", "Cleo", "Dan"]:
     player(n.lower() + "@x", n)
-psql("INSERT INTO aquaterra_council (seat, name, title, kind, email) VALUES (1, 'Alexander', 'Founder', 'human', 'founder@x'), (2, 'NICS AI', 'City Mind', 'ai', NULL)")
+player("zed@x", None)  # the third permanent member, before choosing a name
+psql("INSERT INTO aquaterra_council (seat, name, title, kind, email) VALUES (1, 'Alexander', 'Founder', 'human', 'founder@x'), (2, 'NICS AI', 'City Mind', 'ai', NULL), (3, 'Founding Member', 'Permanent Member', 'human', 'zed@x')")
 
 def as_(who, **req):
     req["session"] = S[who]
@@ -76,7 +77,7 @@ check(t["districtsAdded"] == 1, "a new district is added on its own")
 check("New district on the map: Reedwater" in psql("SELECT text FROM aquaterra_gov_log ORDER BY id DESC LIMIT 1"), "new district logged")
 
 st = gov({"action": "state"})
-check(st["council"]["filled"] == 2 and st["council"]["need"] == 2, "council of two needs both votes")
+check(st["council"]["filled"] == 3 and st["council"]["need"] == 2, "council of three permanent members needs two votes")
 check(st["assembly"]["founding"] and st["assembly"]["total"] == 51, "founding assembly of 51 seats")
 
 # --- residence
@@ -126,7 +127,10 @@ p = as_("Alexander", action="proposal", id=pid)["proposal"]
 check(p["results"][0]["passed"] and p["results"][0]["body"] == "assembly", "all five voted: Assembly closes early")
 nics = [v for v in p["rollCall"] if v["ai"]][0]
 check(nics["choice"] == "no" and "E1" in nics["reason"], "NICS AI refuses a 9-point tax jump")
-check(p["status"] == "rejected", "council of two cannot pass it: closed at once")
+check(p["status"] == "voting", "one no of three: still open")
+as_("zed@x", action="vote", id=pid, choice="no")
+p = as_("Alexander", action="proposal", id=pid)["proposal"]
+check(p["status"] == "rejected", "NICS AI and the third permanent member say no: closed at once")
 
 # --- citizen petition needs signatures
 r = as_("Ava", action="propose", kind="resolution", title="Free ferries", body="Ferries between the islands are free for residents.")
@@ -236,14 +240,14 @@ for i in range(3):
     as_(f"New{i}", action="set_residence", district=0)
 t = tick()
 cid = int(psql("SELECT id FROM aquaterra_gov_proposals WHERE kind='election' AND payload->>'office'='council' AND status='voting'"))
-check("9 seats" in as_("Ava", action="proposal", id=cid)["proposal"]["title"], "council election for 9 seats")
+check("8 seats" in as_("Ava", action="proposal", id=cid)["proposal"]["title"], "council election for the 8 elected seats")
 for w in ["Ava", "Ben", "Res0"]:
     as_(w, action="stand", id=cid)
 check(as_("Alexander", action="stand", id=cid)["error"] == "not_eligible", "permanent member does not stand")
 expire(cid); tick()
-check(psql("SELECT count(*) FROM aquaterra_council WHERE seat > 2 AND email IS NOT NULL") == "3", "three elected unopposed")
+check(psql("SELECT count(*) FROM aquaterra_council WHERE seat > 3 AND email IS NOT NULL") == "3", "three elected unopposed")
 st = gov({"action": "state"})
-check(st["council"]["filled"] == 5 and st["council"]["need"] == 4, "council of five needs four")
+check(st["council"]["filled"] == 6 and st["council"]["need"] == 4, "council of six needs four")
 
 # --- log has no emails
 logtext = json.dumps(gov({"action": "log"}))
@@ -281,10 +285,18 @@ tick()
 check(psql("SELECT count(*) FROM aquaterra_gov_tax_runs") == "0", "land tax is collected by server/treasury (tested in test_treasury.py), not here")
 
 # --- terms end: the seat empties and a new election opens
-psql("UPDATE aquaterra_council SET term_ends = now() - interval '1 minute' WHERE seat = 3")
+psql("UPDATE aquaterra_council SET term_ends = now() - interval '1 minute' WHERE seat = 4")
 psql("UPDATE aquaterra_gov_proposals SET closed_at = now() - interval '2 days' WHERE kind = 'election' AND payload->>'office' = 'council'")
 tick()
-check(psql("SELECT count(*) FROM aquaterra_council WHERE seat = 3") == "0", "ended council term frees the seat")
+check(psql("SELECT count(*) FROM aquaterra_council WHERE seat = 4") == "0", "ended council term frees the seat")
 check(psql("SELECT count(*) FROM aquaterra_gov_proposals WHERE kind='election' AND payload->>'office'='council' AND status='voting'") == "1", "and a new council election opens")
+
+# --- the third permanent member signs in and picks a name: the seat takes it; the term never ends
+psql("UPDATE aquaterra_players SET display_name = 'Zara' WHERE email = 'zed@x'")
+tick()
+check(psql("SELECT name || '|' || COALESCE(term_ends::text, 'none') FROM aquaterra_council WHERE seat = 3") == "Zara|none", "permanent seat 3 shows the chosen name and never ends")
+check(any(m["name"] == "Zara" and m["seat"] == 3 for m in gov({"action": "state"})["council"]["members"]), "seat 3 listed publicly by name")
+
+check(as_("Alexander", action="propose", kind="dismiss", title="Dismiss seat 3", payload={"office": "councillor", "seat": 3})["error"] == "office", "a permanent seat cannot be put to a dismissal vote")
 
 print(f"ok: {passed} checks passed")
