@@ -96,10 +96,10 @@ export default function PlotView({ world, plot, built, rules, mine, owner, sessi
   const overLimit = centre && rules ? nextFloors > rules.centreHeight : false;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/70 p-2 backdrop-blur-sm md:p-5" role="dialog" aria-modal="true" aria-label={plot.address}>
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/70 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-sm md:p-5" role="dialog" aria-modal="true" aria-label={plot.address}>
       <div className="relative flex w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl md:flex-row">
         {/* the plot itself */}
-        <div className="relative min-h-[45vh] flex-1 bg-[#0b1622] md:min-h-0">
+        <div className="relative min-h-[45dvh] flex-1 bg-[#0b1622] md:min-h-0">
           {view === "side" ? (
             <SideView world={world} plot={plot} built={built} preview={previewBuilt} />
           ) : (
