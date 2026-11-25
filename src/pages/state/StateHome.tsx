@@ -6,10 +6,12 @@ import { useAccount } from "@/game/account/AccountContext";
 import { NicsChatButton } from "@/game/nics/NicsChat";
 import { CHAMBERS, fetchCivic, fetchDistricts, fetchLog, fetchProposals, fetchState, setResidence, type Chamber, type CivicStatus, type DistrictInfo } from "@/game/state/api";
 import { ErrorLine, Loading, Shell, chamberIcon, chamberOf, useLoad, useStateT } from "@/game/state/ui";
+import { useBankT } from "@/game/bank/ui";
 
 /** The Commonwealth: your citizenship, the chambers, the treasury and the journal. */
 const StateHome = () => {
   const { t, date, when } = useStateT();
+  const tb = useBankT().t;
   const { session, player } = useAccount();
   const state = useLoad(fetchState, []);
   const open = useLoad(() => fetchProposals(session, "open"), [session]);
@@ -84,6 +86,8 @@ const StateHome = () => {
         <Link to="/state/laws" className="inline-flex h-10 items-center gap-1.5 rounded-md border border-border px-4 text-sm hover:border-primary"><BookOpen className="h-4 w-4" />{t.laws}</Link>
         <Link to="/state/districts" className="inline-flex h-10 items-center gap-1.5 rounded-md border border-border px-4 text-sm hover:border-primary"><MapPin className="h-4 w-4" />{t.districtsList}</Link>
         <Link to="/state/journal" className="inline-flex h-10 items-center gap-1.5 rounded-md border border-border px-4 text-sm hover:border-primary"><ScrollText className="h-4 w-4" />{t.journal}</Link>
+        <Link to="/state/charter" className="inline-flex h-10 items-center gap-1.5 rounded-md border border-amber-400/60 px-4 text-sm hover:border-amber-300"><ScrollText className="h-4 w-4" />{tb.charterTitle}</Link>
+        <Link to="/bank" className="inline-flex h-10 items-center gap-1.5 rounded-md border border-amber-400/60 px-4 text-sm hover:border-amber-300"><Landmark className="h-4 w-4" />{tb.bankTitle}</Link>
       </div>
 
       {s && (

@@ -53,13 +53,13 @@ const en: PhraseBank = {
     { text: "Start with the welcome grant of {welcome}, buy land, and the land pays you {income_pct} of its price each day. Income waits up to {cap_days}. Transfers between citizens carry a {transfer_fee_pct} fee." },
   ],
   treasury: [
-    { text: "The State Treasury holds {treasury}. Budget lines in force: {budget_lines}, with {budget_allocated} allocated by law. It is filled by the {sales_tax_pct} sales tax, the {land_tax_pct} yearly land tax and transfer fees." },
-    { text: "Right now the Commonwealth has {treasury} in its treasury. Budget lines: {budget_lines}, allocated: {budget_allocated}. Taxes in force: sales {sales_tax_pct}, land {land_tax_pct} a year." },
+    { text: "The State Treasury holds {treasury}. Budget lines in force: {budget_lines}, with {budget_allocated} allocated by law. It is filled by the {income_tax_pct} income tax, the {sales_tax_pct} sales tax, the {land_tax_pct} weekly land tax and transfer fees, and it pays the salaries of office holders every day." },
+    { text: "Right now the Commonwealth has {treasury} in its treasury. Budget lines: {budget_lines}, allocated: {budget_allocated}. Taxes in force: income {income_tax_pct}, sales {sales_tax_pct}, land {land_tax_pct} a week." },
   ],
   laws: [
-    { when: (f) => f.laws_in_force === "no laws", text: "No law has been passed yet: the statute book is waiting for its first entry. The city's base rules apply: sales tax {sales_tax_pct}, land tax {land_tax_pct} a year. Any citizen can write a proposal in the Commonwealth." },
-    { text: "The statute book has {laws_in_force} in force. The latest is “{latest_law}”. Taxes now: sales {sales_tax_pct}, land {land_tax_pct} a year. The full statute book is in the Commonwealth." },
-    { text: "The statute book has {laws_in_force} in force, most recently “{latest_law}”. The sales tax is {sales_tax_pct} and the land tax {land_tax_pct} a year." },
+    { when: (f) => f.laws_in_force === "no laws", text: "No law has been passed yet: the statute book is waiting for its first entry. The city's base rules apply: income tax {income_tax_pct}, sales tax {sales_tax_pct}, land tax {land_tax_pct} a week. Any citizen can write a proposal in the Commonwealth." },
+    { text: "The statute book has {laws_in_force} in force. The latest is “{latest_law}”. Taxes now: income {income_tax_pct}, sales {sales_tax_pct}, land {land_tax_pct} a week. The full statute book is in the Commonwealth." },
+    { text: "The statute book has {laws_in_force} in force, most recently “{latest_law}”. The income tax is {income_tax_pct}, the sales tax {sales_tax_pct} and the land tax {land_tax_pct} a week." },
   ],
   council: [
     { text: "The Council of First Light has {seats_total}. Filled now: {seats_filled}. The Founder holds seat {founder_seat}, I hold seat {nics_seat}. A proposal passes the Council with {votes_needed}." },

@@ -96,8 +96,9 @@ export const gatherFacts = async (topic: Topic, ctx: FactContext): Promise<Facts
   const s = st.data;
   const taxes = () => {
     const sales = param(s, "sales_tax_pct");
-    const land = param(s, "land_tax_pct");
-    return sales === undefined || land === undefined ? null : { sales_tax_pct: f.pct(sales), land_tax_pct: f.pct(land) };
+    const land = param(s, "land_tax_week_bp");
+    const income = param(s, "income_tax_pct") ?? 10;
+    return sales === undefined || land === undefined ? null : { sales_tax_pct: f.pct(sales), land_tax_pct: f.pct(land / 100), income_tax_pct: f.pct(income) };
   };
 
   switch (topic) {

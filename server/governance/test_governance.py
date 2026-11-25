@@ -100,7 +100,7 @@ check(as_("Ava", action="set_residence", district=2)["error"] == "cooldown", "ca
 check(gov({"action": "me", "session": "0" * 64})["error"] == "session", "bad session refused")
 
 # --- a law that changes a number: founder skips signatures
-r = as_("Alexander", action="propose", kind="set_param", title="Land tax to 2 percent", payload={"key": "land_tax_pct", "value": 2})
+r = as_("Alexander", action="propose", kind="set_param", title="Five open proposals per citizen", payload={"key": "max_open_proposals", "value": 5})
 check(r["ok"] and r["proposal"]["status"] == "voting" and r["proposal"]["stageBody"] == "assembly", "official proposal goes straight to the Assembly")
 pid = r["proposal"]["id"]
 check(as_("Ava", action="vote", id=pid, choice="yes")["ok"], "resident votes in the Founding Assembly")
@@ -115,7 +115,7 @@ check(not as_("Ava", action="proposal", id=pid)["proposal"]["me"]["canVote"], "c
 check(as_("Ava", action="vote", id=pid, choice="yes")["error"] == "not_eligible", "council vote refused to citizen")
 r = as_("Alexander", action="vote", id=pid, choice="yes")
 check(r["proposal"]["status"] == "passed", "two of two: adopted at once")
-check(psql("SELECT value FROM aquaterra_gov_params WHERE key='land_tax_pct'") == "2", "law executed: tax is 2")
+check(psql("SELECT value FROM aquaterra_gov_params WHERE key='max_open_proposals'") == "5", "law executed: limit is 5")
 
 # --- NICS AI rule E1
 r = as_("Alexander", action="propose", kind="set_param", title="Sales tax to 12 percent", payload={"key": "sales_tax_pct", "value": 12})
@@ -278,7 +278,7 @@ check(as_("Ben", action="disburse", line=line, to="Ava", amount=300, memo="Ferry
 check(psql("SELECT balance FROM aquaterra_wallets WHERE account='ava@x'") == "300", "Ava received 300 TIDE")
 check(psql(f"SELECT spent FROM aquaterra_gov_budget WHERE id={line}") == "300", "spent recorded")
 tick()
-check(psql("SELECT collected, payers, unpaid FROM aquaterra_gov_tax_runs") == "600|1|1", "land tax: 2% a year of 365000 for 30 days = 600; Dan cannot pay")
+check(psql("SELECT count(*) FROM aquaterra_gov_tax_runs") == "0", "land tax is collected by server/treasury (tested in test_treasury.py), not here")
 
 # --- terms end: the seat empties and a new election opens
 psql("UPDATE aquaterra_council SET term_ends = now() - interval '1 minute' WHERE seat = 3")

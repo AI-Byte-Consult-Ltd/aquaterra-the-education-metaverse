@@ -211,7 +211,7 @@ BEGIN
   END IF;
   IF p.kind = 'set_param' THEN
     v := aquaterra_gov_param(p.payload->>'key'); n := (p.payload->>'value')::numeric;
-    IF p.payload->>'key' IN ('land_tax_pct', 'sales_tax_pct') AND abs(n - v) > 2 THEN
+    IF p.payload->>'key' IN ('sales_tax_pct', 'income_tax_pct', 'deal_duty_pct', 'travel_tax_pct') AND abs(n - v) > 2 THEN
       RETURN QUERY SELECT 'no', format('Rule E1: taxes move at most 2 points at a time (now %s%%, asked %s%%). Propose a smaller step.', v, n); RETURN;
     END IF;
   END IF;
@@ -482,30 +482,12 @@ BEGIN
     ELSE format('%s: nobody voted.', p.title) END);
 END $fn$;
 
--- Land tax: every 30 days each owner pays land_tax_pct a year of what their
--- plots cost, pro rata (30/365), to the State Treasury. Owners who cannot pay
--- are skipped and counted. Needs the TIDE ledger (economy thread).
+-- Taxes, salaries, the bank and land auctions live in server/treasury/treasury.sql
+-- (weekly land tax since 2026-11-25). The tick calls it through this name.
 CREATE OR REPLACE FUNCTION aquaterra_gov_collect_land_tax() RETURNS void
 LANGUAGE plpgsql AS $fn$
-DECLARE r record; due bigint; v_total bigint := 0; v_payers int := 0; v_unpaid int := 0; run int;
 BEGIN
-  IF to_regclass('aquaterra_plot_owners') IS NULL OR to_regprocedure('aquaterra_tide_transfer(text,text,bigint,text,text)') IS NULL THEN RETURN; END IF;
-  IF EXISTS (SELECT 1 FROM aquaterra_gov_tax_runs WHERE kind = 'land' AND at > now() - interval '30 days') THEN RETURN; END IF;
-  INSERT INTO aquaterra_gov_tax_runs (kind) VALUES ('land') RETURNING id INTO run;
-  FOR r IN EXECUTE 'SELECT owner, sum(price_paid)::numeric AS value FROM aquaterra_plot_owners WHERE bought_at < now() - interval ''30 days'' GROUP BY owner' LOOP
-    due := round(r.value * aquaterra_gov_param('land_tax_pct') / 100 * 30 / 365);
-    CONTINUE WHEN due <= 0;
-    BEGIN
-      PERFORM aquaterra_gov_pay(r.owner, 'state:treasury', due, 'Land tax', 'tax:land:' || run || ':' || md5(r.owner));
-      v_total := v_total + due; v_payers := v_payers + 1;
-    EXCEPTION WHEN OTHERS THEN v_unpaid := v_unpaid + 1;
-    END;
-  END LOOP;
-  UPDATE aquaterra_gov_tax_runs SET collected = v_total, payers = v_payers, unpaid = v_unpaid WHERE id = run;
-  IF v_payers + v_unpaid > 0 THEN
-    PERFORM aquaterra_gov_log_add('tax', NULL, format('Land tax collected: %s TIDE from %s owners at %s%% a year.%s', v_total, v_payers,
-      aquaterra_gov_param('land_tax_pct'), CASE WHEN v_unpaid > 0 THEN format(' %s owners could not pay.', v_unpaid) ELSE '' END));
-  END IF;
+  IF to_regprocedure('aquaterra_fisc_tick()') IS NOT NULL THEN PERFORM aquaterra_fisc_tick(); END IF;
 END $fn$;
 
 -- ---------------------------------------------------------------- tick

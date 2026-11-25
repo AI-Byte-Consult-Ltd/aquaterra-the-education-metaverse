@@ -22,6 +22,8 @@ import { DistrictsPage, JournalPage, LawsPage } from "./pages/state/RecordsPages
 import ArcadeHome from "./pages/arcade/ArcadeHome";
 import PlayPage from "./pages/arcade/PlayPage";
 import SetupPage from "./pages/arcade/SetupPage";
+import { CharterPage } from "./pages/state/CharterPage";
+import Bank from "./pages/Bank";
 import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
 
@@ -53,6 +55,8 @@ const App = () => (
             <Route path="/state" element={<StateHome />} />
             <Route path="/state/new" element={<RequireAccount><ProposePage /></RequireAccount>} />
             <Route path="/state/laws" element={<LawsPage />} />
+            <Route path="/state/charter" element={<CharterPage />} />
+            <Route path="/bank" element={<Bank />} />
             <Route path="/state/journal" element={<JournalPage />} />
             <Route path="/state/districts" element={<DistrictsPage />} />
             <Route path="/state/p/:id" element={<ProposalPage />} />

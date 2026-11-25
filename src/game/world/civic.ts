@@ -5,7 +5,7 @@
  */
 import { TH, TW } from "./renderer";
 
-export type CivicId = "assembly" | "council" | "directorate" | "mayors";
+export type CivicId = "assembly" | "council" | "directorate" | "mayors" | "bank";
 
 export interface CivicBuilding {
   id: CivicId;
@@ -19,6 +19,8 @@ export const CIVIC: CivicBuilding[] = [
   { id: "assembly", dx: 3, dy: 0 },
   { id: "directorate", dx: 0, dy: 3 },
   { id: "mayors", dx: 0, dy: -3 },
+  // Bank of First Light: next to the Directorate (decision of 2026-11-24)
+  { id: "bank", dx: 3, dy: 3 },
 ];
 
 /** Footprint in tiles: wider than one tile, it still stays on the plaza. */
@@ -110,6 +112,23 @@ export function drawCivic(ctx: CanvasRenderingContext2D, id: CivicId, px: number
       ctx.lineTo(px + a * 0.75, y);
     }
     ctx.stroke();
+  } else if (id === "bank") {
+    // Bank of First Light: a marble temple with columns, a pediment and a gold coin
+    const top = block(ctx, px, py, a * 0.82, c * 0.82, 14, stone, 3);
+    columns(ctx, px, py - 3, a * 0.82, c * 0.82, 14, 6, night ? "rgba(255,226,150,0.7)" : "rgba(120,110,90,0.5)");
+    const roof = night ? "#8a7a52" : "#cdb27a";
+    ctx.fillStyle = roof;
+    ctx.beginPath();
+    ctx.moveTo(px - a * 0.86, top);
+    ctx.lineTo(px, top - 9);
+    ctx.lineTo(px + a * 0.86, top);
+    ctx.lineTo(px, top + c * 0.82);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = night ? "#ffe08a" : "#e9b93a";
+    ctx.beginPath();
+    ctx.arc(px, top - 4, 2.6, 0, Math.PI * 2);
+    ctx.fill();
   } else {
     // the hall of the districts: low with a clock tower
     block(ctx, px, py, a * 0.9, c * 0.6, 10, stone, 3);
