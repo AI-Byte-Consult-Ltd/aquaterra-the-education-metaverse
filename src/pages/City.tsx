@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
 import { NicsChatButton } from "@/game/nics/NicsChat";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -32,6 +32,7 @@ import { fetchArcadeMap, type MapAttraction } from "@/game/arcade/api";
 import { arcadeStrings } from "@/game/arcade/strings";
 import { DEFAULT_LAWS, dealDuty, useLaws } from "@/game/bank/api";
 import { bankStrings } from "@/game/bank/strings";
+import { roadsStrings } from "@/game/roads/strings";
 import { useBankT } from "@/game/bank/ui";
 
 const ARCADE_GLYPH: Record<MapAttraction["template"], string> = { quiz: "?", crystals: "◆", maze: "#", range: "◎", race: "≈" };
@@ -60,6 +61,7 @@ const City = () => {
   const te = economyStrings(language);
   const ts = stateStrings(language);
   const tBank = bankStrings(language);
+  const tr = roadsStrings(language);
   const tt = travelStrings(language);
   // open votes, for the lights on the plaza buildings and their cards
   const [openVotes, setOpenVotes] = useState<Proposal[]>([]);
@@ -529,6 +531,15 @@ const City = () => {
           <Landmark className="h-4 w-4 text-amber-300" />
           <span className="hidden sm:inline">{ts.commonwealthShort}</span>
           {toVote > 0 && <span className="rounded-full bg-emerald-400 px-1.5 text-[11px] font-bold text-black">{toVote}</span>}
+        </Link>
+        <Link
+          to="/roads"
+          title="Roads"
+          aria-label="Roads"
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-emerald-400/50 bg-emerald-400/10 px-2.5 text-sm font-semibold text-emerald-200 hover:border-emerald-300"
+        >
+          <RoadIcon className="h-4 w-4 text-emerald-300" />
+          <span className="hidden sm:inline">{tr.title}</span>
         </Link>
         <Link
           to="/arcade"
