@@ -127,18 +127,20 @@ interface HubProps {
   busy: boolean;
   t: TravelStrings;
   onBuy: (hub: HubInfo) => Promise<void>;
+  /** Ride from this hub (only offered while the resident stands in its district). */
+  onGo?: (legs: Leg[]) => void;
   travel: React.ReactNode;
 }
 
 /** A station, harbour or airport: who owns it, what it earns, where it goes, and buying it. */
-export function HubCard({ hub, world, net, me, busy, t, onBuy, travel }: HubProps) {
+export function HubCard({ hub, world, net, me, balance, busy, t, onBuy, onGo, travel }: HubProps) {
   const [buying, setBuying] = useState(false);
   const fares = { ...DEFAULT_FARES, ...net.fares };
   const mode: Mode = hub.kind === "station" ? "train" : hub.kind === "port" ? "ferry" : "plane";
   const Icon = MODE_ICON[mode];
   const out = toRoutes(net)
     .filter((r) => r.mode === mode && (r.a === hub.district || r.b === hub.district))
-    .map((r) => ({ to: r.a === hub.district ? r.b : r.a, fare: fare(mode, r.dist, fares) }))
+    .map((r) => ({ to: r.a === hub.district ? r.b : r.a, dist: r.dist, fare: fare(mode, r.dist, fares) }))
     .sort((a, b) => a.fare - b.fare);
   const here = me?.districtId === hub.district;
   return (
@@ -173,13 +175,22 @@ export function HubCard({ hub, world, net, me, busy, t, onBuy, travel }: HubProp
       <div>
         <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t.departures}</div>
         {out.length ? (
-          <ul className="max-h-32 space-y-0.5 overflow-auto text-sm">
+          <ul className="max-h-44 space-y-1 overflow-auto text-sm">
             {out.map((o) => (
-              <li key={o.to} className="flex justify-between gap-2">
+              <li key={o.to} className="flex items-center justify-between gap-2">
                 <span className="truncate">{world.districts[o.to]?.name}</span>
-                <span className="shrink-0 text-muted-foreground">
-                  {o.fare} TIDE <span className="text-[11px]">({travelTax(o.fare, net.taxPct)} tax)</span>
+                <span className="ml-auto shrink-0 text-muted-foreground">
+                  {hub.mine ? t.ownHubFare(travelTax(o.fare, net.taxPct)) : <>{o.fare} TIDE <span className="text-[11px]">({travelTax(o.fare, net.taxPct)} tax)</span></>}
                 </span>
+                {here && onGo && (
+                  <button
+                    disabled={busy || (balance !== null && balance < (hub.mine ? travelTax(o.fare, net.taxPct) : o.fare))}
+                    onClick={() => onGo([{ mode, from: hub.district, to: o.to, dist: o.dist, fare: o.fare }])}
+                    className="h-7 shrink-0 rounded-md bg-cyan-400 px-2.5 text-xs font-semibold text-black hover:bg-cyan-300 disabled:opacity-50"
+                  >
+                    {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t.goShort}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
