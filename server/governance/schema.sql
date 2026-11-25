@@ -29,7 +29,7 @@ CREATE INDEX IF NOT EXISTS aquaterra_residents_district ON aquaterra_residents(d
 -- false while the home was given by default (First Light City): the first real choice is free of the 30-day wait.
 ALTER TABLE aquaterra_residents ADD COLUMN IF NOT EXISTS chosen boolean NOT NULL DEFAULT true;
 
--- Council seats 3..11 are elected and have a term; seats 1 and 2 never end.
+-- Council seats 4..11 are elected and have a term; permanent seats 1-3 (Founder, NICS AI, founding member) never end.
 ALTER TABLE aquaterra_council ADD COLUMN IF NOT EXISTS term_ends timestamptz;
 
 -- Laws that set numbers of the state. Changed only by a passed set_param proposal.
@@ -158,7 +158,7 @@ CREATE INDEX IF NOT EXISTS aquaterra_gov_log_at ON aquaterra_gov_log(at DESC);
 INSERT INTO aquaterra_gov_params (key, value, min_value, max_value, label) VALUES
   ('district_seat_residents', 100, 10, 10000, 'Residents a district needs for its own Assembly seat'),
   ('mayor_residents', 10, 1, 1000, 'Residents a district needs to elect a Mayor'),
-  ('council_election_residents', 20, 5, 100000, 'Citizens with a home needed before Council seats 3-11 are elected'),
+  ('council_election_residents', 20, 5, 100000, 'Citizens with a home needed before Council seats 4-11 are elected'),
   ('founding_deputies', 11, 3, 151, 'Deputies needed to end the Founding Assembly, where every resident votes'),
   ('lot_residents_per_seat', 20, 2, 1000, 'Residents per lot seat before seats are drawn by lot'),
   ('voting_days', 7, 2, 21, 'Days each body has to vote'),
@@ -180,6 +180,8 @@ INSERT INTO aquaterra_gov_params (key, value, min_value, max_value, label) VALUE
   ('sales_tax_pct', 3, 0, 15, 'Tax on plot and asset sales, percent'),
   ('budget_reserve_pct', 25, 0, 90, 'Share of the treasury one budget law may not exceed, percent')
 ON CONFLICT (key) DO NOTHING;
+UPDATE aquaterra_gov_params SET label = 'Citizens with a home needed before Council seats 4-11 are elected'
+ WHERE key = 'council_election_residents' AND label <> 'Citizens with a home needed before Council seats 4-11 are elected';
 
 INSERT INTO aquaterra_gov_directorate (post, title) VALUES
   ('president', 'President of the Directorate'),

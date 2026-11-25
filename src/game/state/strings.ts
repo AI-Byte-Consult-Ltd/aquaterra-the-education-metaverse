@@ -46,7 +46,7 @@ const en = {
   } satisfies Record<Chamber, string>,
   chamberAbout: {
     council:
-      "The upper chamber: 11 seats. The Founder and NICS AI hold the two permanent seats; nine are elected. A proposal passes with 7 of 11 votes, and while seats are empty, with the same share of the filled seats.",
+      "The upper chamber: 11 seats. Three seats are permanent: the Founder, NICS AI and a founding member. Eight are elected. A proposal passes with 7 of 11 votes, and while seats are empty, with the same share of the filled seats.",
     assembly:
       "The parliament: at least 51 seats, 60% for districts, 20% for guilds, 20% drawn by lot. A district gets its own seat when it reaches its resident threshold. Until enough deputies are elected it sits as the Founding Assembly, where every resident votes.",
     mayors: "Every district elects a Mayor. Together they give their opinion on new districts and on changes to borders.",
@@ -102,7 +102,7 @@ const en = {
     district_merge: "Mayors, Assembly 3/5, Council, and a referendum of both districts.",
     district_split: "Gives a merged district back its own government. Same path as a merger.",
     strategy: "The plan for the year. Assembly, Council and a vote of all citizens.",
-    charter: "Changes the Tide Charter. Assembly 2/3, Council, vote of all citizens. Article 1, the two permanent seats, cannot be changed.",
+    charter: "Changes the Tide Charter. Assembly 2/3, Council, vote of all citizens. Article 1, the three permanent seats, cannot be changed.",
     appoint_director: "Names a citizen to a Directorate post. Assembly, then the Council.",
     dismiss: "Removes a Director, Mayor, deputy or Councillor. Assembly 3/5, then the Council.",
     election: "",
@@ -233,7 +233,7 @@ const en = {
   nicsTitle: "How NICS AI votes",
   nicsIntro: "NICS AI votes in the Council by fixed public rules, written in the server code. No outside AI model is used.",
   nicsRules: [
-    "C1: no to any change of the two permanent seats.",
+    "C1: no to any change of the three permanent seats.",
     "E1: no to a tax change of more than 2 points at once.",
     "E2: no to a budget law larger than 25% of the treasury.",
     "W1: no to a skyscraper in a district where nobody lives.",

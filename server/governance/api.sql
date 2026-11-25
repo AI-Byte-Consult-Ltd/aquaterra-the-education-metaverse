@@ -183,7 +183,7 @@ BEGIN
       payload := jsonb_build_object('office', 'mayor', 'district', (payload->>'district')::int,
         'name', aquaterra_gov_name((SELECT mayor_email FROM aquaterra_districts WHERE id = (payload->>'district')::int)));
     ELSIF payload->>'office' = 'councillor' THEN
-      IF NOT COALESCE(payload->>'seat', '') ~ '^\d{1,2}\Z' OR (payload->>'seat')::int < 3
+      IF NOT COALESCE(payload->>'seat', '') ~ '^\d{1,2}\Z' OR (payload->>'seat')::int < 4
          OR NOT EXISTS (SELECT 1 FROM aquaterra_council WHERE seat = (payload->>'seat')::int AND email IS NOT NULL) THEN err := 'office'; RETURN; END IF;
       payload := jsonb_build_object('office', 'councillor', 'seat', (payload->>'seat')::int,
         'name', aquaterra_gov_name((SELECT email FROM aquaterra_council WHERE seat = (payload->>'seat')::int)));
