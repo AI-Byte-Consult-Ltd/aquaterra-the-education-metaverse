@@ -34,6 +34,7 @@ import { arcadeStrings } from "@/game/arcade/strings";
 import { DEFAULT_LAWS, dealDuty, useLaws } from "@/game/bank/api";
 import { bankStrings } from "@/game/bank/strings";
 import { roadsStrings } from "@/game/roads/strings";
+import { RoadsHere } from "@/game/roads/RoadsHere";
 import { useBankT } from "@/game/bank/ui";
 
 const ARCADE_GLYPH: Record<MapAttraction["template"], string> = { quiz: "?", crystals: "◆", maze: "#", range: "◎", race: "≈" };
@@ -50,6 +51,9 @@ type Selection =
   | { kind: "tile"; tile: Kind; district: number }
   | { kind: "hub"; id: string }
   | null;
+
+/** Road tiles: tapping one shows the roads of its district, to buy or repair. */
+const ROAD_TILES = new Set<Kind>(["road", "street", "bridge"] as Kind[]);
 
 /** Tiles of a station, a harbour's shore or an airport that open its card when tapped. */
 const HUB_TILES: Partial<Record<Kind, number>> = { station: 2, rail: 1, terminal: 9, apron: 12, runway: 18, pier: 4, shallow: 2, ocean: 2, beach: 2 };
@@ -713,7 +717,7 @@ const City = () => {
                     {city.districts[selection.district].name} · {t.biomes[city.districts[selection.district].biome]}
                   </p>
                 )}
-                <p className="text-xs text-muted-foreground">{t.wild}</p>
+                {ROAD_TILES.has(selection.tile) && selection.district >= 0 ? <RoadsHere district={selection.district} /> : <p className="text-xs text-muted-foreground">{t.wild}</p>}
                 {selection.district >= 0 && me && net && net.here[String(selection.district)] ? (
                   <p className="text-xs text-cyan-200">{tt.people(net.here[String(selection.district)])}</p>
                 ) : null}
