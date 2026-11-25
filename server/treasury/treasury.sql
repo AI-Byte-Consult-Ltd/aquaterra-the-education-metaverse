@@ -498,6 +498,8 @@ CREATE OR REPLACE FUNCTION aquaterra_gov_collect_land_tax() RETURNS void
 LANGUAGE plpgsql AS $fn$
 BEGIN
   IF to_regprocedure('aquaterra_fisc_tick()') IS NOT NULL THEN PERFORM aquaterra_fisc_tick(); END IF;
+  -- roads (server/roads/roads.sql): kept here too so a rerun of this file does not drop them
+  IF to_regprocedure('aquaterra_roads_tick()') IS NOT NULL THEN PERFORM aquaterra_roads_tick(); END IF;
 END $fn$;
 
 -- ---------------------------------------------------------------- the bank
