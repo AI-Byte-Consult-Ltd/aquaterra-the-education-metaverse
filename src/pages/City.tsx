@@ -5,7 +5,10 @@ import { NicsChatButton } from "@/game/nics/NicsChat";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { DEFAULT_WORLD, findPlotByAddress, generateWorld, type Kind, type Plot, type World } from "@/game/world/generator";
-import { buildingFor, hasHouse } from "@/game/world/buildings";
+import { buildingFor, builtBuilding, hasHouse, type Built } from "@/game/world/buildings";
+import PlotView from "@/game/build/PlotView";
+import { fetchBuildMap, fetchMyBuildings, toBuilt, type BuildRules, type MyBuilding } from "@/game/build/api";
+import { buildStrings } from "@/game/build/strings";
 import { WorldRenderer } from "@/game/world/renderer";
 import { worldLocale, worldStrings } from "@/game/world/strings";
 import { useAccount } from "@/game/account/AccountContext";
@@ -106,6 +109,29 @@ const City = () => {
     };
   }, []);
   const economy = useEconomy();
+  const tb = buildStrings(language);
+  // what residents built, from the construction office
+  const [built, setBuilt] = useState<Map<number, Built>>(new Map());
+  const builtRef = useRef(built);
+  const [buildRules, setBuildRules] = useState<BuildRules | null>(null);
+  const [myBuildings, setMyBuildings] = useState<MyBuilding[]>([]);
+  const [plotOpen, setPlotOpen] = useState<Plot | null>(null);
+  const loadBuilt = useCallback(async () => {
+    const [m, mine] = await Promise.all([fetchBuildMap(), session ? fetchMyBuildings(session) : Promise.resolve(null)]);
+    if (m.ok) {
+      const next = toBuilt(m.data.buildings);
+      builtRef.current = next;
+      setBuilt(next);
+      setBuildRules(m.data.rules);
+      rendererRef.current?.setBuilt(next);
+    }
+    if (mine?.ok) setMyBuildings(mine.data.mine);
+  }, [session]);
+  useEffect(() => {
+    void loadBuilt();
+    const id = window.setInterval(() => void loadBuilt(), 60_000);
+    return () => window.clearInterval(id);
+  }, [loadBuilt]);
   const ownedRef = useRef<Map<number, boolean>>(new Map());
   useEffect(() => {
     ownedRef.current = new Map([...economy.owners].map(([id, o]) => [id, o.mine]));
@@ -170,12 +196,6 @@ const City = () => {
   const rendererRef = useRef<WorldRenderer | null>(null);
   const [selection, setSelection] = useState<Selection>(null);
   const [query, setQuery] = useState("");
-  const [houses, setHouses] = useState(true);
-  const housesRef = useRef(houses);
-  useEffect(() => {
-    housesRef.current = houses;
-    rendererRef.current?.setBuildingsVisible(houses);
-  }, [houses]);
 
   // --- renderer lifecycle ---------------------------------------------------
   useEffect(() => {
@@ -190,7 +210,7 @@ const City = () => {
       r.resize(rect.width, rect.height, Math.min(window.devicePixelRatio || 1, 2));
     };
     size();
-    r.setBuildingsVisible(housesRef.current);
+    if (builtRef.current.size) r.setBuilt(builtRef.current);
     r.owned = ownedRef.current;
     r.attractions = attractionsRef.current;
     r.fit();
@@ -541,7 +561,6 @@ const City = () => {
         <div className="pointer-events-none absolute left-3 top-3 rounded-md bg-background/75 px-2.5 py-1.5 text-xs text-muted-foreground backdrop-blur">
           <div className="font-medium text-foreground">{t.stats(landPlots, city.plots.length - landPlots, city.districts.length, city.airports.length, city.stations.length)}</div>
           <div className="hidden md:block">{t.hint}</div>
-          {houses && <div className="hidden max-w-xs md:block">{t.housesNote}</div>}
         </div>
 
         {me && (
@@ -563,15 +582,13 @@ const City = () => {
             { icon: RotateCcw, label: t.rotateLeft, on: () => rotate(-1) },
             { icon: RotateCw, label: t.rotateRight, on: () => rotate(1) },
             { icon: Building2, label: t.tower, on: () => select({ kind: "tower" }, true) },
-            { icon: Home, label: houses ? t.housesOff : t.housesOn, on: () => setHouses((h) => !h), active: houses },
-          ].map(({ icon: Icon, label, on, active }) => (
+          ].map(({ icon: Icon, label, on }) => (
             <button
               key={label}
               onClick={on}
               aria-label={label}
-              aria-pressed={active}
               title={label}
-              className={`flex h-9 w-9 items-center justify-center rounded-md border bg-background/85 backdrop-blur hover:border-primary ${active ? "border-primary text-primary" : "border-border"}`}
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background/85 backdrop-blur hover:border-primary"
             >
               <Icon className="h-4 w-4" />
             </button>
@@ -593,6 +610,9 @@ const City = () => {
                 te={te}
                 fmt={fmt}
                 onCopy={copyLink}
+                built={built.get(selection.plot.id) ?? null}
+                onOpen={() => setPlotOpen(selection.plot)}
+                tb={tb}
                 owner={economy.owners.get(selection.plot.id) ?? null}
                 balance={economy.wallet?.balance ?? null}
                 incomeBp={economy.wallet?.params?.income_bp_per_day ?? 100}
@@ -717,6 +737,23 @@ const City = () => {
           </aside>
         )}
       </div>
+      {plotOpen && (
+        <PlotView
+          world={city}
+          plot={plotOpen}
+          built={built}
+          rules={buildRules}
+          mine={myBuildings.find((m) => m.plotId === plotOpen.id) ?? null}
+          owner={economy.owners.get(plotOpen.id) ?? null}
+          session={session}
+          t={tb}
+          tw={t}
+          onChanged={async () => {
+            await Promise.all([loadBuilt(), economy.refresh()]);
+          }}
+          onClose={() => setPlotOpen(null)}
+        />
+      )}
     </div>
   );
 };
@@ -759,6 +796,10 @@ interface PlotCardProps {
   te: ReturnType<typeof economyStrings>;
   fmt: (n: number) => string;
   onCopy: () => void;
+  /** What a resident built here, if anything. */
+  built: Built | null;
+  onOpen: () => void;
+  tb: ReturnType<typeof buildStrings>;
   owner: PlotOwner | null;
   balance: number | null;
   incomeBp: number;
@@ -776,9 +817,9 @@ interface PlotCardProps {
   travel: React.ReactNode;
 }
 
-function PlotCard({ plot, world, t, te, fmt, onCopy, owner, balance, incomeBp, listed, onBuy, here, atPlot, myDistrict, onWalk, busy, tt, travel }: PlotCardProps) {
+function PlotCard({ plot, world, t, te, fmt, onCopy, built, onOpen, tb, owner, balance, incomeBp, listed, onBuy, here, atPlot, myDistrict, onWalk, busy, tt, travel }: PlotCardProps) {
   const d = plot.district >= 0 ? world.districts[plot.district] : undefined;
-  const house = hasHouse(plot) ? buildingFor(world, plot) : null;
+  const house = !hasHouse(plot) ? null : built ? builtBuilding(world, plot, built) : buildingFor(world, plot);
   const price = plotPrice(world, plot);
   const [buying, setBuying] = useState(false);
   const short = balance !== null && balance < price ? price - balance : 0;
@@ -815,10 +856,10 @@ function PlotCard({ plot, world, t, te, fmt, onCopy, owner, balance, incomeBp, l
         )}
         {house && (
           <>
-            <dt className="text-muted-foreground">{t.fitsHere}</dt>
+            <dt className="text-muted-foreground">{tb.onPlot}</dt>
             <dd className="font-medium">
               {house.tower
-                ? `${house.tower.name} (${t.styles[house.style.id as keyof typeof t.styles]})`
+                ? `${house.tower.name} (${tb.tower})`
                 : house.cottage
                   ? `${t.cottageMaterials[house.cottage.material]} ${t.cottageForms[house.cottage.form]}`
                   : t.styles[house.style.id as keyof typeof t.styles]}{" "}
@@ -834,6 +875,10 @@ function PlotCard({ plot, world, t, te, fmt, onCopy, owner, balance, incomeBp, l
         <dd className="font-semibold text-cyan-200">{te.tide(price)}</dd>
       </dl>
       {plot.water && <p className="text-xs text-muted-foreground">{t.waterNote}</p>}
+      <button onClick={onOpen} className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-cyan-400/60 bg-cyan-400/10 text-sm font-semibold text-cyan-100 hover:bg-cyan-400/20">
+        <Maximize2 className="h-4 w-4" />
+        {tb.openPlot}
+      </button>
       {owner ? (
         <p className="rounded-md bg-muted/60 p-2.5 text-xs text-muted-foreground">{te.yieldNote(dailyIncome(price, incomeBp))}</p>
       ) : !listed ? (
