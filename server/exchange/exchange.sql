@@ -325,7 +325,7 @@ BEGIN
       v_tide := (req->>'tide')::bigint; v_amt := (req->>'priceMicro')::bigint; v_addr := lower(btrim(req->>'address'));
       IF v_tide IS NULL OR v_tide < aquaterra_xp('market_min_tide') OR v_tide > 100000000 THEN RAISE EXCEPTION 'amount'; END IF;
       IF v_amt IS NULL OR v_amt < 1000 OR v_amt > 1000000000000 THEN RAISE EXCEPTION 'price'; END IF;
-      IF v_addr IS NULL OR v_addr !~ '^0x[0-9a-f]{40}$' OR v_addr = '0x' || repeat('0', 40) THEN RAISE EXCEPTION 'address'; END IF;
+      IF v_addr IS NULL OR v_addr !~ '^0x[0-9a-f]{40}' OR length(v_addr) <> 42 OR v_addr = '0x' || repeat('0', 40) THEN RAISE EXCEPTION 'address'; END IF;
       IF v_addr = lower(COALESCE(aquaterra_xs('deposit_address'), '')) THEN RAISE EXCEPTION 'address'; END IF;
       PERFORM 1 FROM aquaterra_wallets WHERE account = me FOR UPDATE;
       IF (SELECT count(*) FROM aquaterra_market_offers WHERE seller = me AND status = 'open') >= 5 THEN RAISE EXCEPTION 'too_many'; END IF;
@@ -377,7 +377,7 @@ BEGIN
       IF aquaterra_xp('token_enabled') <> 1 THEN RAISE EXCEPTION 'disabled'; END IF;
       v_tide := (req->>'tide')::bigint; v_addr := lower(btrim(req->>'address'));
       IF v_tide IS NULL OR v_tide < aquaterra_xp('token_min_tide') OR v_tide > 100000000 THEN RAISE EXCEPTION 'amount'; END IF;
-      IF v_addr IS NULL OR v_addr !~ '^0x[0-9a-f]{40}$' THEN RAISE EXCEPTION 'address'; END IF;
+      IF v_addr IS NULL OR v_addr !~ '^0x[0-9a-f]{40}' OR length(v_addr) <> 42 THEN RAISE EXCEPTION 'address'; END IF;
       PERFORM 1 FROM aquaterra_wallets WHERE account = me FOR UPDATE;
       v_n := greatest(1, v_tide * aquaterra_xp('token_fee_bp') / 10000);
       IF aquaterra_x_free(me) < v_tide + v_n THEN RAISE EXCEPTION 'insufficient'; END IF;
@@ -398,7 +398,7 @@ BEGIN
       ELSIF act = 'admin_setting' THEN
         v_addr := lower(btrim(req->>'value'));
         IF req->>'key' NOT IN ('deposit_address', 'usdt_contract', 'token_contract') THEN RAISE EXCEPTION 'param'; END IF;
-        IF v_addr !~ '^0x[0-9a-f]{40}$' THEN RAISE EXCEPTION 'address'; END IF;
+        IF v_addr !~ '^0x[0-9a-f]{40}' OR length(v_addr) <> 42 THEN RAISE EXCEPTION 'address'; END IF;
         INSERT INTO aquaterra_exchange_settings (key, value) VALUES (req->>'key', v_addr)
         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
       END IF;
