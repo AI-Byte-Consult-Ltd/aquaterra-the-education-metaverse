@@ -35,6 +35,9 @@ const TOWER_INSET = 0.14;
 const WATER: Kind[] = ["deep", "ocean", "shallow", "lake", "river"];
 /** Length of the animated 90° turn of the map, ms. */
 const TURN_MS = 420;
+/** How high the selected plot rises, in world pixels, and how long it takes. */
+const LIFT_PX = 14;
+const LIFT_MS = 320;
 
 /** Isometric renderer for an AquaTerra World on a 2D canvas. */
 export class WorldRenderer {
@@ -59,6 +62,9 @@ export class WorldRenderer {
   private height = 0;
   camera: Camera = { cx: 0, cy: 0, scale: 0.2 };
   selectedPlot: number | null = null;
+  /** The selected plot rises out of the map like a tile (off in close-up views such as the plot window). */
+  liftSelected = true;
+  private lift = { id: null as number | null, start: 0 };
   hoverPlot: number | null = null;
   /** Plots with an owner: true for the signed-in resident's own land. */
   owned: Map<number, boolean> = new Map();
@@ -438,12 +444,108 @@ export class WorldRenderer {
     ctx.setTransform(...world);
     for (const [id, mine] of this.owned) this.highlight(id, mine ? "rgba(255,196,60,0.42)" : "rgba(255,110,90,0.24)", null);
     this.highlight(this.hoverPlot, "rgba(255,255,255,0.28)", null);
-    this.highlight(this.selectedPlot, "rgba(120,240,255,0.5)", "rgba(160,250,255,0.95)");
+    if (this.liftSelected && this.selectedPlot !== null && s > 0.3) this.drawLifted(time);
+    else this.highlight(this.selectedPlot, "rgba(120,240,255,0.5)", "rgba(160,250,255,0.95)");
     this.drawTower(time);
     this.drawLabels();
     this.drawTraveller(time);
     this.drawAttractions(time);
     if (this.turning) this.drawTurn(time);
+  }
+
+  /**
+   * The selected plot lifted above the map like a tile, with what stands on it,
+   * while the rest of the map dims a little.
+   */
+  private drawLifted(time: number) {
+    const id = this.selectedPlot!;
+    const plot = this.world.plots[id];
+    if (!plot) return;
+    if (this.lift.id !== id) this.lift = { id, start: time };
+    const p = clamp((time - this.lift.start) / LIFT_MS, 0, 1);
+    const e = 1 - Math.pow(1 - p, 3);
+    const h = LIFT_PX * e;
+    const { ctx } = this;
+    const n = this.world.size;
+    const hw = TW / 2;
+    const hh = TH / 2;
+    // dim the map around it
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = `rgba(4,8,16,${0.38 * e})`;
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.restore();
+    const only = new Set(plot.tiles);
+    let x0 = n, x1 = 0, y0 = n, y1 = 0;
+    const inPlot = (x: number, y: number) => x >= 0 && y >= 0 && x < n && y < n && only.has(this.vmap[y * n + x]);
+    // soft shadow on the ground, then the slab's sides
+    ctx.fillStyle = `rgba(0,0,0,${0.35 * e})`;
+    for (const t of plot.tiles) {
+      const v = this.wmap[t];
+      const x = v % n;
+      const y = (v - x) / n;
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      const px = ((x - y) * TW) / 2;
+      const py = ((x + y) * TH) / 2 - this.elev[t] + h * 0.25;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(px + hw, py + hh);
+      ctx.lineTo(px, py + TH);
+      ctx.lineTo(px - hw, py + hh);
+      ctx.closePath();
+      ctx.fill();
+    }
+    for (const t of plot.tiles) {
+      const v = this.wmap[t];
+      const x = v % n;
+      const y = (v - x) / n;
+      const px = ((x - y) * TW) / 2;
+      const py = ((x + y) * TH) / 2 - this.elev[t] - h;
+      if (!inPlot(x, y + 1)) {
+        ctx.fillStyle = this.left[t];
+        ctx.beginPath();
+        ctx.moveTo(px - hw, py + hh);
+        ctx.lineTo(px, py + TH);
+        ctx.lineTo(px, py + TH + h);
+        ctx.lineTo(px - hw, py + hh + h);
+        ctx.closePath();
+        ctx.fill();
+      }
+      if (!inPlot(x + 1, y)) {
+        ctx.fillStyle = this.right[t];
+        ctx.beginPath();
+        ctx.moveTo(px + hw, py + hh);
+        ctx.lineTo(px, py + TH);
+        ctx.lineTo(px, py + TH + h);
+        ctx.lineTo(px + hw, py + hh + h);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    // the plot itself, raised, with its house
+    ctx.save();
+    ctx.translate(0, -h);
+    this.drawTiles(ctx, { x0: Math.max(0, x0 - 1), x1: Math.min(n - 1, x1 + 1), y0: Math.max(0, y0 - 1), y1: Math.min(n - 1, y1 + 1) }, this.camera.scale > 0.55, only);
+    // glowing rim
+    const k = 1 / Math.max(this.camera.scale, 0.25);
+    ctx.strokeStyle = "rgba(160,250,255,0.95)";
+    ctx.lineWidth = 1.6 * k;
+    ctx.shadowColor = "rgba(120,240,255,0.9)";
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    for (const t of plot.tiles) {
+      const v = this.wmap[t];
+      const x = v % n;
+      const y = (v - x) / n;
+      const px = ((x - y) * TW) / 2;
+      const py = ((x + y) * TH) / 2 - this.elev[t];
+      if (!inPlot(x + 1, y)) { ctx.moveTo(px + hw, py + hh); ctx.lineTo(px, py + TH); }
+      if (!inPlot(x, y + 1)) { ctx.moveTo(px, py + TH); ctx.lineTo(px - hw, py + hh); }
+      if (!inPlot(x - 1, y)) { ctx.moveTo(px - hw, py + hh); ctx.lineTo(px, py); }
+      if (!inPlot(x, y - 1)) { ctx.moveTo(px, py); ctx.lineTo(px + hw, py + hh); }
+    }
+    ctx.stroke();
+    ctx.restore();
   }
 
   /** Harbour marks, the route ahead and the resident's drop, on top of everything. */
@@ -576,7 +678,7 @@ export class WorldRenderer {
     };
   }
 
-  private drawTiles(ctx: CanvasRenderingContext2D, r: { x0: number; x1: number; y0: number; y1: number }, detailed: boolean) {
+  private drawTiles(ctx: CanvasRenderingContext2D, r: { x0: number; x1: number; y0: number; y1: number }, detailed: boolean, only?: Set<number>) {
     const { kinds, elev, top, left, right } = this;
     const w = this.world;
     const n = w.size;
@@ -589,6 +691,7 @@ export class WorldRenderer {
       for (let x = r.x0; x <= r.x1; x++) {
         const v = y * n + x;
         const i = vmap[v];
+        if (only && !only.has(i)) continue;
         const e = elev[i];
         const px = ((x - y) * TW) / 2;
         const py = ((x + y) * TH) / 2 - e;

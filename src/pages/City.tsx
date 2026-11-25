@@ -7,6 +7,7 @@ import { useLanguage } from "@/i18n/LanguageContext";
 import { DEFAULT_WORLD, findPlotByAddress, generateWorld, type Kind, type Plot, type World } from "@/game/world/generator";
 import { buildingFor, builtBuilding, hasHouse, type Built } from "@/game/world/buildings";
 import PlotView from "@/game/build/PlotView";
+import PlotPreview from "@/game/build/PlotPreview";
 import { fetchBuildMap, fetchMyBuildings, toBuilt, type BuildRules, type MyBuilding } from "@/game/build/api";
 import { buildStrings } from "@/game/build/strings";
 import { WorldRenderer } from "@/game/world/renderer";
@@ -258,7 +259,11 @@ const City = () => {
         const h = netRef.current.hubs.find((x) => x.id === s.id);
         if (h) r.focusPoint(h.x, h.y, 1);
       }
-      if (focus && s?.kind === "plot") r.focusTile(s.plot.anchor.x, s.plot.anchor.y, 1.4);
+      if (focus && s?.kind === "plot") {
+        r.focusTile(s.plot.anchor.x, s.plot.anchor.y, 1.4);
+        // on phones the card covers the lower half: show the plot above it
+        if (window.innerWidth < 768) r.pan(0, -window.innerHeight * 0.2);
+      }
       if (focus && s?.kind === "tower") r.focusTower(0.6);
       const next = new URLSearchParams(params);
       // links name the address, which never changes; ids may shift as the world grows
@@ -612,10 +617,11 @@ const City = () => {
 
         {/* selection card: bottom sheet on phones, side card on desktop */}
         {selection && (
-          <aside className="absolute inset-x-2 bottom-2 z-10 max-h-[55%] overflow-auto rounded-xl border border-border bg-background/95 p-4 shadow-2xl backdrop-blur md:inset-x-auto md:bottom-auto md:right-16 md:top-3 md:w-80">
-            <button onClick={() => select(null)} aria-label={t.close} className="absolute right-3 top-3 text-muted-foreground hover:text-foreground">
+          <aside className="absolute inset-x-2 bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-10 max-h-[50dvh] overflow-auto rounded-xl border border-border bg-background/95 p-3 shadow-2xl backdrop-blur animate-in fade-in slide-in-from-bottom-4 md:inset-x-auto md:bottom-auto md:right-16 md:top-3 md:max-h-[calc(100%-1.5rem)] md:w-80 md:p-4 md:slide-in-from-right-4 md:slide-in-from-bottom-0">
+            <button onClick={() => select(null)} aria-label={t.close} className="absolute right-4 top-4 z-10 rounded-md bg-background/80 p-0.5 text-muted-foreground hover:text-foreground md:right-5 md:top-5">
               <X className="h-4 w-4" />
             </button>
+            {selection.kind === "plot" && <PlotPreview world={city} plot={selection.plot} built={built} className="mb-2 h-[72px] md:mb-2.5 md:h-36" />}
             {selection.kind === "plot" ? (
               <PlotCard
                 key={selection.plot.id}
@@ -625,7 +631,6 @@ const City = () => {
                 te={te}
                 fmt={fmt}
                 onCopy={copyLink}
-                built={built.get(selection.plot.id) ?? null}
                 onOpen={() => setPlotOpen(selection.plot)}
                 tb={tb}
                 owner={economy.owners.get(selection.plot.id) ?? null}
@@ -638,6 +643,7 @@ const City = () => {
                 onWalk={() => void go([], selection.plot)}
                 busy={travelling}
                 tt={tt}
+                ta={arcadeStrings(language).arcade}
                 travel={
                   me && net ? (
                     <TravelOptions
@@ -830,8 +836,6 @@ interface PlotCardProps {
   te: ReturnType<typeof economyStrings>;
   fmt: (n: number) => string;
   onCopy: () => void;
-  /** What a resident built here, if anything. */
-  built: Built | null;
   onOpen: () => void;
   tb: ReturnType<typeof buildStrings>;
   owner: PlotOwner | null;
@@ -849,84 +853,59 @@ interface PlotCardProps {
   tt: ReturnType<typeof travelStrings>;
   /** Ways to get here, when the resident is elsewhere. */
   travel: React.ReactNode;
+  /** Label of the plot's arcade. */
+  ta: string;
 }
 
-function PlotCard({ plot, world, t, te, fmt, onCopy, built, onOpen, tb, owner, balance, incomeBp, listed, onBuy, here, atPlot, myDistrict, onWalk, busy, tt, travel }: PlotCardProps) {
+function PlotCard({ plot, world, t, te, fmt, onCopy, onOpen, tb, owner, balance, incomeBp, listed, onBuy, here, atPlot, myDistrict, onWalk, busy, tt, travel, ta }: PlotCardProps) {
   const d = plot.district >= 0 ? world.districts[plot.district] : undefined;
-  const house = !hasHouse(plot) ? null : built ? builtBuilding(world, plot, built) : buildingFor(world, plot);
   const price = plotPrice(world, plot);
   const [buying, setBuying] = useState(false);
+  // one thing at a time, so the card never needs scrolling
+  const [pane, setPane] = useState<"info" | "travel" | "arcade">("info");
   const laws = useLaws();
   const dutyPct = laws?.deal_duty_pct ?? DEFAULT_LAWS.deal_duty_pct;
   const duty = dealDuty(price, dutyPct);
   const short = balance !== null && balance < price + duty ? price + duty - balance : 0;
+  const fact = (label: string, value: React.ReactNode, cls = "font-medium") => (
+    <div className="min-w-0">
+      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className={`truncate text-sm ${cls}`}>{value}</dd>
+    </div>
+  );
+  const small = "inline-flex items-center gap-1 text-xs text-cyan-200 hover:underline disabled:opacity-50";
   return (
-    <div className="space-y-3 pr-6">
-      <div className="flex items-center gap-2">
-        {plot.water ? <Waves className="h-5 w-5 text-sky-400" /> : <MapPin className="h-5 w-5 text-primary" />}
-        <h2 className="font-display text-lg font-bold">{plot.address}</h2>
+    <div className="space-y-2 md:space-y-2.5">
+      <div className="flex items-center gap-2 pr-6">
+        {plot.water ? <Waves className="h-4 w-4 shrink-0 text-sky-400" /> : <MapPin className="h-4 w-4 shrink-0 text-primary" />}
+        <h2 className="truncate font-display text-base font-bold md:text-lg">{plot.address}</h2>
       </div>
-      <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
-        <dt className="text-muted-foreground">{t.district}</dt>
-        <dd className="font-medium">{d?.name ?? (plot.water ? t.openSea : "—")}</dd>
-        {d && (
-          <>
-            <dt className="text-muted-foreground">{t.climate}</dt>
-            <dd className="font-medium">{t.biomes[d.biome]}</dd>
-          </>
-        )}
-        <dt className="text-muted-foreground">{t.landscape}</dt>
-        <dd className="font-medium">{t.landscapes[plot.landscape]}</dd>
-        <dt className="text-muted-foreground">{t.area}</dt>
-        <dd className="font-medium">
-          {fmt(plot.tiles.length * TILE_M2)} {t.m2}
-        </dd>
-        <dt className="text-muted-foreground">{t.toTower}</dt>
-        <dd className="font-medium">
-          {fmt(Math.round((plot.distance * TILE_M) / 100) / 10)} {t.km}
-        </dd>
-        {!plot.water && (
-          <>
-            <dt className="text-muted-foreground">{t.water}</dt>
-            <dd className="font-medium">{plot.waterView ? t.yes : t.no}</dd>
-          </>
-        )}
-        {house && (
-          <>
-            <dt className="text-muted-foreground">{tb.onPlot}</dt>
-            <dd className="font-medium">
-              {house.tower
-                ? `${house.tower.name} (${tb.tower})`
-                : house.cottage
-                  ? `${t.cottageMaterials[house.cottage.material]} ${t.cottageForms[house.cottage.form]}`
-                  : t.styles[house.style.id as keyof typeof t.styles]}{" "}
-              · {t.floorsShort(house.floors)}
-            </dd>
-          </>
-        )}
-        <dt className="text-muted-foreground">{t.status}</dt>
-        <dd className={`font-medium ${owner ? (owner.mine ? "text-amber-300" : "text-rose-300") : "text-emerald-500"}`}>
-          {owner ? (owner.mine ? te.yours : te.ownedBy(owner.name)) : t.free}
-        </dd>
-        <dt className="text-muted-foreground">{te.price}</dt>
-        <dd className="font-semibold text-cyan-200">{te.tide(price)}</dd>
-      </dl>
-      {plot.water && <p className="text-xs text-muted-foreground">{t.waterNote}</p>}
-      <button onClick={onOpen} className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-cyan-400/60 bg-cyan-400/10 text-sm font-semibold text-cyan-100 hover:bg-cyan-400/20">
-        <Maximize2 className="h-4 w-4" />
-        {tb.openPlot}
-      </button>
-      {owner ? (
-        <p className="rounded-md bg-muted/60 p-2.5 text-xs text-muted-foreground">{te.yieldNote(dailyIncome(price, incomeBp))}</p>
-      ) : !listed ? (
-        <p className="rounded-md bg-muted/60 p-2.5 text-xs text-muted-foreground">{te.notListed}</p>
-      ) : !here ? (
-        <div className="space-y-2">
-          <p className="rounded-md bg-muted/60 p-2.5 text-xs text-muted-foreground">{tt.buyHereFirst(myDistrict)}</p>
-          {travel}
-        </div>
+      {pane === "info" ? (
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 md:gap-y-1.5">
+          {fact(t.district, d?.name ?? (plot.water ? t.openSea : "—"))}
+          {fact(t.area, `${fmt(plot.tiles.length * TILE_M2)} ${t.m2}`)}
+          {fact(
+            t.status,
+            owner ? (owner.mine ? te.yours : te.ownedBy(owner.name)) : t.free,
+            `font-medium ${owner ? (owner.mine ? "text-amber-300" : "text-rose-300") : "text-emerald-500"}`,
+          )}
+          {fact(te.price, te.tide(price), "font-semibold text-cyan-200")}
+        </dl>
       ) : (
-        <div className="space-y-1.5">
+        <div className="space-y-2">
+          <button onClick={() => setPane("info")} className={small}>
+            <ArrowLeft className="h-3.5 w-3.5" />
+            {t.cardBack}
+          </button>
+          {pane === "travel" ? travel : <PlotArcade key={atPlot ? "at" : "away"} plotId={plot.id} />}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <button onClick={onOpen} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-md border border-cyan-400/60 bg-cyan-400/10 text-sm font-semibold text-cyan-100 hover:bg-cyan-400/20">
+          <Maximize2 className="h-4 w-4" />
+          {tb.openPlot}
+        </button>
+        {!owner && listed && here && (
           <button
             disabled={buying || short > 0}
             onClick={async () => {
@@ -934,28 +913,57 @@ function PlotCard({ plot, world, t, te, fmt, onCopy, built, onOpen, tb, owner, b
               await onBuy(plot);
               setBuying(false);
             }}
-            className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-cyan-400 text-sm font-semibold text-black hover:bg-cyan-300 disabled:opacity-50"
+            className="flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-cyan-400 px-2 text-sm font-semibold text-black hover:bg-cyan-300 disabled:opacity-50"
           >
             {buying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}
-            {buying ? te.buying : te.buy(te.tide(price))}
+            <span className="truncate">{buying ? te.buying : te.buy(te.tide(price))}</span>
           </button>
-          {duty > 0 && <p className="text-xs text-muted-foreground">{te.dutyNote(duty, dutyPct)}</p>}
-          <p className="text-xs text-muted-foreground">{short > 0 ? te.needMore(short) : te.yieldNote(dailyIncome(price, incomeBp))}</p>
-        </div>
-      )}
-      {here && !atPlot && (
-        <button disabled={busy} onClick={onWalk} className="flex items-center gap-1.5 text-sm text-cyan-200 hover:underline disabled:opacity-50">
-          <Footprints className="h-4 w-4" />
-          {tt.walkHere}
+        )}
+        {!owner && listed && !here && travel && (
+          <button onClick={() => setPane("travel")} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-cyan-400 px-2 text-sm font-semibold text-black hover:bg-cyan-300">
+            <Footprints className="h-4 w-4" />
+            {t.cardTravel}
+          </button>
+        )}
+      </div>
+      <p className="text-[11px] leading-snug text-muted-foreground md:text-xs">
+        {owner
+          ? te.yieldNote(dailyIncome(price, incomeBp))
+          : !listed
+            ? te.notListed
+            : !here
+              ? tt.buyHereFirst(myDistrict)
+              : short > 0
+                ? te.needMore(short)
+                : duty > 0
+                  ? te.dutyNote(duty, dutyPct)
+                  : te.yieldNote(dailyIncome(price, incomeBp))}
+      </p>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        {here && !atPlot && (
+          <button disabled={busy} onClick={onWalk} className={small}>
+            <Footprints className="h-3.5 w-3.5" />
+            {tt.walkHere}
+          </button>
+        )}
+        {atPlot && <span className="text-xs font-medium text-cyan-200">{tt.walked}</span>}
+        {owner && !here && travel && pane !== "travel" && (
+          <button onClick={() => setPane("travel")} className={small}>
+            <RoadIcon className="h-3.5 w-3.5" />
+            {t.cardTravel}
+          </button>
+        )}
+        {listed && pane !== "arcade" && (
+          <button onClick={() => setPane("arcade")} className={small}>
+            <Gamepad2 className="h-3.5 w-3.5" />
+            {ta}
+          </button>
+        )}
+        <button onClick={onCopy} className={small}>
+          <Link2 className="h-3.5 w-3.5" />
+          {t.copyLink}
         </button>
-      )}
-      {atPlot && <p className="text-xs font-medium text-cyan-200">{tt.walked}</p>}
-      {owner && !here && travel}
-      {listed && <PlotArcade key={atPlot ? "at" : "away"} plotId={plot.id} />}
-      <button onClick={onCopy} className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
-        <Link2 className="h-4 w-4" />
-        {t.copyLink}
-      </button>
+      </div>
     </div>
   );
 }

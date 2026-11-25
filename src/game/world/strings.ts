@@ -149,6 +149,8 @@ const en = {
   } satisfies Record<MaterialId, string>,
   m2: "m²",
   km: "km",
+  cardBack: "Back",
+  cardTravel: "Travel",
 };
 
 export type WorldStrings = typeof en;
