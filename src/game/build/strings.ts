@@ -1,0 +1,113 @@
+import type { Language } from "@/i18n/translations";
+import type { BuildError, BuildParamKey } from "./api";
+
+const tide = (n: number) => `${n.toLocaleString("en")} TIDE`;
+const hours = (h: number) => (h === 1 ? "1 hour" : `${h} hours`);
+
+const en = {
+  openPlot: "Open plot",
+  close: "Close",
+  view3d: "Side view",
+  viewTop: "From above",
+  rotate: "Turn",
+  onPlot: "On this plot",
+  nothingYet: "Open land. Nothing is built here yet.",
+  starterHome: "Starter home",
+  works: "Works building",
+  cottage: "Cottage",
+  tower: "Skyscraper",
+  foundation: "Foundation",
+  floors: (n: number) => (n === 1 ? "1 floor" : `${n} floors`),
+  underConstruction: (left: string) => `Under construction, ready in ${left}`,
+  readyIn: (ms: number) => {
+    const m = Math.max(1, Math.ceil(ms / 60000));
+    return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
+  },
+  income: (n: number, tax: number) => `Earns ${tide(n)} a day, ${tax}% income tax to the State Treasury`,
+  noIncome: "No income until the first 10 floors are finished.",
+  pending: (n: number) => `Unclaimed income: ${tide(n)}`,
+  collect: "Collect building income",
+  collected: (n: number, tax: number) => `${tide(n)} collected, ${tide(tax)} tax paid`,
+  assets: "Assets and cars",
+  assetsSoon: "Furniture, assets and cars for plots come with the asset shop. This is where they will stand.",
+  build: "Build",
+  buildCottage: "Build a cottage",
+  buildTower: "Lay a skyscraper foundation",
+  chooseDesign: "Choose a design",
+  design: (n: number) => `Design ${n}`,
+  raise: (floors: number) => `Raise to ${floors} floors`,
+  cost: (cost: number, permit: number, h: number) => `${tide(cost)} + permit ${tide(permit)} · ${hours(h)}`,
+  pay: (n: number) => `Pay ${tide(n)}`,
+  replaceNote: "This replaces what stands on the plot now.",
+  demolish: (fee: number) => `Demolish (${tide(fee)})`,
+  sell: (refund: number) => `Sell to the Reserve for ${tide(refund)}`,
+  confirm: "Tap again to confirm",
+  done: "Done",
+  towerNeedsLand: "A skyscraper needs 2,000 m² of land or more. A cottage fits here.",
+  noBuild: "Nothing can be built on water or mountain peaks.",
+  centreLimit: (n: number) => `City centre: buildings up to ${n} floors, by law of the Council.`,
+  centreLaw: "Change the law",
+  notYours: "Only the owner can build here.",
+  buyFirst: "Buy this plot to build on it.",
+  signIn: "Sign in to build.",
+  ladder: "Skyscraper levels",
+  ladderNote: "Each level is paid in TIDE, with a building permit to the State Treasury. Taller earns more and pays more tax.",
+  serverDown: "Building opens soon: the construction office is not open yet.",
+  errors: {
+    session: "Your session ended. Sign in again.",
+    not_found: "This plot is not in the land registry yet.",
+    not_owner: "Only the owner can build here.",
+    not_buildable: "Nothing can be built on this plot.",
+    tower_site: "A skyscraper needs 2,000 m² of land or more.",
+    kind: "That cannot be built here.",
+    occupied: "Something stands here. Confirm to replace it.",
+    nothing_here: "There is nothing to remove.",
+    building: "Wait until the current work is finished.",
+    max_level: "This skyscraper is already at the top level.",
+    height_limit: "The law of the Council does not allow this height in the city centre.",
+    tower_limit: "You own as many skyscrapers as the law allows.",
+    insufficient: "Not enough TIDE. Welcome coins can only buy land.",
+    nothing_to_claim: "Nothing to collect yet.",
+    treasury_empty: "The Reserve cannot pay right now.",
+    forbidden: "Not allowed.",
+    param: "Wrong value.",
+    amount: "Wrong amount.",
+    network: "The construction office did not answer. Try again.",
+  } satisfies Record<BuildError, string>,
+  // admin
+  adminTitle: "Construction",
+  adminNote: "Rates of building. The centre height limit and the income tax are laws of the Commonwealth and change by vote.",
+  adminCounts: (c: { cottages: number; towers: number; cleared: number }) => `${c.cottages} cottages, ${c.towers} skyscrapers, ${c.cleared} cleared plots`,
+  adminMoney: (spent: number, permits: number, tax: number) => `Built for ${tide(spent)} · permits ${tide(permits)} · income tax ${tide(tax)}`,
+  save: "Save",
+  saved: "Saved",
+  params: {
+    cottage_cost: "Cottage, TIDE",
+    tower_cost_0: "Foundation, TIDE",
+    tower_cost_1: "To 10 floors, TIDE",
+    tower_cost_2: "To 30 floors, TIDE",
+    tower_cost_3: "To 60 floors, TIDE",
+    permit_pct: "Building permit, % of cost",
+    demolish_cost: "Demolition, TIDE",
+    sell_back_pct: "Sell back to the Reserve, %",
+    cottage_income: "Cottage income, TIDE a day",
+    tower_income_1: "10 floors income, TIDE a day",
+    tower_income_2: "30 floors income, TIDE a day",
+    tower_income_3: "60 floors income, TIDE a day",
+    income_cap_days: "Income stops after, days",
+    tower_tax_step_pct: "Extra tax per level, %",
+    hours_cottage: "Cottage build time, hours",
+    hours_0: "Foundation time, hours",
+    hours_1: "10 floors time, hours",
+    hours_2: "30 floors time, hours",
+    hours_3: "60 floors time, hours",
+    max_towers_per_citizen: "Skyscrapers per resident",
+  } satisfies Record<BuildParamKey, string>,
+};
+
+export type BuildStrings = typeof en;
+
+/** English only for now (decision 2026-11-22). Add a language by registering another object. */
+const registry: Partial<Record<Language, BuildStrings>> = { en };
+
+export const buildStrings = (lang: Language): BuildStrings => registry[lang] ?? en;

@@ -109,6 +109,9 @@ function candidate(plot: Plot, biome: Biome, attempt: number): Cottage {
   };
 }
 
+/** The cottage design number `design` for one plot (the designs a resident chooses from). */
+export const cottageDesign = (plot: Plot, biome: Biome, design: number): Cottage => candidate(plot, biome, design);
+
 /**
  * A distinct cottage for each plot, in plot order. `biomeOf` gives the plot's climate;
  * the result is keyed by plot id.

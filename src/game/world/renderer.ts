@@ -1,5 +1,5 @@
 import { KINDS, type Kind, type World } from "./generator";
-import { buildingsFor, hasHouse, type Building, type BuildingStyle, type Tower } from "./buildings";
+import { builtBuilding, buildingsFor, type Building, type BuildingStyle, type Built, type Tower } from "./buildings";
 import { cottagePalette, drawCottage, type CottagePalette } from "./cottages";
 import { LAGOON, baseColor, daylight, shade, skyColor, treeColor, type RGB } from "./palette";
 import { groundTurnMatrix, toViewPoint, turn, viewMaps, type Rotation } from "./view";
@@ -79,7 +79,9 @@ export class WorldRenderer {
   ports: Point[] = [];
   /** Draw a preview house on every plot. */
   private showBuildings = true;
-  private buildings: Building[];
+  private buildings: (Building | null)[];
+  /** Plots whose building a resident changed (built, raised, cleared). */
+  private builtIds = new Set<number>();
   /** Plot whose house stands on this tile, or -1. */
   private houseAt: Int32Array;
   /** Skyscraper column on this tile: building index and its height in floors. */
@@ -87,7 +89,7 @@ export class WorldRenderer {
   private towerFloors: Int16Array;
   /** Colours of each building at the current daylight, by plot id. */
   private cottageColors: (CottagePalette | null)[] = [];
-  private houseColors: { wl: string; wr: string; roof: string; roofDark: string; win: string; post: string; trim: string }[] = [];
+  private houseColors: ({ wl: string; wr: string; roof: string; roofDark: string; win: string; post: string; trim: string } | null)[] = [];
   /** Which side the map is seen from, in 90° steps. Plots and addresses never change. */
   private rot: Rotation = 0;
   /** View tile index → world tile index, and back, for the current rotation. */
@@ -111,20 +113,12 @@ export class WorldRenderer {
     this.kinds = Array.from(world.kind, (k) => KINDS[k]);
     this.elev = new Float32Array(n);
     for (let i = 0; i < n; i++) this.elev[i] = this.elevationOf(i);
-    this.buildings = buildingsFor(world);
+    this.buildings = buildingsFor(world).slice();
     ({ toWorld: this.vmap, toView: this.wmap } = viewMaps(world.size, 0));
     this.houseAt = new Int32Array(n).fill(-1);
     this.towerAt = new Int32Array(n).fill(-1);
     this.towerFloors = new Int16Array(n);
-    for (const p of world.plots) {
-      const t = this.buildings[p.id].tower;
-      if (t)
-        t.tiles.forEach((tile, k) => {
-          this.towerAt[tile] = p.id;
-          this.towerFloors[tile] = t.heights[k];
-        });
-      else if (hasHouse(p)) this.houseAt[p.anchor.y * world.size + p.anchor.x] = p.id;
-    }
+    for (const p of world.plots) this.place(p.id);
     this.refreshDaylight();
   }
 
@@ -182,6 +176,7 @@ export class WorldRenderer {
     }
     const night = this.day < 0.5;
     this.houseColors = this.buildings.map((b) => {
+      if (!b) return null;
       const st = b.style;
       const win: RGB = night ? st.window : [60, 80, 104];
       return {
@@ -194,10 +189,43 @@ export class WorldRenderer {
         trim: shade([212, 172, 76], this.day, 1.05),
       };
     });
-    this.cottageColors = this.buildings.map((b) => (b.cottage ? cottagePalette(b.cottage, this.day) : null));
+    this.cottageColors = this.buildings.map((b) => (b?.cottage ? cottagePalette(b.cottage, this.day) : null));
     this.groundKey = "";
     this.overview = null;
     this.prevOverview = null;
+  }
+
+  /** Put a plot's building on its tiles (or clear them). */
+  private place(id: number) {
+    const p = this.world.plots[id];
+    for (const tile of p.tiles) {
+      if (this.towerAt[tile] === id) this.towerAt[tile] = -1;
+      if (this.houseAt[tile] === id) this.houseAt[tile] = -1;
+    }
+    const b = this.buildings[id];
+    if (!b) return;
+    const t = b.tower;
+    if (t)
+      t.tiles.forEach((tile, k) => {
+        this.towerAt[tile] = id;
+        this.towerFloors[tile] = t.heights[k];
+      });
+    else this.houseAt[p.anchor.y * this.world.size + p.anchor.x] = id;
+  }
+
+  /** What residents built, from the server. Plots not listed show their starter building again. */
+  setBuilt(built: Map<number, Built>, now = Date.now() / 1000) {
+    const start = buildingsFor(this.world);
+    const ids = new Set([...this.builtIds, ...built.keys()]);
+    for (const id of ids) {
+      const p = this.world.plots[id];
+      if (!p) continue;
+      const b = built.get(id);
+      this.buildings[id] = b ? builtBuilding(this.world, p, b, now) : start[id];
+      this.place(id);
+    }
+    this.builtIds = new Set(built.keys());
+    this.refreshDaylight();
   }
 
   get buildingsVisible() {
@@ -639,7 +667,7 @@ export class WorldRenderer {
           ctx.fillRect(px - 5, py + hh - 1, 10, 2);
         }
         if (this.showBuildings && this.houseAt[i] >= 0) this.drawBuilding(ctx, px, py + hh, this.houseAt[i]);
-        else if (this.showBuildings && this.towerAt[i] >= 0) this.drawTowerColumn(ctx, px, py, x, y, this.buildings[this.towerAt[i]].tower!);
+        else if (this.showBuildings && this.towerAt[i] >= 0) this.drawTowerColumn(ctx, px, py, x, y, this.buildings[this.towerAt[i]]!.tower!);
       }
     }
   }
@@ -874,10 +902,11 @@ export class WorldRenderer {
 
   /** An isometric house standing on the centre (px, py) of a tile. */
   private drawBuilding(ctx: CanvasRenderingContext2D, px: number, py: number, id: number) {
-    const b: Building = this.buildings[id];
+    const b = this.buildings[id];
+    if (!b) return;
     if (b.cottage) return drawCottage(ctx, px, py, b.cottage, this.cottageColors[id]!, TW, TH, this.rot);
     const st: BuildingStyle = b.style;
-    const col = this.houseColors[id];
+    const col = this.houseColors[id]!;
     const a = (TW / 2) * st.footprint;
     const c = (TH / 2) * st.footprint;
     let base = py;
