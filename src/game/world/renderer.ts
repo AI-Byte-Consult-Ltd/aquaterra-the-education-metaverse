@@ -4,7 +4,8 @@ import { cottagePalette, drawCottage, type CottagePalette } from "./cottages";
 import { LAGOON, baseColor, daylight, shade, skyColor, treeColor, type RGB } from "./palette";
 import { groundTurnMatrix, toViewPoint, turn, viewMaps, type Rotation } from "./view";
 import { CIVIC, civicHit, drawCivic, type CivicId } from "./civic";
-import { drawDrop, drawTrail, type Point, type TripPlayer } from "../travel/drop";
+import { drawTrail, type Point, type TripPlayer } from "../travel/drop";
+import { drawAvatar, seed, type AvatarStyle } from "../residents/avatars";
 
 export const TW = 32;
 export const TH = 16;
@@ -77,7 +78,10 @@ export class WorldRenderer {
   /** Names shown over the seats of government when zoomed in. */
   civicLabels: Partial<Record<CivicId, string>> = {};
   /** The signed-in resident's drop: where it stands (world tiles), its colour and label. */
-  player: { x: number; y: number; hue: number; label: string } | null = null;
+  player: { x: number; y: number; hue: number; label: string; style?: AvatarStyle } | null = null;
+  /** Other residents (real ones, from the server), already spread around shared spots: world tiles, fractional. */
+  residents: { key: string; fx: number; fy: number; style: AvatarStyle; hue: number; name: string; online: boolean }[] = [];
+  showResidents = true;
   /** A trip being played: the drop moves along it, the camera follows while `follow` is on. */
   trip: TripPlayer | null = null;
   follow = false;
@@ -567,6 +571,7 @@ export class WorldRenderer {
         ctx.fillText("⚓", px, py - 9.5 * k);
       }
     }
+    if (this.showResidents && this.residents.length) this.drawResidents(time);
     const me = this.player;
     if (!me) return;
     let lift = 0;
@@ -583,7 +588,32 @@ export class WorldRenderer {
       this.camera.cx += (px - this.camera.cx) * 0.12;
       this.camera.cy += (py - this.camera.cy) * 0.12;
     }
-    drawDrop(ctx, px, py, s, me.hue, time, lift, me.label);
+    drawAvatar(ctx, px, py, s, { style: me.style ?? "drop", hue: me.hue }, time, { lift, label: me.label, online: true });
+  }
+
+  /** Other residents where they stand: names when close enough, quieter when away. */
+  private drawResidents(time: number) {
+    const s = this.camera.scale;
+    const { ctx } = this;
+    const w = this.width / s;
+    const h = this.height / s;
+    const cx = this.camera.cx;
+    const cy = this.camera.cy;
+    const named = s >= 0.9;
+    // far back to front, so nearer figures stand in front
+    const list = this.residents
+      .map((r) => ({ r, p: this.atPoint(r.fx - 0.5, r.fy - 0.5) }))
+      .filter(({ p }) => Math.abs(p.px - cx) < w && Math.abs(p.py - cy) < h)
+      .sort((a, b) => a.p.py - b.p.py);
+    for (const { r, p } of list) {
+      drawAvatar(ctx, p.px, p.py, s, { style: r.style, hue: r.hue }, time, {
+        size: 0.82,
+        online: r.online,
+        dim: !r.online,
+        phase: seed(r.key) * 7,
+        label: named && (r.online || s >= 1.6) ? r.name : undefined,
+      });
+    }
   }
 
   /** Blend the old view into the new one while the ground swings round by 90°. */
