@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS aquaterra_nft_swaps (
   email text NOT NULL REFERENCES aquaterra_players (email),
   collection_id int NOT NULL REFERENCES aquaterra_nft_collections (id),
   token_id text NOT NULL,            -- decimal
-  choice text NOT NULL,              -- plot | tide | apartment | planet
+  choice text NOT NULL,              -- plot | tide | apartment | planet | item
   status text NOT NULL DEFAULT 'checking', -- checking | open | done | rejected | cancelled
   owner_address text,                -- the linked wallet that held it when the swap opened
   fee bigint NOT NULL DEFAULT 0,
@@ -268,9 +268,129 @@ BEGIN
   RETURN jsonb_build_object('ok', true, 'loaded', n, 'total', (SELECT count(*) FROM aquaterra_apartments));
 END $fn$;
 
+-- Listed collections (Rainbowland on Ethereum, 2026-11-26): small collections, or single tokens on
+-- a shared contract (OpenSea Shared Storefront, ERC-1155), where only the token ids listed here
+-- swap, and each token becomes its own item: an island of its own in the Heritage Sea, an island
+-- with a villa on it, or a Tide compensation. Island plots have ids 2000000 + seq and never move.
+ALTER TABLE aquaterra_nft_collections ADD COLUMN IF NOT EXISTS standard text NOT NULL DEFAULT 'erc721';
+ALTER TABLE aquaterra_nft_collections ADD COLUMN IF NOT EXISTS listed boolean NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS aquaterra_heritage_items (
+  collection_id int NOT NULL REFERENCES aquaterra_nft_collections (id),
+  token_id text NOT NULL,            -- decimal
+  seq int NOT NULL UNIQUE,           -- island plot id = 2000000 + seq
+  title text NOT NULL,               -- the name in the token metadata
+  gives text NOT NULL CHECK (gives IN ('island', 'house', 'tide')),
+  tide bigint NOT NULL DEFAULT 0,    -- gives tide: the compensation
+  tiles int NOT NULL DEFAULT 4,      -- gives island or house: plot size
+  price bigint NOT NULL DEFAULT 1000, -- gives island or house: price_paid, so its daily income
+  place text,                        -- gives island or house: the address
+  email text,                        -- who swapped it in
+  plot_id int,
+  PRIMARY KEY (collection_id, token_id)
+);
+INSERT INTO aquaterra_heritage_settings (key, value) VALUES ('islands_district', 'Heritage Sea') ON CONFLICT (key) DO NOTHING;
+
+INSERT INTO aquaterra_nft_collections (chain, contract, name, kind, swap_tide, allow_plot, enabled, note) VALUES
+  ('ethereum', '0x495f947276749ce646f68ac8c248420045cb7b5e', 'Rainbowland on OpenSea (listed tokens)', 'asset', 0, false, true,
+   'Shared OpenSea contract: only the Rainbowland tokens listed here swap, each to its own island, villa or Tide.'),
+  ('ethereum', '0x8a125f154dffe9c5991d0a6a81b067be5e97325d', 'The Rainbowland Metaverse (TRM)', 'house', 0, false, true,
+   'Villas and mansions become a villa on an island of its own; the city becomes an island; Bugatti and the pass are paid in Tide.'),
+  ('ethereum', '0x3a11eed29d57b8f247ff181dd21a53c27b4134f1', 'Rainbowland LANDs (RWL)', 'land', 0, false, true,
+   'Each LAND becomes an island of its own in the Heritage Sea, the size of the LAND.'),
+  ('ethereum', '0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', 'Rainbowland Kingdom (RBL)', 'asset', 0, false, true,
+   'Titles, certificates and collectibles of the Kingdom of Rainbowland: a compensation in Tide.')
+ON CONFLICT (chain, contract) DO NOTHING;
+UPDATE aquaterra_nft_collections SET listed = true, allow_plot = false,
+  standard = CASE WHEN contract = '0x495f947276749ce646f68ac8c248420045cb7b5e' THEN 'erc1155' ELSE 'erc721' END
+WHERE chain = 'ethereum' AND contract IN ('0x495f947276749ce646f68ac8c248420045cb7b5e', '0x8a125f154dffe9c5991d0a6a81b067be5e97325d',
+  '0x3a11eed29d57b8f247ff181dd21a53c27b4134f1', '0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0') AND NOT listed;
+
+INSERT INTO aquaterra_heritage_items (collection_id, token_id, seq, title, gives, tide, tiles, price, place)
+SELECT c.id, v.token_id, v.seq, v.title, v.gives, v.tide, v.tiles, v.price, v.place
+FROM (VALUES
+  ('0x495f947276749ce646f68ac8c248420045cb7b5e', '37198557236742699499983501232576879831168205667897545918004480319462678986753', 1, 'Parcel 58,35', 'island', 0, 2, 600, 'Parcel 58,35 Isle, Heritage Sea'),
+  ('0x495f947276749ce646f68ac8c248420045cb7b5e', '37198557236742699499983501232576879831168205667897545918004479333200748871681', 2, 'Rainbow Happy Town', 'island', 0, 8, 3000, 'Happy Town Isle, Heritage Sea'),
+  ('0x495f947276749ce646f68ac8c248420045cb7b5e', '37198557236742699499983501232576879831168205667897545918004480931890655657985', 3, 'Luxury Villa with Golden Car', 'house', 0, 4, 2500, 'Golden Villa Isle, Heritage Sea'),
+  ('0x495f947276749ce646f68ac8c248420045cb7b5e', '37198557236742699499983501232576879831168205667897545918004480909900423102465', 4, 'Into the Metaverse: Building', 'house', 0, 4, 1500, 'Metaverse Building Isle, Heritage Sea'),
+  ('0x495f947276749ce646f68ac8c248420045cb7b5e', '37198557236742699499983501232576879831168205667897545918004480906601888219137', 5, 'Into the Metaverse: Villa', 'house', 0, 4, 1500, 'Metaverse Villa Isle, Heritage Sea'),
+  ('0x495f947276749ce646f68ac8c248420045cb7b5e', '37198557236742699499983501232576879831168205667897545918004479425559725604865', 6, 'Snow Chalet', 'house', 0, 4, 1500, 'Snow Chalet Isle, Heritage Sea'),
+  ('0x495f947276749ce646f68ac8c248420045cb7b5e', '37198557236742699499983501232576879831168205667897545918004480129247167381505', 7, 'Bugatti Veyron', 'tide', 2000, 0, 0, NULL),
+  ('0x495f947276749ce646f68ac8c248420045cb7b5e', '37198557236742699499983501232576879831168205667897545918004479494828958154753', 8, 'Real Planets: Mercury #5', 'tide', 1000, 0, 0, NULL),
+  ('0x495f947276749ce646f68ac8c248420045cb7b5e', '37198557236742699499983501232576879831168205667897545918004479354091469799425', 9, 'Doge', 'tide', 1000, 0, 0, NULL),
+  ('0x495f947276749ce646f68ac8c248420045cb7b5e', '37198557236742699499983501232576879831168205667897545918004479328802702360577', 10, 'Punk', 'tide', 1000, 0, 0, NULL),
+  ('0x8a125f154dffe9c5991d0a6a81b067be5e97325d', '37198557236742699499983501232576879831168205667897545918004478672394260578305', 11, 'Into the Metaverse: San Francisco', 'island', 0, 6, 2000, 'San Francisco Isle, Heritage Sea'),
+  ('0x8a125f154dffe9c5991d0a6a81b067be5e97325d', '37198557236742699499983501232576879831168205667897545918004478672394260578306', 12, 'Into the Metaverse: Villa, Rainbow Hills', 'house', 0, 4, 1500, 'Rainbow Hills Villa Isle, Heritage Sea'),
+  ('0x8a125f154dffe9c5991d0a6a81b067be5e97325d', '37198557236742699499983501232576879831168205667897545918004478672394260578307', 13, 'Into the Metaverse: Villa', 'house', 0, 4, 1500, 'Villa Isle 307, Heritage Sea'),
+  ('0x8a125f154dffe9c5991d0a6a81b067be5e97325d', '37198557236742699499983501232576879831168205667897545918004478672394260578309', 14, 'Into the Metaverse: Bugatti', 'tide', 2000, 0, 0, NULL),
+  ('0x8a125f154dffe9c5991d0a6a81b067be5e97325d', '37198557236742699499983501232576879831168205667897545918004478672394260578311', 15, 'Into the Metaverse: Villa (rarity 10)', 'house', 0, 4, 2500, 'Villa Isle 311, Heritage Sea'),
+  ('0x8a125f154dffe9c5991d0a6a81b067be5e97325d', '37198557236742699499983501232576879831168205667897545918004478672394260578324', 16, 'Celebrity Mansion', 'house', 0, 6, 3000, 'Celebrity Mansion Isle, Heritage Sea'),
+  ('0x8a125f154dffe9c5991d0a6a81b067be5e97325d', '37198557236742699499983501232576879831168205667897545918004478672394260578325', 17, 'Metaverse Pass (VIP)', 'tide', 1000, 0, 0, NULL),
+  ('0x3a11eed29d57b8f247ff181dd21a53c27b4134f1', '37198557236742699499983501232576879831168205667897545918004478672394260578305', 18, 'LAND (91, 14)', 'island', 0, 4, 1600, 'LAND (91, 14) Isle, Heritage Sea'),
+  ('0x3a11eed29d57b8f247ff181dd21a53c27b4134f1', '37198557236742699499983501232576879831168205667897545918004478672394260578311', 19, 'Residential Plot, 6 Lands', 'island', 0, 6, 1800, 'Six Lands Isle, Heritage Sea'),
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '28', 20, 'Prince of Butay (power 14 of 15)', 'tide', 7000, 0, 0, NULL),
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '21', 21, 'Lord of The Blockchain', 'tide', 5000, 0, 0, NULL),
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '22', 22, 'Certificate of Citizenship #1', 'tide', 1000, 0, 0, NULL),
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '23', 23, 'Certificate of Citizenship #2', 'tide', 1000, 0, 0, NULL),
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '2', 24, 'Church of Saint Sophia', 'tide', 1500, 0, 0, NULL),
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '3', 25, 'Old City Marmaris', 'tide', 1500, 0, 0, NULL),
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '4', 26, 'Jessica, painting', 'tide', 1500, 0, 0, NULL),
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '5', 27, 'Jellyfish, painting', 'tide', 1500, 0, 0, NULL),
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '6', 28, 'Davide, drawing', 'tide', 1500, 0, 0, NULL),
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '7', 29, 'Greek Soldier', 'tide', 1500, 0, 0, NULL),
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '9', 30, 'Certificate: One Hundred Thousand Pride', 'tide', 1500, 0, 0, NULL),
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '10', 31, 'Antique City Hierapolis', 'tide', 1500, 0, 0, NULL),
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '13', 32, 'The Book: The Best Recipes from all Around The World', 'tide', 1500, 0, 0, NULL),
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '14', 33, 'Certificate: Character in The Book', 'tide', 1500, 0, 0, NULL),
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '16', 34, 'Real House in Bulgaria', 'tide', 1500, 0, 0, NULL),
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '19', 35, 'Black Sea Coast, Burgas', 'tide', 1500, 0, 0, NULL),
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '20', 36, 'Beautiful Istanbul', 'tide', 1500, 0, 0, NULL)
+) AS v (contract, token_id, seq, title, gives, tide, tiles, price, place)
+JOIN aquaterra_nft_collections c ON c.chain = 'ethereum' AND c.contract = v.contract
+ON CONFLICT DO NOTHING;
+
+CREATE OR REPLACE FUNCTION aquaterra_h_items_json(cid int) RETURNS jsonb LANGUAGE sql STABLE AS $fn$
+  SELECT COALESCE(jsonb_agg(jsonb_build_object('tokenId', token_id, 'title', title, 'gives', gives, 'tide', tide,
+    'tiles', tiles, 'place', place, 'taken', email IS NOT NULL) ORDER BY seq), '[]'::jsonb)
+  FROM aquaterra_heritage_items WHERE collection_id = cid
+$fn$;
+
+-- The swap of a listed token is confirmed (the vault holds it): give its item, once.
+CREATE OR REPLACE FUNCTION aquaterra_h_item_give(s aquaterra_nft_swaps) RETURNS void LANGUAGE plpgsql AS $fn$
+DECLARE it aquaterra_heritage_items; v_plot int;
+BEGIN
+  SELECT * INTO it FROM aquaterra_heritage_items WHERE collection_id = s.collection_id AND token_id = s.token_id FOR UPDATE;
+  IF it.seq IS NULL THEN RAISE EXCEPTION 'token'; END IF;
+  IF it.email IS NOT NULL THEN RAISE EXCEPTION 'swapped'; END IF;
+  IF it.gives = 'tide' THEN
+    UPDATE aquaterra_heritage_items SET email = s.email WHERE collection_id = it.collection_id AND token_id = it.token_id;
+    UPDATE aquaterra_nft_swaps SET status = 'done', tide = it.tide, done_at = now() WHERE id = s.id;
+    IF it.tide > 0 THEN
+      PERFORM aquaterra_move('treasury', s.email, it.tide, 'nft_swap_tide', NULL, 'Heritage Port: ' || it.title, NULL);
+    END IF;
+    RETURN;
+  END IF;
+  v_plot := 2000000 + it.seq;
+  INSERT INTO aquaterra_plots (id, address, district, tiles, price)
+  VALUES (v_plot, coalesce(it.place, it.title || ' Isle, Heritage Sea'), aquaterra_hs('islands_district'), it.tiles, it.price)
+  ON CONFLICT (id) DO NOTHING;
+  INSERT INTO aquaterra_wallets (account) VALUES (s.email) ON CONFLICT DO NOTHING;
+  INSERT INTO aquaterra_plot_owners (plot_id, owner, price_paid) VALUES (v_plot, s.email, it.price)
+  ON CONFLICT (plot_id) DO UPDATE SET owner = EXCLUDED.owner, price_paid = EXCLUDED.price_paid, bought_at = now(), income_from = now();
+  IF it.gives = 'house' AND to_regclass('aquaterra_buildings') IS NOT NULL THEN
+    INSERT INTO aquaterra_buildings (plot_id, kind, level, built_by) VALUES (v_plot, 'cottage', 3, s.email) ON CONFLICT (plot_id) DO NOTHING;
+  END IF;
+  UPDATE aquaterra_heritage_items SET email = s.email, plot_id = v_plot WHERE collection_id = it.collection_id AND token_id = it.token_id;
+  UPDATE aquaterra_nft_swaps SET status = 'done', plot_id = v_plot, done_at = now() WHERE id = s.id;
+END $fn$;
+
 -- What n8n should ask the chain for one swap.
 CREATE OR REPLACE FUNCTION aquaterra_h_check(s aquaterra_nft_swaps, step text) RETURNS jsonb LANGUAGE sql STABLE AS $fn$
-  SELECT jsonb_build_object('swapId', s.id, 'step', step, 'rpc', ch.rpc, 'contract', c.contract, 'tokenId', s.token_id)
+  SELECT jsonb_build_object('swapId', s.id, 'step', step, 'rpc', ch.rpc, 'contract', c.contract, 'tokenId', s.token_id,
+    'standard', c.standard,
+    -- ERC-1155 has no ownerOf: n8n asks balanceOf for these addresses and answers with the first that holds it.
+    'holders', CASE WHEN c.standard = 'erc1155' THEN CASE WHEN step = 'open'
+      THEN COALESCE((SELECT jsonb_agg(w.address ORDER BY w.linked_at) FROM aquaterra_wallet_links w WHERE w.email = s.email AND w.chain_family = 'evm'), '[]'::jsonb)
+      ELSE jsonb_build_array(aquaterra_hs('vault_address')) END END)
   FROM aquaterra_nft_collections c JOIN aquaterra_nft_chains ch ON ch.id = c.chain WHERE c.id = s.collection_id
 $fn$;
 
@@ -341,7 +461,8 @@ BEGIN
         'chains', COALESCE((SELECT jsonb_agg(jsonb_build_object('id', id, 'name', name, 'family', family, 'chainId', chain_id,
             'explorer', explorer, 'enabled', enabled) ORDER BY sort) FROM aquaterra_nft_chains), '[]'::jsonb),
         'collections', COALESCE((SELECT jsonb_agg(jsonb_build_object('id', id, 'chain', chain, 'contract', contract, 'name', name,
-            'kind', kind, 'swapTide', swap_tide, 'allowPlot', allow_plot, 'note', note) ORDER BY chain, id)
+            'kind', kind, 'swapTide', swap_tide, 'allowPlot', allow_plot, 'note', note, 'listed', listed,
+            'items', CASE WHEN listed THEN aquaterra_h_items_json(id) END) ORDER BY chain, id)
           FROM aquaterra_nft_collections WHERE enabled), '[]'::jsonb));
       IF act = 'me' THEN
         res := res || jsonb_build_object(
@@ -402,7 +523,7 @@ BEGIN
       v_tok := btrim(coalesce(req->>'tokenId', ''));
       IF v_tok !~ '^[0-9]{1,78}' OR length(v_tok) > 78 OR v_tok ~ '[^0-9]' THEN RAISE EXCEPTION 'token'; END IF;
       v_tok := ltrim(v_tok, '0'); IF v_tok = '' THEN v_tok := '0'; END IF;
-      v_choice := CASE WHEN col.kind = 'tower' THEN 'apartment' WHEN col.kind = 'planet' THEN 'planet' WHEN req->>'choice' = 'plot' AND col.allow_plot THEN 'plot' ELSE 'tide' END;
+      v_choice := CASE WHEN col.listed THEN 'item' WHEN col.kind = 'tower' THEN 'apartment' WHEN col.kind = 'planet' THEN 'planet' WHEN req->>'choice' = 'plot' AND col.allow_plot THEN 'plot' ELSE 'tide' END;
       IF v_choice = 'tide' AND col.swap_tide <= 0 THEN RAISE EXCEPTION 'choice'; END IF;
       IF v_choice = 'apartment' THEN
         IF length(v_tok) > 9 THEN RAISE EXCEPTION 'token'; END IF;
@@ -410,6 +531,11 @@ BEGIN
         WHERE t2.collection_id = col.id AND a.token_id = v_tok::int;
         IF ap.tower IS NULL THEN RAISE EXCEPTION 'token'; END IF;
         IF ap.owner IS NOT NULL THEN RAISE EXCEPTION 'swapped'; END IF;
+      END IF;
+      IF v_choice = 'item' THEN
+        -- Listed collections: only the token ids in aquaterra_heritage_items swap, each to its own item.
+        IF NOT EXISTS (SELECT 1 FROM aquaterra_heritage_items WHERE collection_id = col.id AND token_id = v_tok) THEN RAISE EXCEPTION 'token'; END IF;
+        IF EXISTS (SELECT 1 FROM aquaterra_heritage_items WHERE collection_id = col.id AND token_id = v_tok AND email IS NOT NULL) THEN RAISE EXCEPTION 'swapped'; END IF;
       END IF;
       IF v_choice = 'planet' THEN
         -- Milky Way Marvels: token N becomes Orbit claim N (server/orbit/orbit.sql).
@@ -578,6 +704,11 @@ BEGIN
       IF s.choice = 'planet' THEN
         IF NOT aquaterra_orbit_give(s.token_id, s.email) THEN RAISE EXCEPTION 'swapped'; END IF;
         UPDATE aquaterra_nft_swaps SET status = 'done', done_at = now() WHERE id = s.id;
+        SELECT * INTO s FROM aquaterra_nft_swaps WHERE id = s.id;
+        RETURN jsonb_build_object('ok', true, 'swap', aquaterra_h_swap_json(s));
+      END IF;
+      IF s.choice = 'item' THEN
+        PERFORM aquaterra_h_item_give(s);
         SELECT * INTO s FROM aquaterra_nft_swaps WHERE id = s.id;
         RETURN jsonb_build_object('ok', true, 'swap', aquaterra_h_swap_json(s));
       END IF;
