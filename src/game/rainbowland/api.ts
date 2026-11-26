@@ -48,3 +48,9 @@ async function call<T>(body: Record<string, unknown>): Promise<Result<T>> {
 
 export const fetchRainbowMap = (session: string | null) => call<RainbowMap>({ action: "map", session: session ?? "" });
 export const fetchRainbowCell = (token: number, session: string | null) => call<{ cell: RainbowCell }>({ action: "cell", token: String(token), session: session ?? "" });
+
+/* Prism Hills (the Polygon LAND): same webhook, {land: "prism"}, Postgres aquaterra_prism(). */
+export interface PrismMap { cols: number; rows: number; total: number; pricePerCell: number; claimed: [number, string, boolean][]; swapFee: number | null }
+export interface PrismCell { token: number; x: number; y: number; tiles: number; price: number; claimed: boolean; owner: string | null; mine: boolean; plotId: number | null; since: string | null }
+export const fetchPrismMap = (session: string | null) => call<PrismMap>({ land: "prism", action: "map", session: session ?? "" });
+export const fetchPrismCell = (token: number, session: string | null) => call<{ cell: PrismCell }>({ land: "prism", action: "cell", token: String(token), session: session ?? "" });

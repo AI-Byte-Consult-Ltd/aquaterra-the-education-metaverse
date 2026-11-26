@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Anchor, Gem, Layers, Loader2, Minus, Plus, Rainbow, Maximize2, Search, Ship, Car } from "lucide-react";
+import { Anchor, Gem, Layers, Loader2, Minus, Plus, Rainbow, Maximize2, Search, Ship, Car, Mountain } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { useAccount } from "@/game/account/AccountContext";
@@ -336,7 +336,7 @@ const Rainbowland = () => {
               {!cell && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
               {cell && (
                 <>
-                  <Row k={t.rarity} v={cell.rarity ?? t.rarityUnknown} />
+                  <Row k={t.rarity} v={cell.rarity || t.rarityUnknown} />
                   <Row k={t.tier} v={<TierChip tier={cell.tier} label={t.tierNames[cell.tier]} />} />
                   <p>{t.plotSize(cell.tiles)} · {t.plotValue(cell.price)}</p>
                   <p className="text-muted-foreground">{t.subsoil(cell.subsoilPct)}</p>
@@ -403,6 +403,10 @@ const Rainbowland = () => {
             ))}
           </ul>
           <p className="text-xs text-muted-foreground">{t.zonesNote}</p>
+          <Link to="/prism-hills" className={`${btnSoft} w-full`}>
+            <Mountain className="h-4 w-4" />
+            {t.toPrism}
+          </Link>
         </Panel>
       </div>
     </Shell>

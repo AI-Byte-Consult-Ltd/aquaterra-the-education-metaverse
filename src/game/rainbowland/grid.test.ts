@@ -3,6 +3,7 @@ import { DEFAULT_WORLD, generateWorld } from "../world/generator";
 import { buildNetwork, planTrips } from "../travel/network";
 import { COLS, RAINBOW_DISTRICT, ROWS, TOTAL, ZONES, landName, parseCell, tokenAt, tokenX, tokenY } from "./grid";
 import { rainbowLinks } from "./travel";
+import { PRISM_DISTRICT, PRISM_TOTAL, parcelName, parsePrism, prismAt, prismSize } from "./prism";
 
 describe("Rainbowland grid", () => {
   it("keeps the coordinates written in the LAND tokens", () => {
@@ -36,5 +37,27 @@ describe("Rainbowland grid", () => {
     expect(plans.length).toBeGreaterThan(0);
     expect(net.routes.some((r) => r.mode === "ferry" && r.b === RAINBOW_DISTRICT)).toBe(true);
     expect(net.hubs.filter((h) => h.district === RAINBOW_DISTRICT).map((h) => h.kind).sort()).toEqual(["port", "station"]);
+  });
+});
+
+describe("Prism Hills grid", () => {
+  it("lays the 90,000 Polygon LAND on a grid of their own", () => {
+    expect(parcelName(1)).toBe("Parcel (0, 0)");
+    expect(parcelName(302)).toBe("Parcel (1, 1)");
+    expect(parcelName(PRISM_TOTAL)).toBe("Parcel (299, 299)");
+    for (const t of [1, 300, 301, 45_000, PRISM_TOTAL]) expect(parsePrism(parcelName(t))).toBe(t);
+    expect(prismAt(300, 0)).toBeNull();
+    expect(parsePrism("90001")).toBeNull();
+    expect(parsePrism("0")).toBeNull();
+  });
+  it("gives small plots of 1 to 3 cells, the same rule as the server", () => {
+    // aquaterra_prism_size(1..20) in server/rainbowland/prism.sql
+    expect(Array.from({ length: 20 }, (_, i) => prismSize(i + 1)).join("")).toBe("21211211213212112112");
+  });
+  it("is reached from Rainbowland by ferry and the causeway", () => {
+    const world = generateWorld(DEFAULT_WORLD);
+    const net = rainbowLinks(world, buildNetwork(world));
+    expect(planTrips(net.routes, 0, PRISM_DISTRICT).length).toBeGreaterThan(0);
+    expect(net.hubs.filter((h) => h.district === PRISM_DISTRICT).map((h) => h.kind).sort()).toEqual(["port", "station"]);
   });
 });
