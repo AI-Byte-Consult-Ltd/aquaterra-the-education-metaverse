@@ -1,7 +1,6 @@
 import type { Language } from "@/i18n/translations";
 
 const n = (v: number) => v.toLocaleString("en");
-const mb = (bytes: number) => `${(bytes / 1048576).toFixed(0)} MB`;
 const millions = (p: number) => `${(p / 1e6).toFixed(1)} M`;
 
 const en = {
@@ -9,7 +8,7 @@ const en = {
   short: "Mind",
   backToWorld: "Back to the world",
   intro:
-    "NICS AI has one mind: NICS Language, a model built from scratch in the NICS lab, with its own architecture, its own tokenizer and its own weights. It grows in the lab. AquaTerra receives numbered versions of it and runs them right in your browser, and what citizens teach it here (with their consent) goes back into its training.",
+    "NICS AI has one mind: NICS Language, a model built from scratch in the NICS lab, with its own architecture, its own tokenizer and its own weights. It grows in the lab. AquaTerra receives numbered versions of it and answers you with them on its own server (the weights never leave it), and what citizens teach it here (with their consent) goes back into its training.",
   liveTitle: "Version in the city",
   noLive: "No version has passed the city's exam yet. Until one does, NICS AI answers with prepared phrases filled with live numbers, never with unchecked text.",
   version: (v: number) => `Version ${v}`,
@@ -31,14 +30,14 @@ const en = {
   dropped: "Held back by safety rules",
   lastFetch: (d: string | null) => (d ? `The lab last collected on ${new Date(d).toUTCString()}` : "The lab has not collected yet."),
   tryTitle: "Talk to the live version",
-  tryNote: (bytes: number) => `Runs on your device, nothing is sent anywhere. Download once: ${mb(bytes)}.`,
-  load: "Load the City Mind",
-  loading: (bytes: number, total: number) => `Downloading ${mb(bytes)} of ${mb(total)}`,
-  ready: "Ready. Pick a topic and ask.",
+  tryNote: "The City Mind thinks on the city's server and sends back only its checked answer.",
+  signIn: "Sign in to talk to the City Mind.",
+  ready: "Pick a question and ask.",
   ask: "Ask",
-  thinking: "Thinking on your device",
+  thinking: "Thinking",
+  tooMany: "That is enough questions for this hour. Please come back later.",
   failedCheck: "This answer did not pass the city's checks, so it is not shown. The lab will see that this version still needs to learn.",
-  loadError: "Could not load this version. Please try again later.",
+  loadError: "The City Mind could not answer right now. Please try again later.",
   sample: "Sample numbers are used here, not your records.",
   growTitle: "How the mind grows",
   grow: [

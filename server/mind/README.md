@@ -3,6 +3,7 @@
 There is **one** model, NICS Language, and it lives and trains in the NICS lab
 (`AI-Byte-Consult-Ltd/nics-ai-lab`). AquaTerra never trains a model of its own: it receives
 numbered releases, examines them with its own checks, runs the live one in residents' browsers,
+answers residents with the live one **on the server** (the weights never reach a browser),
 and hands consented game data back to the lab.
 
 ## 1. Making a release
@@ -17,12 +18,13 @@ python3 server/mind/pack_release.py <lab release folder> --version 1 --out web/n
 ```
 
 The packed folder (`nics-release-v1`: manifest.json with `lab_release` and `lab_sha256`,
-weights.bin ~47 MB for micro, tokenizer.json) goes to any public https address that sends CORS
-headers for `https://aquaterra.aibyteconsult.com` (for example Cloudflare R2). Then register it:
+weights.bin ~47 MB for micro, tokenizer.json) is uploaded to the **private** Cloudflare R2 bucket
+`nics-releases` (Alexander 2026-11-26: the weights are NICS's own technology, no public access,
+no CORS). Then register it by its key prefix inside the bucket:
 
 ```
 POST https://n8n.aibyteconsult.com/webhook/aquaterra-mind
-{"action": "release", "key": "<release_key>", "baseUrl": "https://…/nics-text-micro-v1", "manifest": { …manifest.json… }}
+{"action": "release", "key": "<release_key>", "prefix": "language/nics-text-micro-v1", "manifest": { …manifest.json… }}
 ```
 
 `release_key` is in the game database, table `aquaterra_mind_settings`. Never put it in code or chat.
@@ -48,6 +50,15 @@ Prompt format (src/game/mind/prompt.ts), the lab trains on the same shape:
 
 The resident's question is always encoded without special tokens, so it cannot inject control tokens.
 
+## 2b. Answers on the server
+
+`{"action": "ask", "session": "…", "topic": "wallet", "question": "…"}` → `aquaterra_mind` checks the
+session, the topic and the rate limit (`asks_per_hour`, 20) and tells n8n where the live release is.
+n8n reads weights.bin and tokenizer.json from the private bucket, checks both sha256, runs
+`server/mind/server-engine.js` (built by `node scripts/build-mind-server.mjs` from the same engine
+the tests check against the lab) and returns only `{ok, version, text}`, the text already passed
+`checkModelAnswer`. The browser fills the labels with the resident's live facts and checks again.
+
 ## 3. Data back to the lab
 
 ```
@@ -60,11 +71,10 @@ consent still given, resident not in `aquaterra_mind_muted`, not rated 👎, one
 question, at most `lines_per_resident_day` (40) lines per resident a day. Civic texts (laws in force,
 NICS AI quest notes) come with the first fetch or with `"civic": true`.
 
-## 4. Next: Mind mining
+## 4. Later: Mind mining
 
-Residents' browsers compute gradients for the lab's current release on lab-chosen batches; the
-server re-computes a share of them to catch cheaters; the lab merges the sum into its own training,
-so the model stays one. Verified work earns Tide. Needs the backward pass in `engine.ts`.
+Would need residents' devices to hold the weights, which the private-bucket rule forbids for now.
+If it comes back, it must share only gradients for lab-chosen batches, with server spot checks.
 
 ## Tests
 
