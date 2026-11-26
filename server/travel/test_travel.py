@@ -70,6 +70,7 @@ if extra:
 for _ in range(2):
     load(os.path.join(HERE, "travel.sql"))
     load(os.path.join(HERE, "boats.sql"))
+    load(os.path.join(HERE, "water.sql"))
 check("aquaterra_travel_may_buy" in psql("SELECT prosrc FROM pg_proc WHERE proname = 'aquaterra_economy'"), "economy patched once")
 check(psql("SELECT count(*) FROM regexp_matches((SELECT prosrc FROM pg_proc WHERE proname = 'aquaterra_economy'), 'aquaterra_travel_may_buy', 'g')") == "1", "patch is not doubled")
 
@@ -248,5 +249,17 @@ if out:
 if water:
     psql(f"UPDATE aquaterra_locations SET district_id = {port_d}, spot = 'centre', plot_id = NULL WHERE email = 'ava@x'")
     check(travel_("Ava", action="go", legs=[{"mode": "walk", "plot": water[0]}])["error"] == "boat", "no walking onto a water plot")
-    check(travel_("Ava", action="go", legs=[{"mode": "boat", "plot": water[0]}])["ok"], "a boat to the water plot")
+    a0, s0 = bal("ava@x"), bal("state:treasury")
+    r = travel_("Ava", action="go", legs=[{"mode": "boat", "plot": water[0]}])
+    check(r["ok"], "a boat to the water plot")
+    # Ava owns this water: crossing it she pays only the tax and the state's part
+    check(a0 - bal("ava@x") == bal("state:treasury") - s0 and a0 - bal("ava@x") == r["fare"], "own water: nothing paid to yourself")
+    # Ben sails over Ava's water: Ava gets the owner's share, the tax goes to the treasury
+    psql(f"UPDATE aquaterra_locations SET district_id = {port_d}, spot = 'centre', plot_id = NULL, x = c.cx, y = c.cy FROM aquaterra_districts c WHERE c.id = {port_d} AND email = 'ben@x'")
+    a0, b0, s0 = bal("ava@x"), bal("ben@x"), bal("state:treasury")
+    r = travel_("Ben", action="go", legs=[{"mode": "boat", "plot": water[0]}])
+    got = bal("ava@x") - a0
+    check(r["ok"] and got > 0 and b0 - bal("ben@x") == r["fare"] and got + (bal("state:treasury") - s0) == r["fare"], f"the owner of the water earns {got} of a {r['fare']} TIDE boat")
+    check(bal("state:treasury") - s0 >= r["tax"], "the travel tax still goes to the treasury")
+    check(psql("SELECT count(*) FROM aquaterra_ledger WHERE ref = 'travel:water'") == "1", "water toll booked")
 print(f"OK: {passed} checks passed")
