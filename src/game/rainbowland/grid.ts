@@ -57,33 +57,3 @@ export const TIER_COLOR: Record<Tier, [number, number, number]> = {
   legendary: [255, 196, 64],
   cyber: [255, 46, 214],
 };
-
-/**
- * The seven zones of the continent, west to east, each a colour of the rainbow
- * with its own ground. 640 columns cut into seven bands of whole columns.
- */
-export interface Zone {
-  name: string;
-  /** Ground colour of claimed land. */
-  ground: [number, number, number];
-  /** Hue of the band, for the fog and labels. */
-  hue: number;
-  from: number;
-  to: number;
-}
-const ZONE_DEFS: Omit<Zone, "from" | "to">[] = [
-  { name: "Ember Coast", ground: [196, 92, 74], hue: 4 },
-  { name: "Amber Dunes", ground: [214, 150, 72], hue: 32 },
-  { name: "Sunfield", ground: [208, 196, 88], hue: 54 },
-  { name: "Verdant Reach", ground: [92, 168, 92], hue: 120 },
-  { name: "Azure Shelf", ground: [72, 150, 196], hue: 200 },
-  { name: "Indigo Heights", ground: [92, 96, 184], hue: 236 },
-  { name: "Violet Neon", ground: [150, 86, 190], hue: 284 },
-];
-export const ZONES: Zone[] = ZONE_DEFS.map((z, i) => ({
-  ...z,
-  from: Math.round((i * COLS) / ZONE_DEFS.length),
-  to: Math.round(((i + 1) * COLS) / ZONE_DEFS.length) - 1,
-}));
-export const zoneOfColumn = (c: number): Zone => ZONES.find((z) => c >= z.from && c <= z.to) ?? ZONES[ZONES.length - 1];
-export const zoneOf = (t: number): Zone => zoneOfColumn(t % COLS);

@@ -8,7 +8,8 @@ import { useEconomy } from "@/game/economy/EconomyContext";
 import { Shell } from "@/game/state/ui";
 import { Panel, btnMain, btnSoft, input } from "@/game/bank/ui";
 import { fetchRainbowCell, fetchRainbowMap, type RainbowCell, type RainbowError, type RainbowMap } from "@/game/rainbowland/api";
-import { COLS, RAINBOW_DISTRICT, TIERS, TIER_COLOR, ZONES, landName, parseCell, zoneOf } from "@/game/rainbowland/grid";
+import { COLS, RAINBOW_DISTRICT, TIERS, TIER_COLOR, landName, parseCell } from "@/game/rainbowland/grid";
+import { loadTerrain, zoneAtCell, type Terrain } from "@/game/rainbowland/terrain";
 import { IMG_H, IMG_W, PAD, drawBase, drawScene, toImage, tokenAtImage, type View } from "@/game/rainbowland/render";
 import { rainbowStrings } from "@/game/rainbowland/strings";
 import { fetchNetwork, toRoutes, travel, type Location, type NetworkInfo } from "@/game/travel/api";
@@ -32,6 +33,8 @@ const Rainbowland = () => {
   const [me, setMe] = useState<Location | null>(null);
   const [net, setNet] = useState<NetworkInfo | null>(null);
   const [busy, setBusy] = useState(false);
+  const [terrain, setTerrain] = useState<Terrain | null>(null);
+  const [terrainFailed, setTerrainFailed] = useState(false);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -63,11 +66,24 @@ const Rainbowland = () => {
   }, [session]);
   useEffect(loadNet, [loadNet]);
 
+  // the map of the continent (tiles and zones), loaded once
+  useEffect(() => {
+    let live = true;
+    loadTerrain().then((tr) => {
+      if (!live) return;
+      if (tr) setTerrain(tr);
+      else setTerrainFailed(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
   // the continent image, rebuilt when the map arrives
   useEffect(() => {
-    if (!map) return;
-    baseRef.current = drawBase(map.tiles, claimed, mine);
-  }, [map, claimed, mine]);
+    if (!map || !terrain) return;
+    baseRef.current = drawBase(terrain, map.tiles, claimed, mine);
+  }, [map, terrain, claimed, mine]);
 
   const clampView = useCallback(() => {
     const v = viewRef.current;
@@ -85,12 +101,12 @@ const Rainbowland = () => {
     clampView();
   }, [clampView]);
   const focus = useCallback(
-    (tok: number, scale = 14) => {
+    (tok: number, scale = 14, cell?: { c: number; r: number }) => {
       const { w, h } = sizeRef.current;
       const v = viewRef.current;
       v.scale = Math.max(v.scale, scale);
-      v.ox = (tok % COLS) + PAD + 0.5 - w / v.scale / 2;
-      v.oy = Math.floor(tok / COLS) + PAD + 0.5 - h / v.scale / 2;
+      v.ox = (cell ? cell.c : tok % COLS) + PAD + 0.5 - w / v.scale / 2;
+      v.oy = (cell ? cell.r : Math.floor(tok / COLS)) + PAD + 0.5 - h / v.scale / 2;
       clampView();
     },
     [clampView],
@@ -125,9 +141,9 @@ const Rainbowland = () => {
       cv.style.height = `${h}px`;
       cv.getContext("2d")?.setTransform(dpr, 0, 0, dpr, 0, 0);
       if (first) {
-        // start on the western coast, where the bridge and the harbour are
+        // start on the LAND rows of the north-west, where the bridge and the harbour are
         const v = viewRef.current;
-        v.scale = Math.max(Math.min(w / IMG_W, h / IMG_H), Math.min(6, h / (IMG_H * 0.8)));
+        v.scale = Math.max(Math.min(w / IMG_W, h / IMG_H), Math.min(8, h / 100));
         v.ox = 0;
         v.oy = 0;
         first = false;
@@ -145,22 +161,23 @@ const Rainbowland = () => {
     let raf = 0;
     const tick = (time: number) => {
       const cv = canvasRef.current, base = baseRef.current;
-      if (cv && base && map) {
+      if (cv && base && map && terrain) {
         const ctx = cv.getContext("2d")!;
         const { w, h } = sizeRef.current;
         drawScene(ctx, w, h, base, viewRef.current, {
+          terrain,
           claimed,
           tiles: map.tiles,
           selected: selectedRef.current,
           time,
-          labels: { bridge: t.bridgeLabel, harbour: t.harbour, station: t.station, zones: ZONES },
+          labels: { bridge: t.bridgeLabel, harbour: t.harbour, station: t.station, zones: terrain.zones },
         });
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [map, claimed, t]);
+  }, [map, terrain, claimed, t]);
 
   const select = useCallback(
     (tok: number | null) => {
@@ -289,7 +306,7 @@ const Rainbowland = () => {
     return planTrips(toRoutes(net), me.districtId, here ? CAPITAL : RAINBOW_DISTRICT, fares).filter((p) => p.legs.length > 0);
   }, [net, me, here]);
   const harbour = net?.hubs.find((h) => h.kind === "port" && h.district !== RAINBOW_DISTRICT && net.routes.some((r) => r[0] === "ferry" && r[1] === h.district && r[2] === RAINBOW_DISTRICT));
-  const zone = selected != null ? zoneOf(selected) : null;
+  const zone = selected != null && terrain ? zoneAtCell(terrain, selected % COLS, Math.floor(selected / COLS)) : null;
 
   return (
     <Shell title={t.title} icon={Rainbow} accent="text-fuchsia-300">
@@ -313,9 +330,9 @@ const Rainbowland = () => {
 
       <div ref={wrapRef} className="relative h-[52vh] min-h-[280px] w-full touch-none overflow-hidden rounded-2xl border border-border bg-[#12406e] md:h-[60vh]">
         <canvas ref={canvasRef} className="absolute inset-0 cursor-crosshair" />
-        {!map && (
+        {(!map || !terrain) && (
           <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-white/80">
-            {error ? t.errors[error] : (<><Loader2 className="h-4 w-4 animate-spin" />{t.loading}</>)}
+            {error ? t.errors[error] : terrainFailed ? t.errors.network : (<><Loader2 className="h-4 w-4 animate-spin" />{t.loading}</>)}
           </div>
         )}
         <div className="absolute right-2 top-2 flex flex-col gap-1">
@@ -332,7 +349,7 @@ const Rainbowland = () => {
           {selected != null && (
             <div className="space-y-2 text-sm">
               <p className="text-muted-foreground">{t.token(selected)}</p>
-              <Row k={t.zone} v={zone?.name ?? ""} />
+              <Row k={t.zone} v={zone?.name ?? t.openWater} />
               {!cell && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
               {cell && (
                 <>
@@ -393,10 +410,10 @@ const Rainbowland = () => {
 
         <Panel title={t.zones} icon={Rainbow}>
           <ul className="grid grid-cols-2 gap-1.5 text-sm">
-            {ZONES.map((z) => (
+            {(terrain?.zones ?? []).map((z) => (
               <li key={z.name}>
-                <button className="flex items-center gap-2 text-left hover:underline" onClick={() => focus(Math.floor(43 * COLS + (z.from + z.to) / 2), 4)}>
-                  <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: `rgb(${z.ground.join(",")})` }} />
+                <button className="flex items-center gap-2 text-left hover:underline" onClick={() => focus(0, 3, z)}>
+                  <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: `rgb(${z.color.join(",")})` }} />
                   {z.name}
                 </button>
               </li>

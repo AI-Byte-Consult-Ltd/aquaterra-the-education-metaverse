@@ -7,11 +7,11 @@ const tide = (v: number) => `${n(v)} TIDE`;
 const en = {
   title: "Rainbowland",
   intro:
-    "The continent of the old LAND. Every cell is one LAND NFT at its own coordinates. A cell stays in the mist until its LAND comes home through the Heritage Port; then it rises as a plot at the same address. Rainbowland grows exactly as its owners return.",
+    "The continent of the old LAND, on the founder map of Rainbowland. Every cell is one LAND NFT at its own coordinates. A cell waits until its LAND comes home through the Heritage Port; then it becomes a plot at the same address, glowing in its tier colour. Rainbowland grows exactly as its owners return.",
   stats: (claimed: number, total: number) => [
     { k: "LAND on the grid", v: n(total) },
     { k: "Came home", v: n(claimed) },
-    { k: "Still in the mist", v: n(total - claimed) },
+    { k: "Still to come home", v: n(total - claimed) },
   ],
   search: "LAND (x, y) or token number",
   find: "Find",
@@ -30,7 +30,7 @@ const en = {
   plotSize: (k: number) => `${k} ${k === 1 ? "cell" : "cells"} of land`,
   plotValue: (p: number) => `${tide(p)} value, earns like a bought plot`,
   subsoil: (pct: number) => (pct > 0 ? `+${pct}% subsoil bonus (for mining of the elements)` : "no subsoil bonus"),
-  mist: "In the mist: this LAND has not come home yet.",
+  mist: "This LAND has not come home yet.",
   owned: (who: string) => `Came home, held by ${who}`,
   mine: "This plot is yours.",
   swap: "Swap this LAND in the Heritage Port",
@@ -42,7 +42,8 @@ const en = {
   tierNote:
     "The tier comes from the rarity written in the LAND itself: Diamond, Mythical and the heaviest elements are Legendary; superheavy elements, gold, platinum and royal gems are Epic; radioactive elements and gems are Rare; about half the land is Common. Cyber land glows neon.",
   zones: "Zones",
-  zonesNote: "Seven zones run west to east, one for each colour of the rainbow.",
+  zonesNote: "The districts of the founder map of Rainbowland. The LAND tokens fill its northern rows; the south waits for the land still to come.",
+  openWater: "Open water",
   toPrism: "Prism Hills, the Polygon LAND next door",
   getThere: "Getting there",
   getThereNote: (harbour: string | null) =>

@@ -3,12 +3,17 @@
  * then scaled up on screen. Land in the mist is pale, with rare land faintly showing
  * through; land that came home has its zone's ground and its tier's colour.
  */
-import { COLS, ROWS, TOTAL, TIER_COLOR, TIER_OF_CODE, zoneOfColumn, type Tier } from "./grid";
+import { COLS, TOTAL, TIER_COLOR, TIER_OF_CODE, type Tier } from "./grid";
+import type { Terrain } from "./terrain";
 
-/** Sea around the continent, in cells. */
-export const PAD = 28;
-export const IMG_W = COLS + PAD * 2;
-export const IMG_H = ROWS + PAD * 2;
+/**
+ * The whole map of Rainbowland, drawn by the founder in Tiled (assets/rainbowland/*.tmx):
+ * 640 x 640 cells from (-128, -128), the coordinates of the LAND tokens. Image pixel
+ * (c, r) is LAND (c - 128, r - 128); the minted tokens fill the first 87 rows.
+ */
+export const PAD = 0;
+export const IMG_W = 640;
+export const IMG_H = 640;
 
 const hash = (x: number, y: number) => {
   let h = (x * 374761393 + y * 668265263) >>> 0;
@@ -25,59 +30,31 @@ export function noise(x: number, y: number) {
 }
 export const mix = (a: number[], b: number[], t: number) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
 
-/** Distance in cells from the grid to a point of the image, for the coast. */
-function gridDistance(ix: number, iy: number) {
-  const c = ix - PAD, r = iy - PAD;
-  const lastRowCols = TOTAL - (ROWS - 1) * COLS;
-  const maxR = c < lastRowCols ? ROWS - 1 : ROWS - 2;
-  const dx = c < 0 ? -c : c >= COLS ? c - COLS + 1 : 0;
-  const dy = r < 0 ? -r : r > maxR ? r - maxR : 0;
-  return Math.hypot(dx, dy);
-}
-
-/** The whole continent. tiles: one tier letter per token; claimed: token ids that came home. */
-export function drawBase(tiles: string, claimed: Set<number>, mine: Set<number>): HTMLCanvasElement {
+/** The whole continent, one pixel per cell, from the map tiles; LAND that came home takes its tier colour. */
+export function drawBase(terrain: Terrain, tiles: string, claimed: Set<number>, mine: Set<number>): HTMLCanvasElement {
   const cv = document.createElement("canvas");
   cv.width = IMG_W;
   cv.height = IMG_H;
   const ctx = cv.getContext("2d")!;
   const img = ctx.createImageData(IMG_W, IMG_H);
   const px = img.data;
-  for (let iy = 0; iy < IMG_H; iy++)
-    for (let ix = 0; ix < IMG_W; ix++) {
-      const o = (iy * IMG_W + ix) * 4;
-      const c = ix - PAD, r = iy - PAD;
-      const t = r * COLS + c;
-      const onGrid = c >= 0 && c < COLS && r >= 0 && t >= 0 && t < TOTAL;
-      let rgb: number[];
-      if (onGrid) {
-        const zone = zoneOfColumn(c);
-        const tier: Tier = TIER_OF_CODE[tiles[t]] ?? "common";
-        const grain = noise(c / 6, r / 6) * 0.5 + noise(c / 1.7, r / 1.7) * 0.5;
-        if (claimed.has(t)) {
-          const g = mix(zone.ground, [255, 255, 255], grain * 0.12);
-          rgb = tier === "common" ? g : mix(g, TIER_COLOR[tier], tier === "cyber" ? 0.85 : 0.6);
-          if (mine.has(t)) rgb = mix(rgb, [255, 255, 255], 0.25);
-        } else {
-          // mist: pale ground of the zone, rare land showing through a little
-          const fog = mix(zone.ground, [232, 236, 244], 0.7 + grain * 0.12);
-          rgb = tier === "common" ? fog : mix(fog, TIER_COLOR[tier], tier === "cyber" ? 0.32 : 0.2);
-        }
-      } else {
-        const d = gridDistance(ix, iy);
-        const coast = 1.2 + noise(ix / 9, iy / 9) * 4.5 + noise(ix / 3, iy / 3) * 1.5;
-        if (d <= coast) rgb = d <= coast - 1.5 ? [196, 214, 170] : [236, 222, 176]; // grass rim and beach
-        else {
-          const deep = Math.min(1, (d - coast) / 18);
-          rgb = mix([84, 198, 214], [18, 64, 120], deep);
-          rgb = mix(rgb, [255, 255, 255], noise(ix / 4, iy / 4) * 0.06);
-        }
-      }
-      px[o] = rgb[0];
-      px[o + 1] = rgb[1];
-      px[o + 2] = rgb[2];
-      px[o + 3] = 255;
+  for (let i = 0; i < IMG_W * IMG_H; i++) {
+    let rgb: number[] = terrain.colors[terrain.cells[i]];
+    const c = i % IMG_W, r = (i / IMG_W) | 0;
+    const t = r * COLS + c;
+    if (c < COLS && t < TOTAL) {
+      const tier: Tier = TIER_OF_CODE[tiles[t]] ?? "common";
+      if (claimed.has(t)) {
+        rgb = tier === "common" ? mix(rgb, [255, 255, 255], 0.35) : mix(rgb, TIER_COLOR[tier], tier === "cyber" ? 0.85 : 0.6);
+        if (mine.has(t)) rgb = mix(rgb, [255, 255, 255], 0.25);
+      } else if (tier !== "common") rgb = mix(rgb, TIER_COLOR[tier], tier === "cyber" ? 0.22 : 0.12);
     }
+    const o = i * 4;
+    px[o] = rgb[0];
+    px[o + 1] = rgb[1];
+    px[o + 2] = rgb[2];
+    px[o + 3] = 255;
+  }
   ctx.putImageData(img, 0, 0);
   return cv;
 }
@@ -98,10 +75,12 @@ export const tokenAtImage = (x: number, y: number): number | null => {
   return t < TOTAL ? t : null;
 };
 
-/** The bridge leaves the west coast at the middle row; the harbour and station sit beside it. */
-export const BRIDGE_ROW = Math.floor(ROWS / 2);
-export const HARBOUR = { c: 2, r: BRIDGE_ROW + 6 };
-export const STATION = { c: 6, r: BRIDGE_ROW - 6 };
+/** The bridge reaches the west coast at the middle of the LAND rows; the harbour and station sit beside it. */
+export const BRIDGE_ROW = 43;
+/** The bridge runs over the western sea of the map onto the coast. */
+export const LANDFALL = 8;
+export const HARBOUR = { c: 1, r: BRIDGE_ROW + 6 };
+export const STATION = { c: 9, r: BRIDGE_ROW - 6 };
 
 export function drawScene(
   ctx: CanvasRenderingContext2D,
@@ -109,21 +88,33 @@ export function drawScene(
   h: number,
   base: HTMLCanvasElement,
   v: View,
-  opts: { claimed: Set<number>; tiles: string; selected: number | null; time: number; labels: { bridge: string; harbour: string; station: string; zones: { name: string; from: number; to: number; hue: number }[] } },
+  opts: { terrain: Terrain; claimed: Set<number>; tiles: string; selected: number | null; time: number; labels: { bridge: string; harbour: string; station: string; zones: { name: string; c: number; r: number; color: [number, number, number] }[] } },
 ) {
   ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = "#12406e";
   ctx.fillRect(0, 0, w, h);
   ctx.drawImage(base, -v.ox * v.scale, -v.oy * v.scale, IMG_W * v.scale, IMG_H * v.scale);
   const at = (c: number, r: number) => ({ x: (c + PAD - v.ox) * v.scale, y: (r + PAD - v.oy) * v.scale });
+  // the real tiles of the map when zoomed in, with the colour of LAND that came home on top
+  if (v.scale >= 6 && opts.terrain.sheet) {
+    drawTiles(ctx, w, h, v, opts.terrain);
+    for (const t of opts.claimed) {
+      const p = at(t % COLS, Math.floor(t / COLS));
+      if (p.x < -v.scale || p.y < -v.scale || p.x > w || p.y > h) continue;
+      const tier: Tier = TIER_OF_CODE[opts.tiles[t]] ?? "common";
+      const [cr, cg, cb] = tier === "common" ? [255, 255, 255] : TIER_COLOR[tier];
+      ctx.fillStyle = `rgba(${cr},${cg},${cb},${tier === "common" ? 0.3 : 0.45})`;
+      ctx.fillRect(p.x, p.y, v.scale, v.scale);
+    }
+  }
 
   // Rainbow Bridge: from the west coast out to sea, towards First Light City
-  const b0 = at(-1, BRIDGE_ROW + 0.5);
+  const b0 = at(0, BRIDGE_ROW + 0.5);
   const bw = Math.max(2, v.scale * 0.9);
   const bands = ["#ff4d4d", "#ff9f40", "#ffe14d", "#4ddc6a", "#4db8ff", "#6a6aff", "#b36bff"];
   bands.forEach((col, i) => {
     ctx.fillStyle = col;
-    ctx.fillRect(b0.x - PAD * v.scale - 40, b0.y - bw / 2 + (i - 3) * (bw / 7), PAD * v.scale + 40, bw / 7 + 0.5);
+    ctx.fillRect(Math.min(0, b0.x) - 40, b0.y - bw / 2 + (i - 3) * (bw / 7), Math.max(0, b0.x - Math.min(0, b0.x)) + 40 + LANDFALL * v.scale, bw / 7 + 0.5);
   });
   // neon glow of Cyber land that came home, when zoomed in enough to see a cell
   if (v.scale >= 3) {
@@ -145,7 +136,7 @@ export function drawScene(
     ctx.strokeStyle = "rgba(20,30,50,0.18)";
     ctx.lineWidth = 1;
     const c0 = Math.max(0, Math.floor(v.ox - PAD)), c1 = Math.min(COLS, Math.ceil(v.ox - PAD + w / v.scale));
-    const r0 = Math.max(0, Math.floor(v.oy - PAD)), r1 = Math.min(ROWS, Math.ceil(v.oy - PAD + h / v.scale));
+    const r0 = Math.max(0, Math.floor(v.oy - PAD)), r1 = Math.min(Math.ceil(TOTAL / COLS), Math.ceil(v.oy - PAD + h / v.scale));
     ctx.beginPath();
     for (let c = c0; c <= c1; c++) {
       const p = at(c, r0), q = at(c, r1);
@@ -188,22 +179,26 @@ export function drawScene(
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(glyph, p.x, p.y + 1);
-    if (v.scale >= 2) label3(ctx, label, p.x, p.y - rad - 8, 12);
+    if (v.scale >= 2) {
+      ctx.font = "700 12px Inter, system-ui, sans-serif";
+      const half = ctx.measureText(label).width / 2 + 6;
+      label3(ctx, label, Math.max(half, p.x), p.y - rad - 8, 12);
+    }
   };
   mark(HARBOUR.c, HARBOUR.r, "#0e7490", opts.labels.harbour, "⚓");
   mark(STATION.c, STATION.r, "#7c3aed", opts.labels.station, "🚆");
-  if (b0.x > 30) {
+  if (b0.x > -20) {
     ctx.font = "700 12px Inter, system-ui, sans-serif";
     const half = ctx.measureText(opts.labels.bridge).width / 2 + 8;
-    label3(ctx, opts.labels.bridge, Math.max(half, Math.min(b0.x - half, b0.x - PAD * v.scale * 0.5)), b0.y - bw - 10, 12);
+    label3(ctx, opts.labels.bridge, Math.max(half, b0.x - half + 8), b0.y - bw - 10, 12);
   }
 
-  // zone names along the top of the continent
+  // zone names on the map
   ctx.textAlign = "center";
   for (const z of opts.labels.zones) {
-    const p = at((z.from + z.to + 1) / 2, -2.2);
-    if (p.x < -200 || p.x > w + 200) continue;
-    label3(ctx, z.name, p.x, p.y, Math.max(11, Math.min(18, v.scale * 4)), `hsl(${z.hue} 90% 78%)`);
+    const p = at(z.c + 0.5, z.r + 0.5);
+    if (p.x < -200 || p.x > w + 200 || p.y < -40 || p.y > h + 40) continue;
+    label3(ctx, z.name, p.x, p.y, Math.max(11, Math.min(18, v.scale * 3)), `rgb(${z.color.map((x) => Math.min(255, x + 70)).join(",")})`);
   }
 
   // selected cell
@@ -229,4 +224,39 @@ export function label3(ctx: CanvasRenderingContext2D, text: string, x: number, y
   ctx.strokeText(text, x, y);
   ctx.fillStyle = fill;
   ctx.fillText(text, x, y);
+}
+
+/** Tiles of the map are drawn into cached chunks of 32 x 32 cells at full sprite size. */
+const CHUNK = 32;
+const chunks = new Map<string, HTMLCanvasElement>();
+function chunk(terrain: Terrain, cx: number, cy: number) {
+  const key = `${cx},${cy}`;
+  let cv = chunks.get(key);
+  if (cv) return cv;
+  const T = terrain.tile;
+  cv = document.createElement("canvas");
+  cv.width = CHUNK * T;
+  cv.height = CHUNK * T;
+  const g = cv.getContext("2d")!;
+  g.imageSmoothingEnabled = false;
+  for (let r = 0; r < CHUNK; r++)
+    for (let c = 0; c < CHUNK; c++) {
+      const x = cx * CHUNK + c, y = cy * CHUNK + r;
+      if (x >= IMG_W || y >= IMG_H) continue;
+      const gid = terrain.gids[terrain.cells[y * IMG_W + x]];
+      if (!gid) continue;
+      const k = gid - 1;
+      const sx = (k % terrain.columns) * (T + terrain.spacing), sy = Math.floor(k / terrain.columns) * (T + terrain.spacing);
+      g.drawImage(terrain.sheet!, sx, sy, T, T, c * T, r * T, T, T);
+    }
+  if (chunks.size > 96) chunks.delete(chunks.keys().next().value as string);
+  chunks.set(key, cv);
+  return cv;
+}
+function drawTiles(ctx: CanvasRenderingContext2D, w: number, h: number, v: View, terrain: Terrain) {
+  const c0 = Math.max(0, Math.floor(v.ox / CHUNK)), c1 = Math.min(IMG_W / CHUNK - 1, Math.floor((v.ox + w / v.scale) / CHUNK));
+  const r0 = Math.max(0, Math.floor(v.oy / CHUNK)), r1 = Math.min(IMG_H / CHUNK - 1, Math.floor((v.oy + h / v.scale) / CHUNK));
+  const size = CHUNK * v.scale;
+  for (let cy = r0; cy <= r1; cy++)
+    for (let cx = c0; cx <= c1; cx++) ctx.drawImage(chunk(terrain, cx, cy), (cx * CHUNK - v.ox) * v.scale, (cy * CHUNK - v.oy) * v.scale, size + 0.5, size + 0.5);
 }

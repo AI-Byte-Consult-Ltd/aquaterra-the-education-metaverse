@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_WORLD, generateWorld } from "../world/generator";
 import { buildNetwork, planTrips } from "../travel/network";
-import { COLS, RAINBOW_DISTRICT, ROWS, TOTAL, ZONES, landName, parseCell, tokenAt, tokenX, tokenY } from "./grid";
+import { COLS, RAINBOW_DISTRICT, ROWS, TOTAL, landName, parseCell, tokenAt, tokenX, tokenY } from "./grid";
 import { rainbowLinks } from "./travel";
 import { PRISM_DISTRICT, PRISM_TOTAL, parcelName, parsePrism, prismAt, prismSize } from "./prism";
 
@@ -23,12 +23,6 @@ describe("Rainbowland grid", () => {
     expect(parseCell("LAND (353, -120)")).toBe(5601);
     expect(parseCell("#5601")).toBe(5601);
     expect(parseCell("999999")).toBeNull();
-  });
-  it("cuts the continent into seven zones without gaps", () => {
-    expect(ZONES).toHaveLength(7);
-    expect(ZONES[0].from).toBe(0);
-    expect(ZONES[6].to).toBe(COLS - 1);
-    for (let i = 1; i < 7; i++) expect(ZONES[i].from).toBe(ZONES[i - 1].to + 1);
   });
   it("is reached from First Light City over the bridge and by ferry", () => {
     const world = generateWorld(DEFAULT_WORLD);
