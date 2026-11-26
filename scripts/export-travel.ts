@@ -8,9 +8,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DEFAULT_WORLD, generateWorld } from "../src/game/world/generator";
 import { buildNetwork, districtCentre } from "../src/game/travel/network";
+import { rainbowLinks } from "../src/game/rainbowland/travel";
 
 const world = generateWorld(DEFAULT_WORLD);
-const net = buildNetwork(world);
+const net = rainbowLinks(world, buildNetwork(world));
 const out = resolve(process.argv[2] ?? "public", "world");
 mkdirSync(out, { recursive: true });
 writeFileSync(
@@ -22,7 +23,7 @@ writeFileSync(
     centres: world.districts.map((d) => {
       const c = districtCentre(world, d.id);
       return [d.id, c.x, c.y];
-    }),
+    }).concat(net.extraCentres),
     anchors: world.plots.map((p) => [p.id, p.anchor.x, p.anchor.y]),
   }),
 );

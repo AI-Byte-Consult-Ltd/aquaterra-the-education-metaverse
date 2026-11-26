@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Anchor, Check, Copy, Loader2, Repeat, Wallet as WalletIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -13,6 +13,7 @@ import {
 } from "@/game/heritage/api";
 import { connectWallet, hasWalletApp, metamaskLink, signText } from "@/game/heritage/wallet";
 import { heritageStrings, shortAddr } from "@/game/heritage/strings";
+import { RAINBOW_CONTRACT, TOTAL as RAINBOW_TOTAL, landName } from "@/game/rainbowland/grid";
 
 const statusColour: Record<Swap["status"], string> = {
   open: "text-amber-300", done: "text-emerald-300", rejected: "text-red-300", cancelled: "text-muted-foreground",
@@ -27,8 +28,10 @@ const Heritage = () => {
   const [me, setMe] = useState<HeritageMe | null>(null);
   const [error, setError] = useState<HeritageError | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [search] = useSearchParams();
   const [colId, setColId] = useState<number | null>(null);
-  const [token, setToken] = useState("");
+  // /heritage?token=5601 comes from a Rainbowland cell
+  const [token, setToken] = useState(() => (search.get("token") ?? "").replace(/\D/g, "").slice(0, 78));
   const [choice, setChoice] = useState<"plot" | "tide">("plot");
   const [copied, setCopied] = useState(false);
 
@@ -81,7 +84,10 @@ const Heritage = () => {
   };
 
   const cols = (me?.collections ?? []).filter((c) => c.kind !== "tower");
-  const col = cols.find((c) => c.id === colId) ?? cols[0] ?? null;
+  const rainbowCol = cols.find((c) => c.contract === RAINBOW_CONTRACT);
+  const col = cols.find((c) => c.id === colId) ?? (search.get("token") ? rainbowCol : undefined) ?? cols[0] ?? null;
+  const rainbow = col?.contract === RAINBOW_CONTRACT;
+  const rainbowToken = rainbow && token !== "" && Number(token) < RAINBOW_TOTAL ? Number(token) : null;
   const plotOk = !!col?.allowPlot && (me?.reserve ?? 0) > 0;
   const pick = plotOk ? choice : "tide";
   const evmChains = new Set((me?.chains ?? []).filter((c) => c.family === "evm" && c.enabled).map((c) => c.id));
@@ -166,7 +172,7 @@ const Heritage = () => {
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <button type="button" disabled={!plotOk} onClick={() => setChoice("plot")}
                     className={`rounded-lg border px-2 py-2 text-left disabled:opacity-40 ${pick === "plot" ? "border-cyan-300 bg-cyan-400/10" : "border-border"}`}>
-                    {t.getPlot(me.district)}
+                    {rainbow ? (rainbowToken != null ? t.getRainbow(landName(rainbowToken)) : t.getRainbow("LAND (x, y)")) : t.getPlot(me.district)}
                   </button>
                   <button type="button" disabled={!col || col.swapTide <= 0} onClick={() => setChoice("tide")}
                     className={`rounded-lg border px-2 py-2 text-left disabled:opacity-40 ${pick === "tide" ? "border-cyan-300 bg-cyan-400/10" : "border-border"}`}>
