@@ -30,6 +30,8 @@ export interface Resident {
   district: number;
   online: boolean;
   council: boolean;
+  /** Name of their AI companion (a NICS AI Agent), if any. */
+  companion?: string | null;
 }
 
 export interface ResidentsMap {
@@ -37,6 +39,8 @@ export interface ResidentsMap {
   online: number;
   recent: number;
   avatar: MyAvatar;
+  /** My AI companion, if any. */
+  companion?: string | null;
 }
 
 const call = async <T>(body: Record<string, unknown>): Promise<Result<T>> => {

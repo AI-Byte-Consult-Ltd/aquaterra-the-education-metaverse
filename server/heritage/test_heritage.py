@@ -110,7 +110,7 @@ A1, B1 = "0x" + "a1" * 20, "0x" + "b1" * 20
 info = her(action="info")
 check(info["ok"] and info["fee"] == 600 and info["vault"] == VAULT and info["reserve"] == 2, f"info {info}")
 check([c["kind"] for c in info["collections"] if not c["listed"]] == ["tower", "tower"], "only the two towers are on at the start, besides listed ones")
-check(sum(len(c["items"]) for c in info["collections"] if c["listed"]) == 41 and all(c["chain"] == "ethereum" for c in info["collections"] if c["listed"]), "41 listed Ethereum tokens")
+check(sum(len(c["items"]) for c in info["collections"] if c["listed"]) == 104 and all(c["chain"] == "ethereum" for c in info["collections"] if c["listed"]), "104 listed Ethereum tokens")
 check([c["id"] for c in info["chains"]] == ["cronos", "polygon", "ethereum", "bitcoin"], "four chains")
 check(her(action="me")["error"] == "session", "me needs a session")
 
@@ -287,6 +287,20 @@ o = internal(action="owner", swapId=r["check"]["swapId"], step="open", owner=E1)
 before = bal("eve@x")
 d = internal(action="owner", swapId=o["swap"]["id"], step="confirm", owner=her(action="info")["vault"])
 check(d["ok"] and d["swap"]["tide"] == 7000 and bal("eve@x") == before + 7000, f"Prince of Butay pays 7000 TIDE {d}")
+
+# NICS AI Agents: the agent becomes an AI companion, plus 1,000 TIDE.
+NOVA = next(c for c in her(action="info")["collections"] if c["contract"] == "0x55e9f906866c364fe330a3de88e2e06d075e1a83")
+check(len(NOVA["items"]) == 63 and NOVA["items"][0]["title"] == "Ra" and NOVA["items"][0]["image"].startswith("bafy"), f"63 agents {NOVA['items'][0]}")
+player("fay@x", "Fay")
+F1 = "0x" + "f1" * 20
+link("fay", F1)
+r = her("fay", action="swap", collectionId=NOVA["id"], tokenId="1")
+o = internal(action="owner", swapId=r["check"]["swapId"], step="open", owner=F1)
+before = bal("fay@x")
+d = internal(action="owner", swapId=o["swap"]["id"], step="confirm", owner=her(action="info")["vault"])
+check(d["ok"] and d["swap"]["status"] == "done" and bal("fay@x") == before + 1000, f"agent swap pays 1000 {d}")
+m = her("fay", action="me")
+check(len(m["companions"]) == 1 and m["companions"][0]["name"] == "Ra" and m["companions"][0]["pantheon"] == "Egyptian", f"companion {m['companions']}")
 
 # Ledger adds up: no Tide created or lost.
 check(int(psql("SELECT sum(balance) FROM aquaterra_wallets")) == int(psql("SELECT value FROM aquaterra_economy_params WHERE key = 'genesis_supply'")), "supply unchanged")

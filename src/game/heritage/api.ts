@@ -23,7 +23,10 @@ export interface Collection { id: number; chain: ChainId; contract: string; name
   /** Listed collections: only these tokens swap, each to its own item. */
   listed?: boolean; items?: ListedItem[] | null }
 /** One listed token and what it becomes: an island of its own, an island with a villa, or Tide. */
-export interface ListedItem { tokenId: string; title: string; gives: "island" | "house" | "tide"; tide: number; tiles: number; place: string | null; taken: boolean }
+export interface ListedItem { tokenId: string; title: string; gives: "island" | "house" | "tide" | "companion"; tide: number; tiles: number; place: string | null; taken: boolean; image?: string | null; about?: string | null }
+/** An AI companion of mine: a NICS AI Agent swapped in. image is an IPFS CID. */
+export interface Companion { token: string; name: string; pantheon: string | null; domain: string | null; image: string | null; since: string }
+export const ipfsImage = (cid: string | null | undefined) => (cid ? `https://dweb.link/ipfs/${cid}` : null);
 export type SwapStatus = "open" | "done" | "rejected" | "cancelled";
 export interface Swap {
   id: number; collectionId: number; collection: string; chain: ChainId; contract: string; tokenId: string; choice: "plot" | "tide" | "apartment" | "planet" | "item";
@@ -51,6 +54,7 @@ export interface HeritageMe extends HeritageInfo {
   wallets: { family: "evm" | "btc"; address: string; linkedAt: string }[];
   swaps: Swap[];
   apartments: MyApartment[];
+  companions?: Companion[];
   balance: number;
   /** Tide that may pay a swap fee (Tide received from swaps cannot). */
   feeFree: number;

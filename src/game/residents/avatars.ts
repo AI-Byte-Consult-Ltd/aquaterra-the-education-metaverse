@@ -371,3 +371,40 @@ export function spread<T extends { key: string; x: number; y: number }>(list: T[
   }
   return out;
 }
+
+/**
+ * The AI companion of a resident (a NICS AI Agent swapped in at the Heritage Port): a small
+ * glowing spirit that floats beside the avatar, with its name when close enough.
+ */
+export function drawCompanion(ctx: CanvasRenderingContext2D, px: number, py: number, scale: number, name: string, time: number, o: { label?: boolean; dim?: boolean; phase?: number } = {}) {
+  const k = 1 / scale;
+  const u = (Math.max(14, Math.min(26, 12 + 7 * scale)) * k) / 15;
+  const t = time + (o.phase ?? 0) * 1000;
+  const hue = Math.floor(seed(name) * 360);
+  const x = px + Math.cos(t / 1400) * 15 * u;
+  const y = py - 26 * u + Math.sin(t / 700) * 3 * u;
+  ctx.save();
+  if (o.dim) ctx.globalAlpha = 0.55;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, 9 * u);
+  g.addColorStop(0, `hsla(${hue}, 95%, 85%, 0.95)`);
+  g.addColorStop(0.45, `hsla(${hue}, 90%, 60%, 0.55)`);
+  g.addColorStop(1, `hsla(${hue}, 90%, 50%, 0)`);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, 9 * u, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.arc(x, y, 2.2 * u, 0, Math.PI * 2);
+  ctx.fill();
+  if (o.label) {
+    ctx.font = `600 ${10 * k}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.lineWidth = 3 * k;
+    ctx.strokeStyle = "rgba(2,6,23,0.8)";
+    ctx.strokeText(name, x, y - 11 * u);
+    ctx.fillStyle = `hsl(${hue}, 90%, 82%)`;
+    ctx.fillText(name, x, y - 11 * u);
+  }
+  ctx.restore();
+}

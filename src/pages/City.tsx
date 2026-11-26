@@ -200,6 +200,7 @@ const City = () => {
   const tres = residentsStrings(language);
   const [crowd, setCrowd] = useState<ResidentsMap | null>(null);
   const [showCrowd, setShowCrowd] = useState(true);
+  const companionRef = useRef<string | null>(null);
   const crowdRef = useRef<ReturnType<typeof spread<ResidentsMap["residents"][number] & { hue: number }>>>([]);
   useEffect(() => {
     if (!session) return;
@@ -210,7 +211,11 @@ const City = () => {
       if (stop || !r.ok) return;
       setCrowd(r.data);
       crowdRef.current = spread(r.data.residents.map((x) => ({ ...x, hue: x.hue ?? dropHue(x.key) })));
-      if (rendererRef.current) rendererRef.current.residents = crowdRef.current;
+      companionRef.current = r.data.companion ?? null;
+      if (rendererRef.current) {
+        rendererRef.current.residents = crowdRef.current;
+        rendererRef.current.myCompanion = companionRef.current;
+      }
     };
     void load();
     const id = window.setInterval(load, 30_000);
@@ -286,6 +291,7 @@ const City = () => {
     r.owned = ownedRef.current;
     r.attractions = attractionsRef.current;
     r.residents = crowdRef.current;
+    r.myCompanion = companionRef.current;
     r.fit();
     centred.current = false;
     if (netRef.current) r.ports = netRef.current.hubs.filter((h) => h.kind === "port").map((h) => ({ x: h.x, y: h.y }));
