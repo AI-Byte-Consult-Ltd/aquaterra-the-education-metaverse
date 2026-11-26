@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, ChevronDown, Coins, Cpu, Landmark, Loader2, MapPin, Plus, ScrollText, UserRound } from "lucide-react";
+import { BookOpen, ChevronDown, Coins, Cpu, Landmark, Loader2, MapPin, Plus, ScrollText, UserRound, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { useAccount } from "@/game/account/AccountContext";
 import { NicsChatButton } from "@/game/nics/NicsChat";
@@ -88,6 +88,7 @@ const StateHome = () => {
         <Link to="/state/journal" className="inline-flex h-10 items-center gap-1.5 rounded-md border border-border px-4 text-sm hover:border-primary"><ScrollText className="h-4 w-4" />{t.journal}</Link>
         <Link to="/state/charter" className="inline-flex h-10 items-center gap-1.5 rounded-md border border-amber-400/60 px-4 text-sm hover:border-amber-300"><ScrollText className="h-4 w-4" />{tb.charterTitle}</Link>
         <Link to="/bank" className="inline-flex h-10 items-center gap-1.5 rounded-md border border-amber-400/60 px-4 text-sm hover:border-amber-300"><Landmark className="h-4 w-4" />{tb.bankTitle}</Link>
+        <Link to="/rich" className="inline-flex h-10 items-center gap-1.5 rounded-md border border-amber-400/60 px-4 text-sm hover:border-amber-300"><Trophy className="h-4 w-4" />Richest residents</Link>
       </div>
 
       {s && (
