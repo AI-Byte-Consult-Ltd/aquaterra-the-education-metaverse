@@ -1,0 +1,146 @@
+{
+ "format": "nics-release-v1",
+ "model_id": "fixture",
+ "version": 1,
+ "step": 0,
+ "created_at": "2026-11-26T21:21:31+00:00",
+ "config": {
+  "vocab_size": 679,
+  "d_model": 48,
+  "n_layers": 2,
+  "n_heads": 4,
+  "max_seq_len": 64,
+  "pos_encoding": "rope"
+ },
+ "dtype": "f32",
+ "tensors": [
+  {
+   "name": "tok_emb.weight",
+   "shape": [
+    679,
+    48
+   ],
+   "offset": 0
+  },
+  {
+   "name": "blocks.0.norm1.weight",
+   "shape": [
+    48
+   ],
+   "offset": 32592
+  },
+  {
+   "name": "blocks.0.attn.qkv.weight",
+   "shape": [
+    144,
+    48
+   ],
+   "offset": 32640
+  },
+  {
+   "name": "blocks.0.attn.proj.weight",
+   "shape": [
+    48,
+    48
+   ],
+   "offset": 39552
+  },
+  {
+   "name": "blocks.0.norm2.weight",
+   "shape": [
+    48
+   ],
+   "offset": 41856
+  },
+  {
+   "name": "blocks.0.ffn.w1.weight",
+   "shape": [
+    128,
+    48
+   ],
+   "offset": 41904
+  },
+  {
+   "name": "blocks.0.ffn.w2.weight",
+   "shape": [
+    128,
+    48
+   ],
+   "offset": 48048
+  },
+  {
+   "name": "blocks.0.ffn.w3.weight",
+   "shape": [
+    48,
+    128
+   ],
+   "offset": 54192
+  },
+  {
+   "name": "blocks.1.norm1.weight",
+   "shape": [
+    48
+   ],
+   "offset": 60336
+  },
+  {
+   "name": "blocks.1.attn.qkv.weight",
+   "shape": [
+    144,
+    48
+   ],
+   "offset": 60384
+  },
+  {
+   "name": "blocks.1.attn.proj.weight",
+   "shape": [
+    48,
+    48
+   ],
+   "offset": 67296
+  },
+  {
+   "name": "blocks.1.norm2.weight",
+   "shape": [
+    48
+   ],
+   "offset": 69600
+  },
+  {
+   "name": "blocks.1.ffn.w1.weight",
+   "shape": [
+    128,
+    48
+   ],
+   "offset": 69648
+  },
+  {
+   "name": "blocks.1.ffn.w2.weight",
+   "shape": [
+    128,
+    48
+   ],
+   "offset": 75792
+  },
+  {
+   "name": "blocks.1.ffn.w3.weight",
+   "shape": [
+    48,
+    128
+   ],
+   "offset": 81936
+  },
+  {
+   "name": "norm_f.weight",
+   "shape": [
+    48
+   ],
+   "offset": 88080
+  }
+ ],
+ "weights_file": "weights.bin",
+ "weights_sha256": "34af9a54d3188946bccf63bc65b9576bf72df0e90e3d546b653108bd1a291dfa",
+ "tokenizer_file": "tokenizer.json",
+ "tokenizer_sha256": "f3aad83079a50467a0ebf3c18c3bf10c6941ddf9d5ca6f5d998b017fee04eee4",
+ "eval": {}
+}

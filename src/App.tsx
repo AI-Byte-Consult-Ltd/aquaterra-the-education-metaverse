@@ -28,6 +28,7 @@ import Heritage from "./pages/Heritage";
 import Rainbowland from "./pages/Rainbowland";
 import Quests from "./pages/Quests";
 import Orbit from "./pages/Orbit";
+import Mind from "./pages/Mind";
 import Rich from "./pages/Rich";
 import Bank from "./pages/Bank";
 import Terms from "./pages/Terms";
@@ -68,6 +69,7 @@ const App = () => (
             <Route path="/rainbowland" element={<Rainbowland />} />
             <Route path="/quests" element={<Quests />} />
             <Route path="/orbit" element={<Orbit />} />
+            <Route path="/mind" element={<Mind />} />
             <Route path="/rich" element={<Rich />} />
             <Route path="/state/journal" element={<JournalPage />} />
             <Route path="/state/districts" element={<DistrictsPage />} />
