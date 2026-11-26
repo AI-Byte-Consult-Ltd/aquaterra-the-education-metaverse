@@ -29,6 +29,7 @@ import Rainbowland from "./pages/Rainbowland";
 import PrismHills from "./pages/PrismHills";
 import Quests from "./pages/Quests";
 import Orbit from "./pages/Orbit";
+import Farm from "./pages/Farm";
 import Mind from "./pages/Mind";
 import Rich from "./pages/Rich";
 import Bank from "./pages/Bank";
@@ -71,6 +72,7 @@ const App = () => (
             <Route path="/prism-hills" element={<PrismHills />} />
             <Route path="/quests" element={<Quests />} />
             <Route path="/orbit" element={<Orbit />} />
+            <Route path="/farm" element={<Farm />} />
             <Route path="/mind" element={<Mind />} />
             <Route path="/rich" element={<Rich />} />
             <Route path="/state/journal" element={<JournalPage />} />
