@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, UserRound, Waves, X, ZoomIn, ZoomOut, Trophy } from "lucide-react";
 import { NicsChatButton } from "@/game/nics/NicsChat";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -549,6 +549,14 @@ const City = () => {
         >
           <RoadIcon className="h-4 w-4 text-emerald-300" />
           <span className="hidden sm:inline">{tr.title}</span>
+        </Link>
+        <Link
+          to="/rich"
+          title="Richest residents"
+          aria-label="Richest residents"
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-amber-400/50 bg-amber-400/10 px-2.5 text-sm font-semibold text-amber-200 hover:border-amber-300"
+        >
+          <Trophy className="h-4 w-4 text-amber-300" />
         </Link>
         <Link
           to="/arcade"
