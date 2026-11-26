@@ -24,6 +24,7 @@ import PlayPage from "./pages/arcade/PlayPage";
 import SetupPage from "./pages/arcade/SetupPage";
 import { CharterPage } from "./pages/state/CharterPage";
 import Roads from "./pages/Roads";
+import Quests from "./pages/Quests";
 import Rich from "./pages/Rich";
 import Bank from "./pages/Bank";
 import Terms from "./pages/Terms";
@@ -60,6 +61,7 @@ const App = () => (
             <Route path="/state/charter" element={<CharterPage />} />
             <Route path="/bank" element={<Bank />} />
             <Route path="/roads" element={<Roads />} />
+            <Route path="/quests" element={<Quests />} />
             <Route path="/rich" element={<Rich />} />
             <Route path="/state/journal" element={<JournalPage />} />
             <Route path="/state/districts" element={<DistrictsPage />} />
