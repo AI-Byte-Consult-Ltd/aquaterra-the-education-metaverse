@@ -1,4 +1,5 @@
-import { KINDS, type Kind, type World } from "./generator";
+import { KINDS, type Kind, type Plot, type World } from "./generator";
+import { landmarkFor, SECOND_TOWER } from "./landmarks";
 import { builtBuilding, buildingsFor, type Building, type BuildingStyle, type Built, type Tower } from "./buildings";
 import { cottagePalette, drawCottage, type CottagePalette } from "./cottages";
 import { LAGOON, baseColor, daylight, shade, skyColor, treeColor, type RGB } from "./palette";
@@ -21,7 +22,7 @@ export interface Camera {
   scale: number;
 }
 
-export type Pick = { kind: "plot"; plotId: number } | { kind: "tower" } | { kind: "civic"; id: CivicId } | { kind: "tile"; tile: Kind; x: number; y: number; district: number } | null;
+export type Pick = { kind: "plot"; plotId: number } | { kind: "tower"; id?: "second-light" } | { kind: "civic"; id: CivicId } | { kind: "tile"; tile: Kind; x: number; y: number; district: number } | null;
 
 const isoX = (x: number, y: number) => ((x - y) * TW) / 2;
 const isoY = (x: number, y: number) => ((x + y) * TH) / 2;
@@ -30,6 +31,8 @@ const isoY = (x: number, y: number) => ((x + y) * TH) / 2;
 const FLOOR_PX = 5;
 /** Skyscrapers use the First Light Tower's scale: 108 floors = TOWER_HEIGHT. */
 const TOWER_FLOOR_PX = TOWER_HEIGHT / 108;
+/** The Second Light Tower on the same scale of floors. */
+const SECOND_HEIGHT = TOWER_FLOOR_PX * SECOND_TOWER.floors;
 /** Gap left on the outer edges of a skyscraper, as a share of a tile (sidewalk). */
 const TOWER_INSET = 0.14;
 
@@ -70,6 +73,8 @@ export class WorldRenderer {
   /** Plots with an owner: true for the signed-in resident's own land. */
   owned: Map<number, boolean> = new Map();
   towerSelected = false;
+  /** The Second Light Tower is selected. */
+  secondSelected = false;
   /** Seat of government picked on the map, and seats with open votes (a light on the roof). */
   selectedCivic: CivicId | null = null;
   busyCivic: Set<CivicId> = new Set();
@@ -90,6 +95,7 @@ export class WorldRenderer {
   /** Draw a preview house on every plot. */
   private showBuildings = true;
   private buildings: (Building | null)[];
+  private second: Plot | null = null;
   /** Plots whose building a resident changed (built, raised, cleared). */
   private builtIds = new Set<number>();
   /** Plot whose house stands on this tile, or -1. */
@@ -124,6 +130,9 @@ export class WorldRenderer {
     this.elev = new Float32Array(n);
     for (let i = 0; i < n; i++) this.elev[i] = this.elevationOf(i);
     this.buildings = buildingsFor(world).slice();
+    // the Second Light Tower is drawn on its own, over the map, like the First Light Tower
+    this.second = landmarkFor(world, SECOND_TOWER.plotId) ? world.plots[SECOND_TOWER.plotId] : null;
+    if (this.second) this.buildings[SECOND_TOWER.plotId] = null;
     ({ toWorld: this.vmap, toView: this.wmap } = viewMaps(world.size, 0));
     this.houseAt = new Int32Array(n).fill(-1);
     this.towerAt = new Int32Array(n).fill(-1);
@@ -231,7 +240,7 @@ export class WorldRenderer {
       const p = this.world.plots[id];
       if (!p) continue;
       const b = built.get(id);
-      this.buildings[id] = b ? builtBuilding(this.world, p, b, now) : start[id];
+      this.buildings[id] = this.second?.id === id ? null : b ? builtBuilding(this.world, p, b, now) : start[id];
       this.place(id);
     }
     this.builtIds = new Set(built.keys());
@@ -284,6 +293,14 @@ export class WorldRenderer {
     const c = this.world.center;
     const { px, py } = this.at(c, c);
     this.camera = { cx: px, cy: py - 8 * TH, scale: clamp(scale, MIN_SCALE, MAX_SCALE) };
+  }
+
+  /** Show the whole Second Light Tower, from its foot to the beacon. */
+  focusSecond() {
+    if (!this.second) return;
+    const { px, py } = this.at(this.second.anchor.x, this.second.anchor.y);
+    const scale = clamp((this.height * 0.8) / (SECOND_HEIGHT + 120), MIN_SCALE, MAX_SCALE);
+    this.camera = { cx: px, cy: py - (SECOND_HEIGHT + 60) / 2, scale };
   }
 
   /** Screen position (at scale 1) of the centre of world tile (x, y), standing on its ground. */
@@ -397,6 +414,10 @@ export class WorldRenderer {
     }
     const { px: tx, py: ty } = this.at(c, c);
     if (Math.abs(wx - tx) < TW * 1.6 && wy < ty + TH && wy > ty - TOWER_HEIGHT - 60) return { kind: "tower" };
+    if (this.second) {
+      const { px: sx2, py: sy2 } = this.at(this.second.anchor.x, this.second.anchor.y);
+      if (Math.abs(wx - sx2) < TW * 1.2 && wy < sy2 + TH && wy > sy2 - SECOND_HEIGHT - 60) return { kind: "tower", id: "second-light" };
+    }
     // Walk from the front tile at sea level backwards; the first tile whose raised top contains the point wins.
     const t0 = this.worldToTile(wx, wy);
     const bx = Math.floor(t0.x);
@@ -1504,15 +1525,28 @@ export class WorldRenderer {
   }
 
   private drawTower(time: number) {
-    const { ctx } = this;
-    const n = this.world.size;
     const c = this.world.center;
-    const { px: bx, py: ty } = this.at(c, c);
+    if (this.second && this.at(this.second.anchor.x, this.second.anchor.y).py < this.at(c, c).py) {
+      this.drawSecond(time);
+      this.drawTowerAt(time, c, c, 1.6, TOWER_HEIGHT, 0.55, this.towerSelected, 12);
+    } else {
+      this.drawTowerAt(time, c, c, 1.6, TOWER_HEIGHT, 0.55, this.towerSelected, 12);
+      this.drawSecond(time);
+    }
+  }
+
+  private drawSecond(time: number) {
+    if (!this.second) return;
+    this.drawTowerAt(time, this.second.anchor.x, this.second.anchor.y, 1.9, SECOND_HEIGHT, 0.32, this.secondSelected, 40);
+  }
+
+  /** A landmark tower on a tile: two glass faces narrowing to the top, floor bands, a beacon. */
+  private drawTowerAt(time: number, x: number, y: number, size: number, H: number, taper: number, selected: boolean, bands: number) {
+    const { ctx } = this;
+    const { px: bx, py: ty } = this.at(x, y);
     const by = ty + TH / 2;
-    const hw = 1.6 * (TW / 2);
-    const hh = 1.6 * (TH / 2);
-    const H = TOWER_HEIGHT;
-    const taper = 0.55;
+    const hw = size * (TW / 2);
+    const hh = size * (TH / 2);
     const night = this.isNight;
     const gl = ctx.createLinearGradient(bx - hw, 0, bx, 0);
     gl.addColorStop(0, night ? "#2a3566" : "#9fb4d8");
@@ -1538,8 +1572,8 @@ export class WorldRenderer {
     ctx.fill();
     ctx.strokeStyle = night ? "rgba(140,220,255,0.4)" : "rgba(255,255,255,0.35)";
     ctx.lineWidth = 0.8;
-    for (let f = 1; f < 12; f++) {
-      const t = f / 12;
+    for (let f = 1; f < bands; f++) {
+      const t = f / bands;
       const w = hw * (1 - (1 - taper) * t);
       const h2 = hh * (1 - (1 - taper) * t);
       const y = by - H * t;
@@ -1577,7 +1611,7 @@ export class WorldRenderer {
     ctx.beginPath();
     ctx.arc(bx, by - H - 50, 4, 0, Math.PI * 2);
     ctx.fill();
-    if (this.towerSelected) {
+    if (selected) {
       ctx.strokeStyle = "rgba(160,250,255,0.95)";
       ctx.lineWidth = 2 / Math.max(this.camera.scale, 0.25);
       ctx.beginPath();

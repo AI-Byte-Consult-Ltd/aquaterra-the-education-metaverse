@@ -5,7 +5,7 @@ let b = $input.first().json.body || {};
 if (typeof b === 'string') { try { b = JSON.parse(b); } catch (e) { b = {}; } }
 if (!b || typeof b !== 'object' || Array.isArray(b)) b = {};
 const actions = ['info', 'me', 'link_challenge', 'link', 'unlink', 'login_challenge', 'wallet_login', 'swap', 'confirm', 'cancel',
-  'admin', 'admin_collection', 'admin_setting', 'admin_reserve'];
+  'tower', 'apt_collect', 'admin', 'admin_collection', 'admin_setting', 'admin_reserve'];
 const req = { action: actions.includes(b.action) ? b.action : 'invalid' };
 const s = String(b.session || '').replace(/[^a-f0-9]/g, '').slice(0, 64);
 if (s) req.session = s;
@@ -15,6 +15,7 @@ else if (b.address !== undefined) req.address = 'bad';
 for (const k of ['collectionId', 'swapId']) { const n = Math.trunc(Number(b[k])); if (Number.isFinite(n) && n > 0 && n < 1e12) req[k] = n; }
 if (typeof b.tokenId === 'string' || typeof b.tokenId === 'number') req.tokenId = String(b.tokenId).slice(0, 80);
 if (b.choice === 'plot' || b.choice === 'tide') req.choice = b.choice;
+if (b.tower === 'first-light' || b.tower === 'second-light') req.tower = b.tower;
 if (req.action.startsWith('admin_')) {
   for (const k of ['chain', 'contract', 'name', 'kind', 'note', 'key', 'value']) { const v = str(b[k], 200); if (v !== undefined) req[k] = v; }
   if (b.swapTide !== undefined) { const n = Math.trunc(Number(b.swapTide)); if (Number.isFinite(n)) req.swapTide = n; }

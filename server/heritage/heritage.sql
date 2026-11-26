@@ -10,8 +10,10 @@
 --    the address from the signature and passes it as req.verified; the browser cannot.
 --    The same signed message can sign a resident in (wallet login) once a wallet is linked.
 --  * Collections are listed by the founder in /admin, per chain. Only enabled collections swap.
---    The First Light tower (Radiant Residences on Cronos) is kind tower: it stays on chain,
---    never swapped.
+--    Collections of kind tower (First Light Tower = Radiant Residences, Second Light Tower =
+--    Radiant Residences Tower 2, both on Cronos) swap 1:1: token N becomes apartment N of that
+--    tower in the game, with its floor, number, type, view and size from the NFT metadata
+--    (loaded once by n8n into aquaterra_apartments). An apartment earns Tide every day.
 --  * A swap: the resident names a token and chooses a plot in the Heritage district or Tide.
 --    n8n asks the chain ownerOf(token); if it is one of the residents linked wallets the swap
 --    opens and the swap fee (law nft_swap_fee) goes to the State Treasury. The resident then
@@ -46,7 +48,7 @@ CREATE TABLE IF NOT EXISTS aquaterra_nft_collections (
   chain text NOT NULL REFERENCES aquaterra_nft_chains (id),
   contract text NOT NULL,            -- lower case 0x address (EVM) or collection id (Bitcoin)
   name text NOT NULL,
-  kind text NOT NULL DEFAULT 'asset', -- land | house | car | asset | tower
+  kind text NOT NULL DEFAULT 'asset', -- land | house | car | asset | tower | planet
   standard text NOT NULL DEFAULT 'erc721',
   swap_tide bigint NOT NULL DEFAULT 0,  -- Tide paid instead of a plot
   allow_plot boolean NOT NULL DEFAULT true,
@@ -99,7 +101,7 @@ CREATE TABLE IF NOT EXISTS aquaterra_nft_swaps (
   email text NOT NULL REFERENCES aquaterra_players (email),
   collection_id int NOT NULL REFERENCES aquaterra_nft_collections (id),
   token_id text NOT NULL,            -- decimal
-  choice text NOT NULL,              -- plot | tide
+  choice text NOT NULL,              -- plot | tide | apartment | planet
   status text NOT NULL DEFAULT 'checking', -- checking | open | done | rejected | cancelled
   owner_address text,                -- the linked wallet that held it when the swap opened
   fee bigint NOT NULL DEFAULT 0,
@@ -115,6 +117,56 @@ CREATE UNIQUE INDEX IF NOT EXISTS aquaterra_nft_swaps_once ON aquaterra_nft_swap
 
 INSERT INTO aquaterra_wallets (account, welcomed_at) VALUES ('heritage:reserve', now()) ON CONFLICT DO NOTHING;
 
+-- The two towers: every NFT of the tower collection is one apartment here.
+CREATE TABLE IF NOT EXISTS aquaterra_towers (
+  id text PRIMARY KEY,               -- first-light | second-light
+  name text NOT NULL,
+  collection_id int NOT NULL UNIQUE REFERENCES aquaterra_nft_collections (id),
+  plot_id int,                       -- the plot it stands on (null: the tower plaza)
+  sort int NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS aquaterra_apartments (
+  tower text NOT NULL REFERENCES aquaterra_towers (id),
+  token_id int NOT NULL,
+  floor int NOT NULL,
+  number text NOT NULL,
+  apt_type text NOT NULL,            -- Residential, Office, Store, Penthouse, Parking Lot ...
+  view text,
+  area int,                          -- square metres
+  bedrooms int,
+  rooms int,
+  image text,
+  owner text REFERENCES aquaterra_players (email),
+  owned_at timestamptz,
+  income_from timestamptz,
+  PRIMARY KEY (tower, token_id)
+);
+CREATE INDEX IF NOT EXISTS aquaterra_apartments_owner ON aquaterra_apartments (owner) WHERE owner IS NOT NULL;
+CREATE INDEX IF NOT EXISTS aquaterra_apartments_floor ON aquaterra_apartments (tower, floor);
+
+UPDATE aquaterra_nft_collections SET name = 'First Light Tower (Radiant Residences)', kind = 'tower', swap_tide = 0, allow_plot = false,
+  enabled = true, note = '1,200 apartments on 108 floors. Each NFT becomes the same apartment in the First Light Tower.'
+WHERE chain = 'cronos' AND contract = '0x3720cde69e4e997bbdeaec7b4e7b5f8c3c406869';
+UPDATE aquaterra_nft_collections SET name = 'Second Light Tower (Radiant Residences - Tower 2)', kind = 'tower', swap_tide = 0, allow_plot = false,
+  enabled = true, note = '2,002 apartments. Each NFT becomes the same apartment in the Second Light Tower by the lake.'
+WHERE chain = 'cronos' AND contract = '0xb4b898ee60185facc247aadb8d061661590f167f' AND kind <> 'tower';
+INSERT INTO aquaterra_towers (id, name, collection_id, plot_id, sort)
+SELECT 'first-light', 'First Light Tower', id, NULL, 1 FROM aquaterra_nft_collections
+WHERE chain = 'cronos' AND contract = '0x3720cde69e4e997bbdeaec7b4e7b5f8c3c406869' ON CONFLICT (id) DO NOTHING;
+INSERT INTO aquaterra_towers (id, name, collection_id, plot_id, sort)
+SELECT 'second-light', 'Second Light Tower', id, 44, 2 FROM aquaterra_nft_collections
+WHERE chain = 'cronos' AND contract = '0xb4b898ee60185facc247aadb8d061661590f167f' ON CONFLICT (id) DO NOTHING;
+-- 13 Velvet Highway by the lake is the site of the Second Light Tower: not for sale.
+INSERT INTO aquaterra_wallets (account, welcomed_at) VALUES ('state:towers', now()) ON CONFLICT DO NOTHING;
+INSERT INTO aquaterra_plot_owners (plot_id, owner, price_paid)
+SELECT 44, 'state:towers', 0 WHERE EXISTS (SELECT 1 FROM aquaterra_plots WHERE id = 44)
+  AND NOT EXISTS (SELECT 1 FROM aquaterra_plot_owners WHERE plot_id = 44)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO aquaterra_gov_params (key, value, min_value, max_value, label) VALUES
+  ('apartment_income', 3, 0, 1000, 'Towers: Tide a day one apartment earns (stores and offices x2, penthouses x5, parking x0.5)')
+ON CONFLICT (key) DO NOTHING;
+
 DO $do$
 DECLARE src text; anchor text := 'WHEN acct IS NULL THEN NULL';
 BEGIN
@@ -122,6 +174,16 @@ BEGIN
   IF position('heritage:reserve' IN src) > 0 THEN RETURN; END IF;
   IF position(anchor IN src) = 0 THEN RAISE EXCEPTION 'name patch: anchor not found'; END IF;
   src := replace(src, anchor, anchor || E'\n    WHEN acct = ''heritage:reserve'' THEN ''Heritage Reserve''');
+  EXECUTE src;
+END $do$;
+
+DO $do$
+DECLARE src text; anchor text := 'WHEN acct IS NULL THEN NULL';
+BEGIN
+  src := pg_get_functiondef('aquaterra_name(text)'::regprocedure);
+  IF position('state:towers' IN src) > 0 THEN RETURN; END IF;
+  IF position(anchor IN src) = 0 THEN RAISE EXCEPTION 'name patch: anchor not found'; END IF;
+  src := replace(src, anchor, anchor || E'\n    WHEN acct = ''state:towers'' THEN ''Second Light Tower''');
   EXECUTE src;
 END $do$;
 
@@ -169,9 +231,42 @@ CREATE OR REPLACE FUNCTION aquaterra_h_swap_json(s aquaterra_nft_swaps) RETURNS 
   SELECT jsonb_build_object('id', s.id, 'collectionId', s.collection_id, 'collection', c.name, 'chain', c.chain,
     'contract', c.contract, 'tokenId', s.token_id, 'choice', s.choice, 'status', s.status, 'fee', s.fee,
     'plotId', s.plot_id, 'plotAddress', p.address, 'tide', s.tide, 'reason', s.reason, 'owner', s.owner_address,
-    'createdAt', s.created_at, 'doneAt', s.done_at)
-  FROM aquaterra_nft_collections c LEFT JOIN aquaterra_plots p ON p.id = s.plot_id WHERE c.id = s.collection_id
+    'createdAt', s.created_at, 'doneAt', s.done_at,
+    'apartment', CASE WHEN a.tower IS NOT NULL THEN jsonb_build_object('tower', a.tower, 'towerName', tw.name, 'floor', a.floor, 'number', a.number, 'type', a.apt_type) END)
+  FROM aquaterra_nft_collections c LEFT JOIN aquaterra_plots p ON p.id = s.plot_id
+  LEFT JOIN aquaterra_towers tw ON tw.collection_id = c.id
+  LEFT JOIN aquaterra_apartments a ON a.tower = tw.id AND s.choice = 'apartment' AND a.token_id::text = s.token_id
+  WHERE c.id = s.collection_id
 $fn$;
+
+-- Tide a day one apartment earns, by its type (law apartment_income).
+CREATE OR REPLACE FUNCTION aquaterra_apt_rate(t text) RETURNS numeric LANGUAGE sql STABLE AS
+$fn$ SELECT aquaterra_hlaw('apartment_income') * CASE WHEN t ILIKE '%penthouse%' THEN 5 WHEN t ILIKE '%parking%' THEN 0.5
+  WHEN t ILIKE '%office%' OR t ILIKE '%store%' OR t ILIKE '%shop%' OR t ILIKE '%commercial%' THEN 2 ELSE 1 END $fn$;
+CREATE OR REPLACE FUNCTION aquaterra_apt_pending(a aquaterra_apartments) RETURNS bigint LANGUAGE sql STABLE AS
+$fn$ SELECT CASE WHEN a.owner IS NULL OR a.income_from IS NULL THEN 0 ELSE
+  floor(aquaterra_apt_rate(a.apt_type) * least(extract(epoch FROM now() - a.income_from) / 86400.0, 30))::bigint END $fn$;
+CREATE OR REPLACE FUNCTION aquaterra_apt_json(a aquaterra_apartments) RETURNS jsonb LANGUAGE sql STABLE AS
+$fn$ SELECT jsonb_build_object('tower', a.tower, 'towerName', (SELECT name FROM aquaterra_towers WHERE id = a.tower), 'tokenId', a.token_id,
+  'floor', a.floor, 'number', a.number, 'type', a.apt_type, 'view', a.view, 'area', a.area, 'bedrooms', a.bedrooms, 'rooms', a.rooms,
+  'image', a.image, 'rate', aquaterra_apt_rate(a.apt_type), 'pending', aquaterra_apt_pending(a), 'ownedAt', a.owned_at) $fn$;
+
+-- n8n only, once: load NFT metadata into apartments. rows: [{tower, tokenId, floor, number, type, view, area, bedrooms, rooms, image}].
+-- Never touches the owner.
+CREATE OR REPLACE FUNCTION aquaterra_apt_load(rows jsonb) RETURNS jsonb LANGUAGE plpgsql AS $fn$
+DECLARE n int;
+BEGIN
+  INSERT INTO aquaterra_apartments (tower, token_id, floor, number, apt_type, view, area, bedrooms, rooms, image)
+  SELECT r->>'tower', (r->>'tokenId')::int, (r->>'floor')::int, left(r->>'number', 20), left(coalesce(nullif(r->>'type', ''), 'Residential'), 40),
+    left(r->>'view', 40), nullif(r->>'area', '')::int, nullif(r->>'bedrooms', '')::int, nullif(r->>'rooms', '')::int, left(r->>'image', 200)
+  FROM jsonb_array_elements(rows) r
+  WHERE r->>'tower' IN (SELECT id FROM aquaterra_towers) AND (r->>'floor') ~ '^-?[0-9]' AND length(r->>'floor') <= 6 AND substr(r->>'floor', 2) !~ '[^0-9]'
+    AND (r->>'tokenId') ~ '^[0-9]' AND length(r->>'tokenId') <= 9 AND (r->>'tokenId') !~ '[^0-9]'
+  ON CONFLICT (tower, token_id) DO UPDATE SET floor = EXCLUDED.floor, number = EXCLUDED.number, apt_type = EXCLUDED.apt_type,
+    view = EXCLUDED.view, area = EXCLUDED.area, bedrooms = EXCLUDED.bedrooms, rooms = EXCLUDED.rooms, image = EXCLUDED.image;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  RETURN jsonb_build_object('ok', true, 'loaded', n, 'total', (SELECT count(*) FROM aquaterra_apartments));
+END $fn$;
 
 -- What n8n should ask the chain for one swap.
 CREATE OR REPLACE FUNCTION aquaterra_h_check(s aquaterra_nft_swaps, step text) RETURNS jsonb LANGUAGE sql STABLE AS $fn$
@@ -220,14 +315,14 @@ DECLARE
   me text; my_role text; my_name text;
   res jsonb := '{}'::jsonb;
   addr text; ch aquaterra_wallet_challenges; col aquaterra_nft_collections; s aquaterra_nft_swaps;
-  v_tok text; v_choice text; v_fee bigint; tok text; v_n bigint;
+  v_tok text; v_choice text; v_fee bigint; tok text; v_n bigint; tw aquaterra_towers; ap aquaterra_apartments; v_tax bigint;
 BEGIN
   IF coalesce(req->>'session', '') <> '' THEN
     SELECT p.email, p.role, p.display_name INTO me, my_role, my_name
     FROM aquaterra_sessions s2 JOIN aquaterra_players p ON p.email = s2.email
     WHERE s2.token_hash = encode(sha256(convert_to(req->>'session', 'UTF8')), 'hex') AND s2.expires_at > now();
   END IF;
-  IF act NOT IN ('info', 'login_challenge', 'wallet_login') AND me IS NULL THEN
+  IF act NOT IN ('info', 'login_challenge', 'wallet_login', 'tower') AND me IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'error', 'session', 'status', 401);
   END IF;
 
@@ -254,6 +349,7 @@ BEGIN
             FROM aquaterra_wallet_links WHERE email = me), '[]'::jsonb),
           'swaps', COALESCE((SELECT jsonb_agg(aquaterra_h_swap_json(x) ORDER BY x.id DESC) FROM aquaterra_nft_swaps x
             WHERE x.email = me AND x.status <> 'checking'), '[]'::jsonb),
+          'apartments', COALESCE((SELECT jsonb_agg(aquaterra_apt_json(a) ORDER BY a.tower, a.floor, a.number) FROM aquaterra_apartments a WHERE a.owner = me), '[]'::jsonb),
           'balance', aquaterra_balance(me),
           'feeFree', greatest(0, aquaterra_balance(me) - aquaterra_swap_locked(me)));
       END IF;
@@ -299,15 +395,27 @@ BEGIN
       IF aquaterra_hlaw('nft_swap_enabled') <> 1 THEN RAISE EXCEPTION 'closed'; END IF;
       IF coalesce(aquaterra_hs('vault_address'), '') = '' THEN RAISE EXCEPTION 'closed'; END IF;
       SELECT * INTO col FROM aquaterra_nft_collections WHERE id = (req->>'collectionId')::int AND enabled;
-      IF col.id IS NULL OR col.kind = 'tower' THEN RAISE EXCEPTION 'collection'; END IF;
+      IF col.id IS NULL THEN RAISE EXCEPTION 'collection'; END IF;
       IF (SELECT family FROM aquaterra_nft_chains WHERE id = col.chain) <> 'evm' OR NOT (SELECT enabled FROM aquaterra_nft_chains WHERE id = col.chain) THEN
         RAISE EXCEPTION 'chain_soon';
       END IF;
       v_tok := btrim(coalesce(req->>'tokenId', ''));
       IF v_tok !~ '^[0-9]{1,78}' OR length(v_tok) > 78 OR v_tok ~ '[^0-9]' THEN RAISE EXCEPTION 'token'; END IF;
       v_tok := ltrim(v_tok, '0'); IF v_tok = '' THEN v_tok := '0'; END IF;
-      v_choice := CASE WHEN req->>'choice' = 'plot' AND col.allow_plot THEN 'plot' ELSE 'tide' END;
+      v_choice := CASE WHEN col.kind = 'tower' THEN 'apartment' WHEN col.kind = 'planet' THEN 'planet' WHEN req->>'choice' = 'plot' AND col.allow_plot THEN 'plot' ELSE 'tide' END;
       IF v_choice = 'tide' AND col.swap_tide <= 0 THEN RAISE EXCEPTION 'choice'; END IF;
+      IF v_choice = 'apartment' THEN
+        IF length(v_tok) > 9 THEN RAISE EXCEPTION 'token'; END IF;
+        SELECT a.* INTO ap FROM aquaterra_apartments a JOIN aquaterra_towers t2 ON t2.id = a.tower
+        WHERE t2.collection_id = col.id AND a.token_id = v_tok::int;
+        IF ap.tower IS NULL THEN RAISE EXCEPTION 'token'; END IF;
+        IF ap.owner IS NOT NULL THEN RAISE EXCEPTION 'swapped'; END IF;
+      END IF;
+      IF v_choice = 'planet' THEN
+        -- Milky Way Marvels: token N becomes Orbit claim N (server/orbit/orbit.sql).
+        IF length(v_tok) > 6 OR NOT EXISTS (SELECT 1 FROM aquaterra_planets WHERE token_id = v_tok::int) THEN RAISE EXCEPTION 'token'; END IF;
+        IF EXISTS (SELECT 1 FROM aquaterra_planets WHERE token_id = v_tok::int AND owner IS NOT NULL) THEN RAISE EXCEPTION 'swapped'; END IF;
+      END IF;
       IF NOT EXISTS (SELECT 1 FROM aquaterra_wallet_links WHERE email = me AND chain_family = 'evm') THEN RAISE EXCEPTION 'no_wallet'; END IF;
       IF EXISTS (SELECT 1 FROM aquaterra_nft_swaps WHERE collection_id = col.id AND token_id = v_tok AND status = 'done') THEN RAISE EXCEPTION 'swapped'; END IF;
       IF EXISTS (SELECT 1 FROM aquaterra_nft_swaps WHERE collection_id = col.id AND token_id = v_tok AND status = 'open' AND email = me) THEN RAISE EXCEPTION 'swap_open'; END IF;
@@ -331,6 +439,36 @@ BEGIN
       IF s.status <> 'open' THEN RAISE EXCEPTION 'not_open'; END IF;
       res := jsonb_build_object('check', aquaterra_h_check(s, 'confirm'));
 
+    ELSIF act = 'tower' THEN
+      -- One tower, apartments as compact rows: [token, floor, number, type, view, area, bedrooms, owner name or null, mine].
+      SELECT * INTO tw FROM aquaterra_towers WHERE id = coalesce(req->>'tower', 'first-light');
+      IF tw.id IS NULL THEN RAISE EXCEPTION 'not_found'; END IF;
+      res := jsonb_build_object('tower', jsonb_build_object('id', tw.id, 'name', tw.name, 'plotId', tw.plot_id,
+          'contract', (SELECT contract FROM aquaterra_nft_collections WHERE id = tw.collection_id), 'collectionId', tw.collection_id,
+          'floors', (SELECT max(floor) FROM aquaterra_apartments WHERE tower = tw.id),
+          'lowest', (SELECT min(floor) FROM aquaterra_apartments WHERE tower = tw.id),
+          'owned', (SELECT count(*) FROM aquaterra_apartments WHERE tower = tw.id AND owner IS NOT NULL),
+          'income', aquaterra_hlaw('apartment_income')),
+        'apartments', COALESCE((SELECT jsonb_agg(jsonb_build_array(a.token_id, a.floor, a.number, a.apt_type, a.view, a.area, a.bedrooms,
+            CASE WHEN a.owner IS NOT NULL THEN aquaterra_name(a.owner) END, me IS NOT NULL AND a.owner = me) ORDER BY a.floor, a.number)
+          FROM aquaterra_apartments a WHERE a.tower = tw.id), '[]'::jsonb));
+
+    ELSIF act = 'apt_collect' THEN
+      -- Collect what all my apartments earned, minus income tax to the State Treasury.
+      v_n := 0; v_tax := 0;
+      FOR ap IN SELECT * FROM aquaterra_apartments WHERE owner = me FOR UPDATE LOOP
+        v_fee := aquaterra_apt_pending(ap);
+        IF v_fee >= 1 THEN
+          v_n := v_n + v_fee;
+          UPDATE aquaterra_apartments SET income_from = now() WHERE tower = ap.tower AND token_id = ap.token_id;
+        END IF;
+      END LOOP;
+      IF v_n < 1 THEN RAISE EXCEPTION 'nothing'; END IF;
+      v_tax := round(v_n * greatest(0, least(50, aquaterra_hlaw('income_tax_pct'))) / 100.0);
+      PERFORM aquaterra_move('treasury', me, v_n - v_tax, 'apartment_income', NULL, 'Apartment income', me);
+      IF v_tax > 0 THEN PERFORM aquaterra_move('treasury', 'state:treasury', v_tax, 'tax', NULL, 'Income tax, apartments', me); END IF;
+      res := jsonb_build_object('gross', v_n, 'tax', v_tax, 'net', v_n - v_tax, 'balance', aquaterra_balance(me));
+
     ELSIF act = 'cancel' THEN
       SELECT * INTO s FROM aquaterra_nft_swaps WHERE id = (req->>'swapId')::bigint AND email = me FOR UPDATE;
       IF s.id IS NULL THEN RAISE EXCEPTION 'not_found'; END IF;
@@ -347,7 +485,7 @@ BEGIN
         v_tok := lower(btrim(coalesce(req->>'contract', '')));
         IF (SELECT family FROM aquaterra_nft_chains WHERE id = req->>'chain') = 'evm' AND (v_tok !~ '^0x[0-9a-f]{40}' OR length(v_tok) <> 42) THEN RAISE EXCEPTION 'address'; END IF;
         IF v_tok = '' OR length(v_tok) > 120 THEN RAISE EXCEPTION 'address'; END IF;
-        IF coalesce(req->>'kind', 'asset') NOT IN ('land', 'house', 'car', 'asset', 'tower') THEN RAISE EXCEPTION 'kind'; END IF;
+        IF coalesce(req->>'kind', 'asset') NOT IN ('land', 'house', 'car', 'asset') THEN RAISE EXCEPTION 'kind'; END IF;
         INSERT INTO aquaterra_nft_collections (chain, contract, name, kind, swap_tide, allow_plot, enabled, note)
         VALUES (req->>'chain', v_tok, left(coalesce(nullif(btrim(req->>'name'), ''), v_tok), 80), coalesce(req->>'kind', 'asset'),
           greatest(0, least(1000000, coalesce((req->>'swapTide')::bigint, 0))), coalesce((req->>'allowPlot')::boolean, true),
@@ -437,6 +575,20 @@ BEGIN
     ELSIF req->>'step' = 'confirm' AND s.status = 'open' THEN
       IF own = '' THEN RAISE EXCEPTION 'chain'; END IF;
       IF own <> coalesce(aquaterra_hs('vault_address'), '-') THEN RAISE EXCEPTION 'not_received'; END IF;
+      IF s.choice = 'planet' THEN
+        IF NOT aquaterra_orbit_give(s.token_id, s.email) THEN RAISE EXCEPTION 'swapped'; END IF;
+        UPDATE aquaterra_nft_swaps SET status = 'done', done_at = now() WHERE id = s.id;
+        SELECT * INTO s FROM aquaterra_nft_swaps WHERE id = s.id;
+        RETURN jsonb_build_object('ok', true, 'swap', aquaterra_h_swap_json(s));
+      END IF;
+      IF s.choice = 'apartment' THEN
+        UPDATE aquaterra_apartments a SET owner = s.email, owned_at = now(), income_from = now()
+        FROM aquaterra_towers t2 WHERE t2.id = a.tower AND t2.collection_id = s.collection_id AND a.token_id::text = s.token_id AND a.owner IS NULL;
+        IF NOT FOUND THEN RAISE EXCEPTION 'swapped'; END IF;
+        UPDATE aquaterra_nft_swaps SET status = 'done', done_at = now() WHERE id = s.id;
+        SELECT * INTO s FROM aquaterra_nft_swaps WHERE id = s.id;
+        RETURN jsonb_build_object('ok', true, 'swap', aquaterra_h_swap_json(s));
+      END IF;
       IF s.choice = 'plot' THEN
         SELECT o2.plot_id, p.price INTO v_plot, v_price FROM aquaterra_plot_owners o2 JOIN aquaterra_plots p ON p.id = o2.plot_id
         WHERE o2.owner = 'heritage:reserve' ORDER BY p.price DESC, o2.plot_id LIMIT 1 FOR UPDATE OF o2;

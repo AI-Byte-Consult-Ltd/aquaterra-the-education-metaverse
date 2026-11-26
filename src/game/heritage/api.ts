@@ -9,7 +9,7 @@ export const HERITAGE_ENDPOINT = (import.meta.env.VITE_HERITAGE_ENDPOINT as stri
 const ERRORS = [
   "session", "address", "not_linked", "already_mine", "linked_elsewhere", "too_many", "signature", "expired", "wallet_limit",
   "swap_open", "cell_taken", "closed", "collection", "chain_soon", "token", "choice", "no_wallet", "swapped", "reserve_empty", "plot_limit",
-  "insufficient", "not_found", "not_open", "not_owner", "not_received", "chain", "forbidden", "district", "kind", "key", "amount", "action",
+  "insufficient", "not_found", "not_open", "not_owner", "not_received", "chain", "forbidden", "district", "kind", "key", "amount", "action", "nothing",
 ] as const;
 export type HeritageError = (typeof ERRORS)[number] | "network" | "no_wallet_app" | "rejected";
 const KNOWN = new Set<string>(ERRORS);
@@ -18,13 +18,26 @@ export type Result<T> = { ok: true; data: T; error?: undefined } | { ok: false; 
 
 export type ChainId = "cronos" | "polygon" | "ethereum" | "bitcoin";
 export interface Chain { id: ChainId; name: string; family: "evm" | "btc"; chainId: number | null; explorer: string; enabled: boolean }
-export type Kind = "land" | "house" | "car" | "asset" | "tower";
+export type Kind = "land" | "house" | "car" | "asset" | "tower" | "planet";
 export interface Collection { id: number; chain: ChainId; contract: string; name: string; kind: Kind; swapTide: number; allowPlot: boolean; note: string | null; enabled?: boolean; swapped?: number }
 export type SwapStatus = "open" | "done" | "rejected" | "cancelled";
 export interface Swap {
-  id: number; collectionId: number; collection: string; chain: ChainId; contract: string; tokenId: string; choice: "plot" | "tide";
+  id: number; collectionId: number; collection: string; chain: ChainId; contract: string; tokenId: string; choice: "plot" | "tide" | "apartment" | "planet";
   status: SwapStatus; fee: number; plotId: number | null; plotAddress: string | null; tide: number; reason: string | null;
   owner: string | null; createdAt: string; doneAt: string | null; resident?: string;
+  apartment?: { tower: TowerId; towerName: string; floor: number; number: string; type: string } | null;
+}
+export type TowerId = "first-light" | "second-light";
+/** An apartment of my own, with what it has earned so far. */
+export interface MyApartment {
+  tower: TowerId; towerName: string; tokenId: number; floor: number; number: string; type: string; view: string | null;
+  area: number | null; bedrooms: number | null; rooms: number | null; image: string | null; rate: number; pending: number; ownedAt: string;
+}
+/** [token, floor, number, type, view, area, bedrooms, owner name or null, mine] */
+export type ApartmentRow = [number, number, string, string, string | null, number | null, number | null, string | null, boolean];
+export interface TowerView {
+  tower: { id: TowerId; name: string; plotId: number | null; contract: string; collectionId: number; floors: number | null; lowest: number | null; owned: number; income: number };
+  apartments: ApartmentRow[];
 }
 export interface HeritageInfo {
   open: boolean; fee: number; vault: string | null; district: string; reserve: number; swapped: number;
@@ -33,6 +46,7 @@ export interface HeritageInfo {
 export interface HeritageMe extends HeritageInfo {
   wallets: { family: "evm" | "btc"; address: string; linkedAt: string }[];
   swaps: Swap[];
+  apartments: MyApartment[];
   balance: number;
   /** Tide that may pay a swap fee (Tide received from swaps cannot). */
   feeFree: number;
@@ -70,5 +84,7 @@ export const startSwap = (session: string, collectionId: number, tokenId: string
   call<{ swap: Swap }>({ action: "swap", session, collectionId, tokenId, choice });
 export const confirmSwap = (session: string, swapId: number) => call<{ swap: Swap }>({ action: "confirm", session, swapId });
 export const cancelSwap = (session: string, swapId: number) => call<{ swap: Swap }>({ action: "cancel", session, swapId });
+export const fetchTower = (tower: TowerId, session?: string | null) => call<TowerView>({ action: "tower", tower, ...(session ? { session } : {}) });
+export const collectApartments = (session: string) => call<{ gross: number; tax: number; net: number; balance: number }>({ action: "apt_collect", session });
 export const heritageAdmin = (session: string, extra: Record<string, unknown> = {}) =>
   call<HeritageAdmin>({ action: "admin", session, ...extra });
