@@ -8,8 +8,8 @@ import type { FareParams, HubKind, Mode, Route, TransitMode } from "./network";
 
 export const TRAVEL_ENDPOINT = (import.meta.env.VITE_TRAVEL_ENDPOINT as string | undefined) || "https://n8n.aibyteconsult.com/webhook/aquaterra-travel";
 
-export type TravelError = "session" | "route" | "not_here" | "insufficient" | "taken" | "not_found" | "hub_limit" | "forbidden" | "param" | "amount" | "action" | "network";
-const KNOWN = new Set<TravelError>(["session", "route", "not_here", "insufficient", "taken", "not_found", "hub_limit", "forbidden", "param", "amount", "action"]);
+export type TravelError = "session" | "route" | "boat" | "not_here" | "insufficient" | "taken" | "not_found" | "hub_limit" | "forbidden" | "param" | "amount" | "action" | "network";
+const KNOWN = new Set<TravelError>(["session", "route", "boat", "not_here", "insufficient", "taken", "not_found", "hub_limit", "forbidden", "param", "amount", "action"]);
 
 export type Result<T> = { ok: true; data: T; error?: undefined } | { ok: false; data?: undefined; error: TravelError };
 

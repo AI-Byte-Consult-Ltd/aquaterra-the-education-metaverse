@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Brain, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, Sparkles, UserRound, Users, Waves, X, ZoomIn, ZoomOut, Trophy, Rainbow, Orbit as OrbitIcon } from "lucide-react";
+import { ArrowLeft, Brain, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Sailboat, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, Sparkles, UserRound, Users, Waves, X, ZoomIn, ZoomOut, Trophy, Rainbow, Orbit as OrbitIcon } from "lucide-react";
 import { NicsChatButton } from "@/game/nics/NicsChat";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -30,7 +30,7 @@ import { buyHub, fetchNetwork, travel, type HubInfo, type Location, type Network
 import { TripPlayer, dropHue } from "@/game/travel/drop";
 import type { Leg } from "@/game/travel/network";
 import { travelStrings } from "@/game/travel/strings";
-import { HubCard, TravelOptions, tripSegments } from "@/game/travel/ui";
+import { HubCard, TravelOptions, boatsFare, locationPoint, tripMoves, tripSegments } from "@/game/travel/ui";
 import PlotArcade from "@/game/arcade/PlotArcade";
 import { fetchArcadeMap, type MapAttraction } from "@/game/arcade/api";
 import { arcadeStrings } from "@/game/arcade/strings";
@@ -512,7 +512,9 @@ const City = () => {
       if (!session || !me || !net || travellingRef.current) return;
       travellingRef.current = true;
       setTravelling(true);
-      const body = [...legs.map((l) => ({ mode: l.mode, to: l.to })), ...(plot ? [{ mode: "walk" as const, plot: plot.id }] : [])];
+      // nobody walks on water: the last bit to the plot is by boat when there is water on the way
+      const lastWet = plot ? tripMoves(city, net, locationPoint(me), legs, plot.anchor, me.districtId).some((m) => m.leg === -1 && m.mode === "boat") : false;
+      const body = [...legs.map((l) => ({ mode: l.mode, to: l.to })), ...(plot ? [{ mode: lastWet ? ("boat" as const) : ("walk" as const), plot: plot.id }] : [])];
       const res = await travel(session, body);
       if (!res.ok) {
         travellingRef.current = false;
@@ -782,6 +784,7 @@ const City = () => {
                 here={me ? canBuyHere(city, net, me, selection.plot) : true}
                 atPlot={me?.plotId === selection.plot.id}
                 myDistrict={me ? me.district ?? city.districts[me.districtId]?.name ?? "" : ""}
+                walkFare={me && net ? boatsFare(tripMoves(city, net, locationPoint(me), [], selection.plot.anchor, me.districtId)) : 0}
                 onWalk={() => void go([], selection.plot)}
                 busy={travelling}
                 tt={tt}
@@ -793,6 +796,7 @@ const City = () => {
                       net={net}
                       me={me}
                       target={plotDistrict(city, net, me, selection.plot)}
+                      plotAnchor={selection.plot.anchor}
                       balance={economy.wallet?.balance ?? null}
                       busy={travelling}
                       t={tt}
@@ -808,8 +812,8 @@ const City = () => {
                     else toast.error(te.errors[r.error]);
                   } else {
                     toast.success(te.bought(plot.address));
-                    // walk onto the new land
-                    if (me?.plotId !== plot.id) void go([], plot);
+                    // walk onto the new land (a boat is never called without asking)
+                    if (me && net && me.plotId !== plot.id && boatsFare(tripMoves(city, net, locationPoint(me), [], plot.anchor, me.districtId)) === 0) void go([], plot);
                   }
                   await economy.refresh();
                 }}
@@ -977,6 +981,8 @@ interface PlotCardProps {
   atPlot: boolean;
   myDistrict: string;
   onWalk: () => void;
+  /** TIDE for the boat when there is water between the resident and the plot; 0: a free walk. */
+  walkFare: number;
   busy: boolean;
   tt: ReturnType<typeof travelStrings>;
   /** Ways to get here, when the resident is elsewhere. */
@@ -985,7 +991,7 @@ interface PlotCardProps {
   ta: string;
 }
 
-function PlotCard({ plot, world, t, te, fmt, onCopy, onOpen, tb, owner, balance, incomeBp, listed, onBuy, here, atPlot, myDistrict, onWalk, busy, tt, travel, ta }: PlotCardProps) {
+function PlotCard({ plot, world, t, te, fmt, onCopy, onOpen, tb, owner, balance, incomeBp, listed, onBuy, here, atPlot, myDistrict, onWalk, walkFare, busy, tt, travel, ta }: PlotCardProps) {
   const d = plot.district >= 0 ? world.districts[plot.district] : undefined;
   const price = plotPrice(world, plot);
   const [buying, setBuying] = useState(false);
@@ -1069,9 +1075,9 @@ function PlotCard({ plot, world, t, te, fmt, onCopy, onOpen, tb, owner, balance,
       </p>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         {here && !atPlot && (
-          <button disabled={busy} onClick={onWalk} className={small}>
-            <Footprints className="h-3.5 w-3.5" />
-            {tt.walkHere}
+          <button disabled={busy || (walkFare > 0 && balance !== null && balance < walkFare)} onClick={onWalk} className={small} title={walkFare > 0 ? tt.boatNote : undefined}>
+            {walkFare > 0 ? <Sailboat className="h-3.5 w-3.5" /> : <Footprints className="h-3.5 w-3.5" />}
+            {walkFare > 0 ? tt.boatHere(walkFare) : tt.walkHere}
           </button>
         )}
         {atPlot && <span className="text-xs font-medium text-cyan-200">{tt.walked}</span>}

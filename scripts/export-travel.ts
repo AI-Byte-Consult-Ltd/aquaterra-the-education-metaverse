@@ -7,7 +7,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DEFAULT_WORLD, generateWorld } from "../src/game/world/generator";
-import { buildNetwork, districtCentre } from "../src/game/travel/network";
+import { buildNetwork, districtCentre, isleAt } from "../src/game/travel/network";
 import { rainbowLinks } from "../src/game/rainbowland/travel";
 
 const world = generateWorld(DEFAULT_WORLD);
@@ -18,13 +18,15 @@ writeFileSync(
   resolve(out, "travel.json"),
   JSON.stringify({
     version: 1,
-    hubs: net.hubs.map((h) => [h.id, h.kind, h.district, h.name, h.x, h.y]),
+    // the last number of hubs, centres and anchors is the piece of land the point stands on (isleAt):
+    // the server lets a resident walk only within one, and calls a boat across water. null: off this map.
+    hubs: net.hubs.map((h) => [h.id, h.kind, h.district, h.name, h.x, h.y, world.districts[h.district] ? isleAt(world, h.x, h.y) : null]),
     routes: net.routes.map((r) => [r.mode, r.a, r.b, r.dist]),
     centres: world.districts.map((d) => {
       const c = districtCentre(world, d.id);
-      return [d.id, c.x, c.y];
+      return [d.id, c.x, c.y, isleAt(world, c.x, c.y)];
     }).concat(net.extraCentres),
-    anchors: world.plots.map((p) => [p.id, p.anchor.x, p.anchor.y]),
+    anchors: world.plots.map((p) => [p.id, p.anchor.x, p.anchor.y, isleAt(world, p.anchor.x, p.anchor.y)]),
   }),
 );
 console.log(`travel.json: ${net.hubs.length} hubs, ${net.routes.length} routes`);
