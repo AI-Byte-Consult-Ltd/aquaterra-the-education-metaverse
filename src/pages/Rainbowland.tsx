@@ -336,7 +336,7 @@ const Rainbowland = () => {
               {!cell && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
               {cell && (
                 <>
-                  <Row k={t.rarity} v={cell.rarity ?? t.rarityUnknown} />
+                  <Row k={t.rarity} v={cell.rarity || t.rarityUnknown} />
                   <Row k={t.tier} v={<TierChip tier={cell.tier} label={t.tierNames[cell.tier]} />} />
                   <p>{t.plotSize(cell.tiles)} · {t.plotValue(cell.price)}</p>
                   <p className="text-muted-foreground">{t.subsoil(cell.subsoilPct)}</p>
