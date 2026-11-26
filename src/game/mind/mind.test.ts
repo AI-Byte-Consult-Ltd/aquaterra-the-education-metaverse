@@ -72,3 +72,11 @@ describe("experimental answers", () => {
     expect(checkExperimentalAnswer("Pay 12 now. <b>", "wallet", {} as never)).toBeNull();
   });
 });
+
+describe("experimental long ramble", () => {
+  it("is cut to a short safe sentence", async () => {
+    const { checkExperimentalAnswer } = await import("@/game/nics/answer");
+    const out = checkExperimentalAnswer("\nMr President, " + "I am pleased to say that ".repeat(20), "greeting", {} as never);
+    expect(out && out.length <= 202 && out.endsWith("…")).toBe(true);
+  });
+});

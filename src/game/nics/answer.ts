@@ -71,7 +71,8 @@ export const checkExperimentalAnswer = (raw: unknown, topic: Topic, facts: Facts
   const seen = new Set<string>();
   const keep: string[] = [];
   for (const s of raw.replace(/<\|[a-z_:]+\|>/g, " ").split(/(?<=[.!?])\s+|\n+/)) {
-    const t = s.replace(/\s+/g, " ").trim();
+    let t = s.replace(/\s+/g, " ").trim();
+    if (t.length > 200) t = t.slice(0, t.lastIndexOf(" ", 200)) + "…";
     if (t.length < 4 || seen.has(t.toLowerCase())) continue;
     seen.add(t.toLowerCase());
     if (slots(t).some((k) => !allowed.has(k))) continue;
