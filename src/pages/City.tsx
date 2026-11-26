@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, Sparkles, UserRound, Users, Waves, X, ZoomIn, ZoomOut, Trophy, Rainbow, Orbit as OrbitIcon } from "lucide-react";
+import { ArrowLeft, Brain, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, Sparkles, UserRound, Users, Waves, X, ZoomIn, ZoomOut, Trophy, Rainbow, Orbit as OrbitIcon } from "lucide-react";
 import { NicsChatButton } from "@/game/nics/NicsChat";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -660,6 +660,14 @@ const City = () => {
         >
           <Gamepad2 className="h-4 w-4 text-fuchsia-300" />
           <span className="hidden sm:inline">{tg.arcade}</span>
+        </Link>
+        <Link
+          to="/mind"
+          title="City Mind"
+          aria-label="City Mind"
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-cyan-300/50 bg-cyan-400/10 px-2.5 text-sm font-semibold text-cyan-200 hover:border-cyan-200"
+        >
+          <Brain className="h-4 w-4 text-cyan-300" />
         </Link>
         <NicsChatButton className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-cyan-300/50 bg-cyan-400/10 px-2.5 text-sm font-semibold text-cyan-200 hover:border-cyan-200">
           <Cpu className="h-4 w-4 text-cyan-300" />
