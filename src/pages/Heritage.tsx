@@ -14,6 +14,7 @@ import {
 import { connectWallet, hasWalletApp, metamaskLink, signText } from "@/game/heritage/wallet";
 import { heritageStrings, shortAddr } from "@/game/heritage/strings";
 import { RAINBOW_CONTRACT, TOTAL as RAINBOW_TOTAL, landName } from "@/game/rainbowland/grid";
+import { PRISM_CONTRACT, PRISM_TOTAL, parcelName } from "@/game/rainbowland/prism";
 
 const statusColour: Record<Swap["status"], string> = {
   open: "text-amber-300", done: "text-emerald-300", rejected: "text-red-300", cancelled: "text-muted-foreground",
@@ -85,8 +86,12 @@ const Heritage = () => {
 
   const cols = me?.collections ?? [];
   const rainbowCol = cols.find((c) => c.contract === RAINBOW_CONTRACT);
-  const col = cols.find((c) => c.id === colId) ?? (search.get("token") ? rainbowCol : undefined) ?? cols[0] ?? null;
+  const prismCol = cols.find((c) => c.contract === PRISM_CONTRACT);
+  const linkedCol = search.get("token") ? (search.get("land") === "prism" ? prismCol : rainbowCol) : undefined;
+  const col = cols.find((c) => c.id === colId) ?? linkedCol ?? cols[0] ?? null;
   const rainbow = col?.contract === RAINBOW_CONTRACT;
+  const prism = col?.contract === PRISM_CONTRACT;
+  const prismToken = prism && token !== "" && Number(token) >= 1 && Number(token) <= PRISM_TOTAL ? Number(token) : null;
   const rainbowToken = rainbow && token !== "" && Number(token) < RAINBOW_TOTAL ? Number(token) : null;
   const isTower = col?.kind === "tower";
   const isPlanet = col?.kind === "planet";
@@ -196,7 +201,7 @@ const Heritage = () => {
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <button type="button" disabled={!plotOk} onClick={() => setChoice("plot")}
                     className={`rounded-lg border px-2 py-2 text-left disabled:opacity-40 ${pick === "plot" ? "border-cyan-300 bg-cyan-400/10" : "border-border"}`}>
-                    {rainbow ? (rainbowToken != null ? t.getRainbow(landName(rainbowToken)) : t.getRainbow("LAND (x, y)")) : t.getPlot(me.district)}
+                    {rainbow ? (rainbowToken != null ? t.getRainbow(landName(rainbowToken)) : t.getRainbow("LAND (x, y)")) : prism ? t.getPrism(prismToken != null ? parcelName(prismToken) : "Parcel (x, y)") : t.getPlot(me.district)}
                   </button>
                   <button type="button" disabled={!col || col.swapTide <= 0} onClick={() => setChoice("tide")}
                     className={`rounded-lg border px-2 py-2 text-left disabled:opacity-40 ${pick === "tide" ? "border-cyan-300 bg-cyan-400/10" : "border-border"}`}>

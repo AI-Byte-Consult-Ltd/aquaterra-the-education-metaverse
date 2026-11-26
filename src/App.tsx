@@ -26,6 +26,7 @@ import { CharterPage } from "./pages/state/CharterPage";
 import Roads from "./pages/Roads";
 import Heritage from "./pages/Heritage";
 import Rainbowland from "./pages/Rainbowland";
+import PrismHills from "./pages/PrismHills";
 import Quests from "./pages/Quests";
 import Orbit from "./pages/Orbit";
 import Mind from "./pages/Mind";
@@ -67,6 +68,7 @@ const App = () => (
             <Route path="/roads" element={<Roads />} />
             <Route path="/heritage" element={<RequireAccount><Heritage /></RequireAccount>} />
             <Route path="/rainbowland" element={<Rainbowland />} />
+            <Route path="/prism-hills" element={<PrismHills />} />
             <Route path="/quests" element={<Quests />} />
             <Route path="/orbit" element={<Orbit />} />
             <Route path="/mind" element={<Mind />} />

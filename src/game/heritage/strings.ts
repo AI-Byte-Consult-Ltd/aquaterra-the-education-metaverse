@@ -52,6 +52,7 @@ const en = {
   tokenHint: "The number of the NFT, as your wallet or the explorer shows it.",
   getPlot: (d: string) => `A plot in ${d}`,
   getRainbow: (land: string) => `${land} in Rainbowland, at its own coordinates`,
+  getPrism: (parcel: string) => `${parcel}, a plot of its own in Prism Hills`,
   getTide: (v: number) => `${tide(v)}`,
   start: (fee: number) => `Check and pay ${tide(fee)}`,
   checking: "Asking the chain…",
