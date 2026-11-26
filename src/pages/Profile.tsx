@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Check, Coins, Crown, Globe2, Loader2, LogOut, UserRound, Users, Landmark } from "lucide-react";
+import { Anchor, ArrowLeft, Check, Coins, Crown, Globe2, Loader2, LogOut, UserRound, Users, Landmark } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { useAccount } from "@/game/account/AccountContext";
 import { isStaff, safeNext, saveDisplayName, validDisplayName, type AccountError } from "@/game/account/api";
@@ -10,6 +10,7 @@ import HomePicker from "@/game/state/HomePicker";
 import { accountLocale, accountStrings } from "@/game/account/strings";
 import { useEconomy } from "@/game/economy/EconomyContext";
 import { economyStrings } from "@/game/economy/strings";
+import { heritageStrings } from "@/game/heritage/strings";
 
 const Profile = () => {
   const { language } = useLanguage();
@@ -133,6 +134,14 @@ const Profile = () => {
                 {te.myLand}: {wallet?.plots.length ?? 0} · {te.openWallet} →
               </span>
             </span>
+          </Link>
+
+          <Link
+            to="/heritage"
+            className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3 text-sm hover:border-cyan-300"
+          >
+            <span className="flex items-center gap-2"><Anchor className="h-4 w-4 text-cyan-300" />{heritageStrings(language).title}</span>
+            <span className="text-xs text-muted-foreground">{heritageStrings(language).profileLink} →</span>
           </Link>
 
           <dl className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-2 text-sm">
