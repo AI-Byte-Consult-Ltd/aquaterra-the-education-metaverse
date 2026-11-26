@@ -44,6 +44,7 @@ const en = {
   zones: "Zones",
   zonesNote: "The districts of the founder map of Rainbowland. The LAND tokens fill its northern rows; the south waits for the land still to come.",
   openWater: "Open water",
+  noToken: "No LAND token sits on this cell yet. It is part of the Rainbowland map; the minted LAND fills the northern rows, and this land opens when its tokens come.",
   toPrism: "Prism Hills, the Polygon LAND next door",
   getThere: "Getting there",
   getThereNote: (harbour: string | null) =>

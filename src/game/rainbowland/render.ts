@@ -68,6 +68,11 @@ export interface View {
 }
 
 export const toImage = (v: View, sx: number, sy: number) => ({ x: v.ox + sx / v.scale, y: v.oy + sy / v.scale });
+/** Map cell under an image point, or null off the map. */
+export const cellAtImage = (x: number, y: number) => {
+  const c = Math.floor(x), r = Math.floor(y);
+  return c >= 0 && r >= 0 && c < IMG_W && r < IMG_H ? { c, r } : null;
+};
 export const tokenAtImage = (x: number, y: number): number | null => {
   const c = Math.floor(x) - PAD, r = Math.floor(y) - PAD;
   if (c < 0 || c >= COLS || r < 0) return null;
@@ -88,7 +93,7 @@ export function drawScene(
   h: number,
   base: HTMLCanvasElement,
   v: View,
-  opts: { terrain: Terrain; claimed: Set<number>; tiles: string; selected: number | null; time: number; labels: { bridge: string; harbour: string; station: string; zones: { name: string; c: number; r: number; color: [number, number, number] }[] } },
+  opts: { terrain: Terrain; claimed: Set<number>; tiles: string; selected: { c: number; r: number } | null; time: number; labels: { bridge: string; harbour: string; station: string; zones: { name: string; c: number; r: number; color: [number, number, number] }[] } },
 ) {
   ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = "#12406e";
@@ -203,7 +208,7 @@ export function drawScene(
 
   // selected cell
   if (opts.selected != null) {
-    const p = at(opts.selected % COLS, Math.floor(opts.selected / COLS));
+    const p = at(opts.selected.c, opts.selected.r);
     const s = Math.max(v.scale, 6);
     const off = (s - v.scale) / 2;
     ctx.strokeStyle = "#fff";
