@@ -18,11 +18,11 @@ export type Result<T> = { ok: true; data: T; error?: undefined } | { ok: false; 
 
 export type ChainId = "cronos" | "polygon" | "ethereum" | "bitcoin";
 export interface Chain { id: ChainId; name: string; family: "evm" | "btc"; chainId: number | null; explorer: string; enabled: boolean }
-export type Kind = "land" | "house" | "car" | "asset" | "tower";
+export type Kind = "land" | "house" | "car" | "asset" | "tower" | "planet";
 export interface Collection { id: number; chain: ChainId; contract: string; name: string; kind: Kind; swapTide: number; allowPlot: boolean; note: string | null; enabled?: boolean; swapped?: number }
 export type SwapStatus = "open" | "done" | "rejected" | "cancelled";
 export interface Swap {
-  id: number; collectionId: number; collection: string; chain: ChainId; contract: string; tokenId: string; choice: "plot" | "tide" | "apartment";
+  id: number; collectionId: number; collection: string; chain: ChainId; contract: string; tokenId: string; choice: "plot" | "tide" | "apartment" | "planet";
   status: SwapStatus; fee: number; plotId: number | null; plotAddress: string | null; tide: number; reason: string | null;
   owner: string | null; createdAt: string; doneAt: string | null; resident?: string;
   apartment?: { tower: TowerId; towerName: string; floor: number; number: string; type: string } | null;
