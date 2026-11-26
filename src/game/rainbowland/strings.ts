@@ -40,7 +40,7 @@ const en = {
   tierNames: { common: "Common", rare: "Rare", epic: "Epic", legendary: "Legendary", cyber: "Cyber" } satisfies Record<Tier, string>,
   tierLine: (tiles: number, price: number, pct: number) => `${tiles} ${tiles === 1 ? "cell" : "cells"} · ${tide(price)}${pct ? ` · +${pct}% subsoil` : ""}`,
   tierNote:
-    "The tier comes from the rarity written in the LAND itself: superheavy elements, Diamond and Mythical are Legendary; precious metals, radioactive elements and royal gems are Epic; rare earths and gems are Rare; Cyber land glows neon.",
+    "The tier comes from the rarity written in the LAND itself: Diamond, Mythical and the heaviest elements are Legendary; superheavy elements, gold, platinum and royal gems are Epic; radioactive elements and gems are Rare; about half the land is Common. Cyber land glows neon.",
   zones: "Zones",
   zonesNote: "Seven zones run west to east, one for each colour of the rainbow.",
   getThere: "Getting there",

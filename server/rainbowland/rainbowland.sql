@@ -73,31 +73,30 @@ WHERE chain = 'cronos' AND contract = '0x3ff260ce7a8dfcadaf5e880137ee1750ceae988
   AND (name, swap_tide, enabled) IS DISTINCT FROM ('Rainbowland LAND', 0::bigint, true);
 
 -- Rarity names in the LAND metadata are chemical elements, gems and a few words, spread
--- evenly over the tokens. Their tier follows what the name is:
+-- evenly over the tokens (about 120 names). Their tier follows what the name is, sized so
+-- that about half of the land is common and few are legendary:
 --   cyber:     any name with Cyber in it
---   legendary: superheavy elements (104+), Diamond, Legendary, Mythical, Cosmic, Ultra Rare
---   epic:      precious metals, radioactive elements and actinides, Sapphire, Emerald, Ruby,
---              Epic, Mystic, Enchanted, Medieval
---   rare:      rare earths (lanthanides, Scandium, Yttrium), alkali metals of the heavy end,
---              gems, Rare
---   common:    every other element and word (Zinc, Iron, Uncommon...)
+--   legendary: Diamond, Legendary, Mythical, Ultra Rare, Cosmic, and the three heaviest
+--              elements (Oganesson, Tennessine, Livermorium)
+--   epic:      the other superheavy elements (104 to 115), Gold, Platinum, Iridium, Osmium,
+--              Rhodium, Sapphire, Emerald, Ruby, Epic, Mystic, Enchanted
+--   rare:      radioactive elements and actinides, Scandium, Yttrium, Cesium, Silver,
+--              Palladium, Ruthenium, the other gems, Rare, Medieval
+--   common:    every other element and word (Zinc, Iron, the lanthanides, Uncommon...)
 -- Only names not mapped yet are added, so a change by the founder stays.
 CREATE OR REPLACE FUNCTION aquaterra_rainbow_name_tier(n text) RETURNS text LANGUAGE sql IMMUTABLE AS $fn$
   SELECT CASE
     WHEN n ILIKE '%cyber%' THEN 'cyber'
+    WHEN lower(n) IN ('diamond', 'legendary', 'mythical', 'ultra rare', 'cosmic', 'oganesson', 'tennessine', 'livermorium') THEN 'legendary'
     WHEN lower(n) IN ('rutherfordium', 'dubnium', 'seaborgium', 'bohrium', 'hassium', 'meitnerium', 'darmstadtium',
-      'roentgenium', 'copernicium', 'nihonium', 'flerovium', 'moscovium', 'livermorium', 'tennessine', 'oganesson',
-      'diamond', 'legendary', 'mythical', 'cosmic', 'ultra rare') THEN 'legendary'
-    WHEN lower(n) IN ('gold', 'platinum', 'iridium', 'osmium', 'rhodium', 'palladium', 'ruthenium', 'rhenium',
-      'polonium', 'astatine', 'radon', 'francium', 'radium', 'actinium', 'thorium', 'protactinium', 'uranium',
+      'roentgenium', 'copernicium', 'nihonium', 'flerovium', 'moscovium',
+      'gold', 'platinum', 'iridium', 'osmium', 'rhodium', 'sapphire', 'emerald', 'ruby', 'epic', 'mystic', 'enchanted') THEN 'epic'
+    WHEN lower(n) IN ('polonium', 'astatine', 'radon', 'francium', 'radium', 'actinium', 'thorium', 'protactinium', 'uranium',
       'neptunium', 'plutonium', 'americium', 'curium', 'berkelium', 'californium', 'einsteinium', 'fermium',
       'mendelevium', 'nobelium', 'lawrencium', 'technetium', 'promethium',
-      'sapphire', 'emerald', 'ruby', 'epic', 'mystic', 'enchanted', 'medieval') THEN 'epic'
-    WHEN lower(n) IN ('scandium', 'yttrium', 'lanthanum', 'cerium', 'praseodymium', 'neodymium', 'samarium',
-      'europium', 'gadolinium', 'terbium', 'dysprosium', 'holmium', 'erbium', 'thulium', 'ytterbium', 'lutetium',
-      'cesium', 'caesium', 'rubidium', 'silver', 'tantalum', 'hafnium', 'germanium', 'indium', 'tellurium', 'thallium',
+      'scandium', 'yttrium', 'cesium', 'caesium', 'silver', 'palladium', 'ruthenium', 'rhenium',
       'topaz', 'amber', 'citrine', 'garnet', 'zircon', 'rose quartz', 'tourmaline', 'amethyst', 'opal', 'jade',
-      'pearl', 'onyx', 'quartz', 'aquamarine', 'peridot', 'rare') THEN 'rare'
+      'pearl', 'onyx', 'quartz', 'aquamarine', 'peridot', 'rare', 'medieval') THEN 'rare'
     ELSE 'common' END
 $fn$;
 
@@ -106,13 +105,13 @@ SELECT rarity, aquaterra_rainbow_name_tier(rarity), count(*)::int
 FROM aquaterra_rainbow_meta WHERE coalesce(rarity, '') <> '' GROUP BY rarity
 ON CONFLICT (rarity) DO UPDATE SET tokens = EXCLUDED.tokens WHERE aquaterra_rainbow_rarity.tokens <> EXCLUDED.tokens;
 
--- Rarities first mapped by an earlier, frequency-based rule (2026-11-26, a few minutes in prod,
--- nobody had swapped yet): put them on the name rule. Guarded so later founder edits stay.
+-- Rarities mapped by earlier rules on 2026-11-26 (before any LAND was swapped): put them on
+-- the current rule once. Guarded so later founder edits stay.
 DO $do$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM aquaterra_heritage_settings WHERE key = 'rainbow_tiers_by_name') THEN
+  IF NOT EXISTS (SELECT 1 FROM aquaterra_heritage_settings WHERE key = 'rainbow_tiers_v2') THEN
     UPDATE aquaterra_rainbow_rarity SET tier = aquaterra_rainbow_name_tier(rarity);
-    INSERT INTO aquaterra_heritage_settings (key, value) VALUES ('rainbow_tiers_by_name', 'yes');
+    INSERT INTO aquaterra_heritage_settings (key, value) VALUES ('rainbow_tiers_v2', 'yes');
   END IF;
 END $do$;
 

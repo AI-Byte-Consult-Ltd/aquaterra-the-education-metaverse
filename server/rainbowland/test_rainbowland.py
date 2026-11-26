@@ -57,7 +57,7 @@ col = psql("SELECT name || '|' || swap_tide || '|' || enabled FROM aquaterra_nft
 check(col == "Rainbowland LAND|0|true", "LAND collection switched on, no Tide")
 check(psql("SELECT tier FROM aquaterra_rainbow_rarity WHERE rarity = 'Zinc'") == "common", "Zinc is common")
 check(psql("SELECT tier FROM aquaterra_rainbow_rarity WHERE rarity = 'Cesium'") == "rare", "Cesium is rare")
-check(psql("SELECT aquaterra_rainbow_name_tier('Tennessine') || aquaterra_rainbow_name_tier('Plutonium')") == "legendaryepic", "superheavy legendary, actinide epic")
+check(psql("SELECT aquaterra_rainbow_name_tier('Tennessine') || aquaterra_rainbow_name_tier('Plutonium')") == "legendaryrare", "Tennessine legendary, actinide rare")
 check(psql("SELECT tier FROM aquaterra_rainbow_rarity WHERE rarity = 'Cyber'") == "cyber", "Cyber is cyber")
 check(psql("SELECT tier FROM aquaterra_rainbow_rarity WHERE rarity = 'Topaz'") == "rare", "Topaz is rare")
 check(psql("SELECT aquaterra_rainbow_x(5601) || ',' || aquaterra_rainbow_y(5601)") == "353,-120", "token 5601 is LAND (353, -120)")
