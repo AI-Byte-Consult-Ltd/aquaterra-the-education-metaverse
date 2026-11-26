@@ -80,13 +80,13 @@ const Heritage = () => {
     void refresh();
   };
 
-  const cols = (me?.collections ?? []).filter((c) => c.kind !== "tower");
+  const cols = me?.collections ?? [];
   const col = cols.find((c) => c.id === colId) ?? cols[0] ?? null;
-  const plotOk = !!col?.allowPlot && (me?.reserve ?? 0) > 0;
+  const isTower = col?.kind === "tower";
+  const plotOk = !isTower && !!col?.allowPlot && (me?.reserve ?? 0) > 0;
   const pick = plotOk ? choice : "tide";
   const evmChains = new Set((me?.chains ?? []).filter((c) => c.family === "evm" && c.enabled).map((c) => c.id));
   const chainName = (id: string) => me?.chains.find((c) => c.id === id)?.name ?? id;
-  const tower = me?.collections.find((c) => c.kind === "tower");
 
   return (
     <Shell title={t.title} icon={Anchor} accent="text-cyan-300">
@@ -163,6 +163,9 @@ const Heritage = () => {
                   <input className={input} inputMode="numeric" value={token} onChange={(e) => setToken(e.target.value.replace(/\D/g, "").slice(0, 78))} placeholder="1234" />
                   <span className="block text-xs text-muted-foreground">{t.tokenHint}</span>
                 </label>
+                {isTower ? (
+                  <p className="rounded-lg border border-cyan-300 bg-cyan-400/10 px-2 py-2 text-sm">{t.getApartment(col!.name)}</p>
+                ) : (
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <button type="button" disabled={!plotOk} onClick={() => setChoice("plot")}
                     className={`rounded-lg border px-2 py-2 text-left disabled:opacity-40 ${pick === "plot" ? "border-cyan-300 bg-cyan-400/10" : "border-border"}`}>
@@ -173,6 +176,7 @@ const Heritage = () => {
                     {t.getTide(col?.swapTide ?? 0)}
                   </button>
                 </div>
+                )}
                 <button className={`${btnMain} w-full`} disabled={!!busy || !token || me.wallets.length === 0}>
                   {busy === "swap" && <Loader2 className="h-4 w-4 animate-spin" />}
                   {busy === "swap" ? t.checking : t.start(me.fee)}
@@ -194,7 +198,7 @@ const Heritage = () => {
                       <span className="font-semibold">{s.collection} #{s.tokenId}</span>
                       <span className={statusColour[s.status]}>{t.status[s.status]}</span>
                     </div>
-                    {s.status === "done" && <p className="mt-1 text-emerald-200">{s.plotAddress ? t.gotPlot(s.plotAddress) : t.gotTide(s.tide)}</p>}
+                    {s.status === "done" && <p className="mt-1 text-emerald-200">{s.apartment ? t.gotApartment(s.apartment.towerName, s.apartment.number, s.apartment.floor) : s.plotAddress ? t.gotPlot(s.plotAddress) : t.gotTide(s.tide)}</p>}
                     {s.status === "open" && me.vault && (
                       <div className="mt-2 space-y-2">
                         <p className="text-xs text-muted-foreground">{t.sendTo}</p>
@@ -224,7 +228,7 @@ const Heritage = () => {
             <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
               {t.steps.map((s) => <li key={s}>{s}</li>)}
             </ol>
-            {tower && <p className="text-xs text-muted-foreground">{t.towerNote}</p>}
+            <p className="text-xs text-muted-foreground">{t.towerNote}</p>
           </Panel>
         </div>
       )}

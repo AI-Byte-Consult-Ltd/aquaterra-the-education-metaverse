@@ -7,6 +7,9 @@ import { useLanguage } from "@/i18n/LanguageContext";
 import { DEFAULT_WORLD, findPlotByAddress, generateWorld, type Kind, type Plot, type World } from "@/game/world/generator";
 import { buildingFor, builtBuilding, hasHouse, type Built } from "@/game/world/buildings";
 import PlotView from "@/game/build/PlotView";
+import TowerPanel from "@/game/heritage/TowerPanel";
+import type { TowerId } from "@/game/heritage/api";
+import { towerOnPlot } from "@/game/world/landmarks";
 import PlotPreview from "@/game/build/PlotPreview";
 import { fetchBuildMap, fetchMyBuildings, toBuilt, type BuildRules, type MyBuilding } from "@/game/build/api";
 import { buildStrings } from "@/game/build/strings";
@@ -50,11 +53,10 @@ const ARCADE_GLYPH: Record<MapAttraction["template"], string> = { quiz: "?", cry
 /** One tile is 20 × 20 m in the game world. */
 const TILE_M2 = 400;
 const TILE_M = 20;
-const TOWER_CONTRACT = "0x3720cde69e4e997bbdeaec7b4e7b5f8c3c406869";
 
 type Selection =
   | { kind: "plot"; plot: Plot }
-  | { kind: "tower" }
+  | { kind: "tower"; id?: TowerId }
   | { kind: "civic"; id: CivicId }
   | { kind: "tile"; tile: Kind; district: number }
   | { kind: "hub"; id: string }
@@ -315,7 +317,8 @@ const City = () => {
       const r = rendererRef.current;
       if (!r) return;
       r.selectedPlot = s?.kind === "plot" ? s.plot.id : null;
-      r.towerSelected = s?.kind === "tower";
+      r.towerSelected = s?.kind === "tower" && (s.id ?? "first-light") === "first-light";
+      r.secondSelected = s?.kind === "tower" && s.id === "second-light";
       r.selectedCivic = s?.kind === "civic" ? s.id : null;
       if (focus && s?.kind === "hub" && netRef.current) {
         const h = netRef.current.hubs.find((x) => x.id === s.id);
@@ -326,7 +329,10 @@ const City = () => {
         // on phones the card covers the lower half: show the plot above it
         if (window.innerWidth < 768) r.pan(0, -window.innerHeight * 0.2);
       }
-      if (focus && s?.kind === "tower") r.focusTower(0.6);
+      if (focus && s?.kind === "tower") {
+        if (s.id === "second-light") r.focusSecond();
+        else r.focusTower(0.6);
+      }
       const next = new URLSearchParams(params);
       // links name the address, which never changes; ids may shift as the world grows
       next.delete("plot");
@@ -334,7 +340,7 @@ const City = () => {
       else next.delete("at");
       setParams(next, { replace: true });
     },
-    [params, setParams],
+    [params, setParams, city],
   );
 
   // deep link: /world?at=12 Coral Street (older links: ?plot=123)
@@ -451,8 +457,9 @@ const City = () => {
       if (pointers.size < 2) pinchDist = 0;
       if (!r || !wasTap) return;
       const pick = r.pick(p.x, p.y);
-      if (pick?.kind === "plot") select({ kind: "plot", plot: city.plots[pick.plotId] });
-      else if (pick?.kind === "tower") select({ kind: "tower" });
+      if (pick?.kind === "plot" && towerOnPlot(city, pick.plotId)) select({ kind: "tower", id: "second-light" });
+      else if (pick?.kind === "plot") select({ kind: "plot", plot: city.plots[pick.plotId] });
+      else if (pick?.kind === "tower") select({ kind: "tower", id: pick.id });
       else if (pick?.kind === "civic") select({ kind: "civic", id: pick.id });
       else if (pick?.kind === "tile") {
         const reach = HUB_TILES[pick.tile];
@@ -696,6 +703,7 @@ const City = () => {
             { icon: Maximize2, label: "fit", on: () => rendererRef.current?.fit() },
             { icon: RotateCcw, label: t.rotateLeft, on: () => rotate(-1) },
             { icon: RotateCw, label: t.rotateRight, on: () => rotate(1) },
+            { icon: Landmark, label: "Second Light Tower", on: () => select({ kind: "tower", id: "second-light" }, true) },
             { icon: Building2, label: t.tower, on: () => select({ kind: "tower" }, true) },
             ...(player ? [{ icon: HelpCircle, label: tTour.label, on: () => { select(null); setTourOpen(true); } }] : []),
           ].map(({ icon: Icon, label, on }) => (
@@ -826,35 +834,20 @@ const City = () => {
                 )}
               </div>
             ) : (
-              <div className="space-y-3 pr-6">
-                <div className="flex items-center gap-2">
-                  <Building2 className="h-5 w-5 text-primary" />
-                  <h2 className="font-display text-lg font-bold">{t.tower}</h2>
-                </div>
-                <p className="text-sm text-muted-foreground">{t.towerAbout}</p>
-                <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
-                  <dt className="text-muted-foreground">{t.floors}</dt>
-                  <dd className="font-medium">108</dd>
-                  <dt className="text-muted-foreground">{t.apartments}</dt>
-                  <dd className="font-medium">{fmt(1200)}</dd>
-                  <dt className="text-muted-foreground">{t.aiStatus}</dt>
-                  <dd className="col-span-2 text-xs">{t.aiStatusValue}</dd>
-                </dl>
-                <a
-                  href={`https://explorer.cronos.org/token/${TOWER_CONTRACT}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-                >
-                  <Link2 className="h-4 w-4" />
-                  {t.contract}
-                </a>
-                <NicsChatButton className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-cyan-400 text-sm font-semibold text-black hover:bg-cyan-300" />
-                <Link to="/state/council" className="flex items-center gap-1.5 text-sm text-amber-300 hover:underline">
-                  <Crown className="h-4 w-4" />
-                  {ta.councilName}
-                </Link>
-              </div>
+              <TowerPanel tower={selection.id ?? "first-light"} session={session} language={language}>
+                {(selection.id ?? "first-light") === "first-light" && (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      {t.aiStatus}: {t.aiStatusValue}
+                    </p>
+                    <NicsChatButton className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-cyan-400 text-sm font-semibold text-black hover:bg-cyan-300" />
+                    <Link to="/state/council" className="flex items-center gap-1.5 text-sm text-amber-300 hover:underline">
+                      <Crown className="h-4 w-4" />
+                      {ta.councilName}
+                    </Link>
+                  </>
+                )}
+              </TowerPanel>
             )}
           </aside>
         )}
