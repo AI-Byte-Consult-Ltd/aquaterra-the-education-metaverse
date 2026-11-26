@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { useAccount } from "@/game/account/AccountContext";
+import { checkModelAnswer } from "@/game/nics/answer";
 import { Brain, Cpu, Database, Loader2, Sprout } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { Shell } from "@/game/state/ui";
-import { Panel, btnMain, btnSoft } from "@/game/bank/ui";
-import { fetchMindStatus, type MindRelease, type MindStatus } from "@/game/mind/api";
+import { Panel, btnSoft } from "@/game/bank/ui";
+import { askMind, fetchMindStatus, type MindStatus } from "@/game/mind/api";
 import { mindStrings } from "@/game/mind/strings";
 import { EXAM, sampleFacts } from "@/game/mind/prompt";
 import type { Topic } from "@/game/nics/topics";
@@ -15,55 +18,41 @@ const Num = ({ label, v }: { label: string; v: number }) => (
   </div>
 );
 
-/** Try the live release in a Web Worker: download, check sha256, answer on the device. */
-function TryLive({ r, t }: { r: MindRelease; t: ReturnType<typeof mindStrings> }) {
-  const worker = useRef<Worker | null>(null);
-  const [state, setState] = useState<"idle" | "loading" | "ready" | "thinking" | "error">("idle");
-  const [bytes, setBytes] = useState(0);
+/** Ask the live release; it runs on the server, the page only gets the checked answer. */
+function TryLive({ t }: { t: ReturnType<typeof mindStrings> }) {
+  const { session } = useAccount();
   const [pick, setPick] = useState(0);
+  const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState<string | null | undefined>(undefined);
-  useEffect(() => () => worker.current?.terminate(), []);
-
-  const load = () => {
-    const w = new Worker(new URL("../game/mind/worker.ts", import.meta.url), { type: "module" });
-    worker.current = w;
-    w.onmessage = (e) => {
-      const m = e.data;
-      if (m.type === "progress") setBytes(m.bytes);
-      else if (m.type === "ready") setState("ready");
-      else if (m.type === "answer") {
-        setAnswer(m.text);
-        setState("ready");
-      } else if (m.type === "error") setState("error");
-    };
-    setState("loading");
-    w.postMessage({ type: "load", baseUrl: r.baseUrl });
-  };
-  const ask = () => {
+  const [error, setError] = useState<string | null>(null);
+  const ask = async () => {
+    if (!session) return;
     const [topic, question] = EXAM[pick] as [Topic, string];
-    setState("thinking");
+    setBusy(true);
     setAnswer(undefined);
-    worker.current?.postMessage({ type: "ask", id: Date.now(), topic, question, facts: sampleFacts(topic) });
+    setError(null);
+    const r = await askMind(session, topic, question);
+    setBusy(false);
+    if (r.ok === false) setError(r.error === "too_many" ? t.tooMany : t.loadError);
+    else setAnswer(r.text === null ? null : checkModelAnswer(r.text, topic, sampleFacts(topic)));
   };
-
   return (
     <Panel title={t.tryTitle} icon={Cpu}>
-      <p className="text-sm text-muted-foreground">{t.tryNote(r.weightsBytes)}</p>
-      {state === "idle" && <button type="button" className={btnMain} onClick={load}><Brain className="h-4 w-4" />{t.load}</button>}
-      {state === "loading" && <p className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" />{t.loading(bytes, r.weightsBytes)}</p>}
-      {state === "error" && <p className="text-sm text-red-300">{t.loadError}</p>}
-      {(state === "ready" || state === "thinking") && (
+      <p className="text-sm text-muted-foreground">{t.tryNote}</p>
+      {!session ? (
+        <Link to="/login" className="text-sm text-primary underline">{t.signIn}</Link>
+      ) : (
         <div className="space-y-3">
-          <p className="text-sm text-emerald-300">{t.ready}</p>
           <p className="text-xs text-muted-foreground">{t.sample}</p>
           <div className="flex flex-wrap gap-2">
-            <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" value={pick} onChange={(e) => setPick(Number(e.target.value))}>
+            <select className="h-9 max-w-full rounded-md border border-border bg-background px-2 text-sm" value={pick} onChange={(e) => setPick(Number(e.target.value))}>
               {EXAM.map(([topic, q], i) => <option key={i} value={i}>{q} ({topic})</option>)}
             </select>
-            <button type="button" className={btnSoft} disabled={state === "thinking"} onClick={ask}>
-              {state === "thinking" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{state === "thinking" ? t.thinking : t.ask}
+            <button type="button" className={btnSoft} disabled={busy} onClick={() => void ask()}>
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{busy ? t.thinking : t.ask}
             </button>
           </div>
+          {error && <p className="text-sm text-amber-200">{error}</p>}
           {answer !== undefined && (answer ? <p className="rounded-lg border border-cyan-400/40 bg-cyan-400/10 p-3 text-sm">{answer}</p> : <p className="text-sm text-amber-200">{t.failedCheck}</p>)}
         </div>
       )}
@@ -98,7 +87,7 @@ const Mind = () => {
             )}
             <p className="text-xs text-muted-foreground">{t.examRule(s.examMin)}</p>
           </Panel>
-          {s.live && <TryLive r={s.live} t={t} />}
+          {s.live && <TryLive t={t} />}
           <Panel title={t.releasesTitle} icon={Sprout}>
             {s.releases.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t.noReleases}</p>

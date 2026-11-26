@@ -1,7 +1,8 @@
 -- AquaTerra City Mind: the bridge between the game and the NICS lab.
 -- ONE model: NICS Language lives and trains in the NICS lab. The game keeps a register of
--- the lab's numbered releases (the files stay where the lab publishes them), says which one
--- is live, and hands consented game data back to the lab's training.
+-- the lab's numbered releases, says which one is live, answers residents with it ON THE SERVER
+-- (Alexander 2026-11-26: the weights are NICS's own technology; they stay in the private R2
+-- bucket nics-releases and never reach a browser), and hands consented data back to the lab.
 -- n8n "[74 PUBLIC] AquaTerra City Mind" passes each request body to aquaterra_mind(req).
 --
 -- One-off migration (never per request). Safe to run again. Needs nics.sql, governance, quests.
@@ -23,7 +24,7 @@ CREATE TABLE IF NOT EXISTS aquaterra_mind_releases (
   version int PRIMARY KEY,
   model_id text NOT NULL,
   step int NOT NULL,
-  base_url text NOT NULL,           -- folder with manifest.json, weights.bin, tokenizer.json
+  base_url text NOT NULL,           -- key prefix inside the private R2 bucket nics-releases
   manifest jsonb NOT NULL,
   params bigint NOT NULL,
   status text NOT NULL DEFAULT 'shadow' CHECK (status IN ('shadow', 'live', 'retired')),
@@ -38,6 +39,16 @@ CREATE TABLE IF NOT EXISTS aquaterra_mind_muted (
   reason text NOT NULL,
   at timestamptz NOT NULL DEFAULT now()
 );
+
+-- one row per question answered by the model on the server (rate limit, no text kept here)
+CREATE TABLE IF NOT EXISTS aquaterra_mind_asks (
+  id bigserial PRIMARY KEY,
+  resident text NOT NULL,
+  version int NOT NULL,
+  at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS aquaterra_mind_asks_resident ON aquaterra_mind_asks (resident, at);
+INSERT INTO aquaterra_mind_settings (key, value) VALUES ('asks_per_hour', '20') ON CONFLICT (key) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS aquaterra_mind_exports (
   id bigserial PRIMARY KEY,
@@ -56,7 +67,7 @@ LANGUAGE sql IMMUTABLE AS $fn$ SELECT jsonb_build_object('ok', false, 'error', c
 CREATE OR REPLACE FUNCTION aquaterra_mind_pub(r aquaterra_mind_releases) RETURNS jsonb
 LANGUAGE sql STABLE AS $fn$
   SELECT jsonb_build_object('version', r.version, 'modelId', r.model_id, 'step', r.step, 'params', r.params,
-    'status', r.status, 'baseUrl', r.base_url, 'weightsBytes', r.params * CASE WHEN r.manifest->>'dtype' = 'f32' THEN 4 ELSE 2 END,
+    'status', r.status, 'weightsBytes', r.params * CASE WHEN r.manifest->>'dtype' = 'f32' THEN 4 ELSE 2 END,
     'eval', COALESCE(r.manifest->'eval', '{}'::jsonb), 'exam', r.exam,
     'registeredAt', r.registered_at, 'liveAt', r.live_at)
 $fn$;
@@ -107,6 +118,7 @@ DECLARE
   r aquaterra_mind_releases;
   rate numeric;
   arch_ok boolean;
+  who text;
 BEGIN
   IF act = 'status' THEN
     RETURN jsonb_build_object('ok', true,
@@ -124,6 +136,26 @@ BEGIN
   END IF;
 
   -- everything below is for the lab only
+  -- a resident's question for the live release. The answer is computed by n8n on the server
+  -- from the private bucket; this returns where the files are, which n8n never passes on.
+  IF act = 'ask' THEN
+    SELECT s.email INTO who FROM aquaterra_sessions s
+    WHERE s.token_hash = encode(sha256(convert_to(COALESCE(req->>'session', ''), 'UTF8')), 'hex') AND s.expires_at > now();
+    IF who IS NULL THEN RETURN aquaterra_mind_err('session'); END IF;
+    IF NOT (COALESCE(req->>'topic', '') = ANY (ARRAY['greeting', 'about_nics', 'wallet', 'my_plots', 'buy_land', 'earn', 'treasury', 'laws',
+        'council', 'elections', 'vote', 'home', 'tower', 'travel', 'help', 'unknown'])) THEN RETURN aquaterra_mind_err('topic'); END IF;
+    IF length(COALESCE(req->>'question', '')) > 300 THEN RETURN aquaterra_mind_err('length'); END IF;
+    SELECT * INTO r FROM aquaterra_mind_releases WHERE status = 'live';
+    IF r.version IS NULL THEN RETURN aquaterra_mind_err('no_live'); END IF;
+    who := aquaterra_nics_resident(who);
+    SELECT count(*) INTO n FROM aquaterra_mind_asks WHERE resident = who AND at > now() - interval '1 hour';
+    IF n >= COALESCE(aquaterra_mind_setting('asks_per_hour'), '20')::int THEN RETURN aquaterra_mind_err('too_many'); END IF;
+    INSERT INTO aquaterra_mind_asks (resident, version) VALUES (who, r.version);
+    RETURN jsonb_build_object('ok', true, 'version', r.version, 'topic', req->>'topic', 'question', COALESCE(req->>'question', ''),
+      'run', jsonb_build_object('prefix', r.base_url, 'weights', r.manifest->>'weights_file', 'tokenizer', r.manifest->>'tokenizer_file',
+        'weights_sha256', r.manifest->>'weights_sha256', 'tokenizer_sha256', r.manifest->>'tokenizer_sha256', 'manifest', r.manifest));
+  END IF;
+
   IF act IN ('release', 'promote', 'retire') THEN
     IF COALESCE(req->>'key', '') = '' OR req->>'key' <> COALESCE(aquaterra_mind_setting('release_key'), '') THEN
       RETURN aquaterra_mind_err('forbidden');
@@ -139,7 +171,7 @@ BEGIN
   IF act = 'release' THEN
     IF jsonb_typeof(m) <> 'object' OR m->>'format' IS DISTINCT FROM 'nics-release-v1' THEN RETURN aquaterra_mind_err('format'); END IF;
     IF COALESCE(m->>'version', '') !~ '^[0-9]{1,6}\Z' OR COALESCE(m->>'step', '') !~ '^[0-9]{1,9}\Z' THEN RETURN aquaterra_mind_err('version'); END IF;
-    IF COALESCE(req->>'baseUrl', '') !~ '^https://[A-Za-z0-9.-]+(/[A-Za-z0-9._~/-]*)?\Z' THEN RETURN aquaterra_mind_err('url'); END IF;
+    IF COALESCE(req->>'prefix', '') !~ '^[a-z0-9][a-z0-9._-]{0,80}(/[a-z0-9._-]{1,80}){0,4}\Z' THEN RETURN aquaterra_mind_err('prefix'); END IF;
     IF COALESCE(m->>'weights_sha256', '') !~ '^[0-9a-f]{64}\Z' OR COALESCE(m->>'tokenizer_sha256', '') !~ '^[0-9a-f]{64}\Z' THEN
       RETURN aquaterra_mind_err('checksum');
     END IF;
@@ -151,7 +183,7 @@ BEGIN
     IF EXISTS (SELECT 1 FROM aquaterra_mind_releases WHERE version = v) THEN RETURN aquaterra_mind_err('exists'); END IF;
     IF v <= COALESCE((SELECT max(version) FROM aquaterra_mind_releases), 0) THEN RETURN aquaterra_mind_err('older'); END IF;
     INSERT INTO aquaterra_mind_releases (version, model_id, step, base_url, manifest, params)
-    VALUES (v, left(COALESCE(m->>'model_id', 'nics'), 60), (m->>'step')::int, rtrim(req->>'baseUrl', '/'), m, aquaterra_mind_params(m))
+    VALUES (v, left(COALESCE(m->>'model_id', 'nics'), 60), (m->>'step')::int, req->>'prefix', m, aquaterra_mind_params(m))
     RETURNING * INTO r;
     RETURN jsonb_build_object('ok', true, 'release', aquaterra_mind_pub(r));
   END IF;
