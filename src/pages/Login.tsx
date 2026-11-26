@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Loader2, Mail } from "lucide-react";
+import { ArrowLeft, Loader2, Mail, Wallet } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { useAccount } from "@/game/account/AccountContext";
-import { requestCode, safeNext, validEmail, verifyCode, type AccountError } from "@/game/account/api";
+import { fetchMe, requestCode, safeNext, validEmail, verifyCode, type AccountError } from "@/game/account/api";
+import { loginChallenge, walletLogin } from "@/game/heritage/api";
+import { connectWallet, hasWalletApp, signText } from "@/game/heritage/wallet";
+import { heritageStrings } from "@/game/heritage/strings";
 import { accountStrings } from "@/game/account/strings";
 import { termsStrings } from "@/game/account/terms";
 
@@ -40,6 +43,29 @@ const Login = () => {
     if (!r.ok) return setError(r.error);
     setCode("");
     setStep("code");
+  };
+
+  const [walletError, setWalletError] = useState<string | null>(null);
+  const th = heritageStrings(language);
+  const withWallet = async () => {
+    setBusy(true);
+    setWalletError(null);
+    try {
+      const a = await connectWallet();
+      if (!a.ok) return setWalletError(th.errors[a.error]);
+      const c = await loginChallenge(a.value);
+      if (!c.ok) return setWalletError(th.errors[c.error]);
+      const sg = await signText(a.value, c.data.message);
+      if (!sg.ok) return setWalletError(th.errors[sg.error]);
+      const r = await walletLogin(c.data.message, sg.value);
+      if (!r.ok) return setWalletError(th.errors[r.error]);
+      const m = await fetchMe(r.data.session);
+      if (!m.ok) return setWalletError(th.errors.network);
+      signIn({ session: r.data.session, player: m.data.player });
+      navigate(next, { replace: true });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const verify = async (e: FormEvent) => {
@@ -100,6 +126,16 @@ const Login = () => {
                 {busy ? t.sending : t.sendCode}
               </button>
               <p className="text-xs text-muted-foreground">{t.newHere}</p>
+              {hasWalletApp() && (
+                <div className="space-y-1 border-t border-border pt-4">
+                  <button type="button" onClick={withWallet} disabled={busy}
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-cyan-400/50 text-sm font-semibold text-cyan-200 hover:bg-cyan-400/10 disabled:opacity-60">
+                    <Wallet className="h-4 w-4" />
+                    {th.loginWithWallet}
+                  </button>
+                  {walletError ? <p role="alert" className="text-sm text-destructive">{walletError}</p> : <p className="text-xs text-muted-foreground">{th.loginWalletHint}</p>}
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">
                 <Link to="/terms" className="hover:text-foreground hover:underline">{termsStrings(language).title}</Link>
               </p>

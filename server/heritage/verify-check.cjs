@@ -1,0 +1,15 @@
+// node server/heritage/verify-check.cjs — vectors signed with ethers v6 (Wallet.signMessage).
+const { recoverPersonal, keccak256 } = require('./verify.cjs');
+const V = [{"msg":"AquaTerra World\nLink this wallet to the account of Test 0 ✓\nWallet: 0x2915ffe2bec4d12229c9b48a7952f7bc250e01f1\nCode: abababababababababababababababab\nThis signature costs nothing and moves no funds.","sig":"0x16bb7369ddd91fc2426ce4d007f60935cdcb0fc1521056ac57df318134ece04c7107dabe67dc2216df44ee4fab495ffb946ca66cfa84167a60353bcdd81985c51b","addr":"0x2915ffe2bec4d12229c9b48a7952f7bc250e01f1"},{"msg":"AquaTerra World\nLink this wallet to the account of Test 1 ✓\nWallet: 0xa4ece60f085e293147bc5396dc4a786809228310\nCode: abababababababababababababababab\nThis signature costs nothing and moves no funds.","sig":"0x64fb90f35266bd99b8b855930c61f88dee75b04a2aecd7b783c9d45db62857745fc8d09d1ff7e3ae5fb6d2bcaf81b5b3a4dc50bc55b66a512a1e1e99f85972db1c","addr":"0xa4ece60f085e293147bc5396dc4a786809228310"},{"msg":"AquaTerra World\nLink this wallet to the account of Test 2 ✓\nWallet: 0x82d3056c5d0c34bfd9a9be90913bbafacc811801\nCode: abababababababababababababababab\nThis signature costs nothing and moves no funds.","sig":"0x9b75503896d47fb1d109acbef83e5132e458867d1357ae64ceea3dc0b1cbf31c40a24cc36dad8e9e8b55075cc58947dfbb44dd43adc4feb5925abd31be4da54f1c","addr":"0x82d3056c5d0c34bfd9a9be90913bbafacc811801"},{"msg":"AquaTerra World\nLink this wallet to the account of Test 3 ✓\nWallet: 0x14f18c2eca6e18b5963b134ca7dafd1205e8d132\nCode: abababababababababababababababab\nThis signature costs nothing and moves no funds.","sig":"0xdbc1fc6c92744c1314a7071028c6a094996177101c57f4685e7b85cdf9461a2c4bed6ac5ca0486e245e8c40bbda1f13b7d9bc468910850c0274bc5117cd028371b","addr":"0x14f18c2eca6e18b5963b134ca7dafd1205e8d132"},{"msg":"AquaTerra World\nLink this wallet to the account of Test 4 ✓\nWallet: 0x3ede99db5ed6336e8138b79ea9e6a538364a2d1b\nCode: abababababababababababababababab\nThis signature costs nothing and moves no funds.","sig":"0x303041f7ad30bcfebb2423e4907eece777830d7e5d586e5973eb87ec8d3d53fe2b446b2ddb4049cc150aef3c12a9082ca99d95f8f22f89f59068730a4a98b82d1b","addr":"0x3ede99db5ed6336e8138b79ea9e6a538364a2d1b"},{"kec":"0x956875d0d3af4718863b89e475911881cebd1cd08cfe3c2fcd0890d29def1e37"}];
+let n = 0;
+const ok = (c, m) => { if (!c) { console.error('FAIL: ' + m); process.exit(1); } n++; };
+const hex = (b) => '0x' + Buffer.from(b).toString('hex');
+ok(hex(keccak256(new Uint8Array())) === '0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470', 'keccak empty');
+ok(hex(keccak256(Buffer.from('x'.repeat(300)))) === V[V.length - 1].kec, 'keccak 300 bytes');
+for (const t of V.slice(0, -1)) {
+  ok(recoverPersonal(t.msg, t.sig) === t.addr, 'recover ' + t.addr);
+  ok(recoverPersonal(t.msg + ' ', t.sig) !== t.addr, 'other message');
+  ok(recoverPersonal(t.msg, t.sig.slice(0, -2) + '1f') !== t.addr, 'other v');
+}
+ok(recoverPersonal('x', '0x00') === null, 'bad signature');
+console.log('verify: ' + n + ' checks passed');

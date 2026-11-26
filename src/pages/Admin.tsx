@@ -9,6 +9,7 @@ import AdminEconomy from "@/game/economy/AdminEconomy";
 import { AdminTreasury } from "@/game/bank/ui";
 import AdminBuild from "@/game/build/AdminBuild";
 import AdminExchange from "@/game/exchange/AdminExchange";
+import AdminHeritage from "@/game/heritage/AdminHeritage";
 
 /** Founder and admins: who has entered the world. The server checks the role too. */
 const Admin = () => {
@@ -118,6 +119,11 @@ const Admin = () => {
         {!denied && player && isStaff(player) && (
           <section className="mt-10 border-t border-border pt-6">
             <AdminExchange founder={player.role === "founder"} />
+          </section>
+        )}
+        {!denied && player && isStaff(player) && (
+          <section className="mt-10 border-t border-border pt-6">
+            <AdminHeritage founder={player.role === "founder"} />
           </section>
         )}
       </main>
