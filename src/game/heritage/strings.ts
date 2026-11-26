@@ -39,9 +39,11 @@ const en = {
   towerNote: "Radiant Residences NFTs swap 1:1: token N becomes the same apartment (floor, number, view) in the First Light Tower or the Second Light Tower, and earns Tide every day.",
   getPlanet: "You get the same claim in Orbit: one NFT, one claim. It mines its resource every day.",
   listedNote: "Only the tokens listed here swap. Pick yours:",
-  gives: (g: "island" | "house" | "tide", tide: number, tiles: number) =>
-    g === "tide" ? `${tide.toLocaleString("en")} TIDE` : g === "house" ? `A villa on an island of its own (${tiles} tiles)` : `An island of its own (${tiles} tiles)`,
+  gives: (g: "island" | "house" | "tide" | "companion", tide: number, tiles: number) =>
+    g === "companion" ? `Your AI companion + ${tide.toLocaleString("en")} TIDE` : g === "tide" ? `${tide.toLocaleString("en")} TIDE` : g === "house" ? `A villa on an island of its own (${tiles} tiles)` : `An island of its own (${tiles} tiles)`,
   taken: "swapped",
+  companions: "Your AI companions",
+  companionNote: "NICS AI Agents you swapped in. The first one floats next to you on the map.",
   notListed: "This token is not on the list of this collection.",
   gotPlanet: (token: string) => `Orbit claim #${token}`,
   getApartment: (name: string) => `You get the same apartment in the ${name.replace(/ \(.*\)$/, "")}: one NFT, one apartment.`,

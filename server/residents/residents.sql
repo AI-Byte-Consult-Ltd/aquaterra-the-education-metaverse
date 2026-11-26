@@ -29,6 +29,16 @@ $fn$ SELECT ARRAY['drop','explorer','builder','sailor','scholar','pilot','diver'
 CREATE OR REPLACE FUNCTION aquaterra_avatar_json(who text) RETURNS jsonb LANGUAGE sql STABLE AS
 $fn$ SELECT jsonb_build_object('style', p.avatar, 'hue', p.avatar_hue, 'visible', p.on_map) FROM aquaterra_players p WHERE p.email = who $fn$;
 
+-- The first AI companion of a resident (NICS AI Agents swapped in at the Heritage Port), shown
+-- next to their avatar: its name, or null. Safe before the heritage migration.
+CREATE OR REPLACE FUNCTION aquaterra_companion_of(who text) RETURNS text LANGUAGE plpgsql STABLE AS $fn$
+DECLARE v text;
+BEGIN
+  IF to_regclass('aquaterra_companions') IS NULL THEN RETURN NULL; END IF;
+  EXECUTE format('SELECT name FROM aquaterra_companions WHERE email = %L ORDER BY since, token_id LIMIT 1', who) INTO v;
+  RETURN v;
+END $fn$;
+
 -- The residents API. req: {action, session, style?, hue?, visible?}. Returns {ok, ...} or {ok:false, error, status}.
 CREATE OR REPLACE FUNCTION aquaterra_residents(req jsonb) RETURNS jsonb LANGUAGE plpgsql AS $fn$
 DECLARE
@@ -82,11 +92,12 @@ BEGIN
           'hue', r.avatar_hue,
           'x', r.x, 'y', r.y, 'district', r.district_id,
           'online', r.seen > now() - interval '5 minutes',
-          'council', EXISTS (SELECT 1 FROM aquaterra_council c WHERE c.email = r.email))), '[]'::jsonb),
+          'council', EXISTS (SELECT 1 FROM aquaterra_council c WHERE c.email = r.email),
+          'companion', aquaterra_companion_of(r.email))), '[]'::jsonb),
         'online', count(*) FILTER (WHERE r.seen > now() - interval '5 minutes'),
         'recent', count(*))
       INTO res FROM r;
-      res := res || jsonb_build_object('avatar', aquaterra_avatar_json(me));
+      res := res || jsonb_build_object('avatar', aquaterra_avatar_json(me), 'companion', aquaterra_companion_of(me));
     ELSE
       RAISE EXCEPTION 'action';
     END IF;
