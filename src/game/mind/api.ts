@@ -18,6 +18,8 @@ export interface MindRelease {
   exam: { total: number; passed: number; rate: number; at: string } | null;
   registeredAt: string;
   liveAt: string | null;
+  /** live below the exam bar on purpose: the site labels it "experimental, still learning" */
+  experimental?: boolean;
 }
 
 export interface MindStatus {

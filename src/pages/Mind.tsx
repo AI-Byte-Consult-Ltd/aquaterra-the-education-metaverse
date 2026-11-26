@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAccount } from "@/game/account/AccountContext";
-import { checkModelAnswer } from "@/game/nics/answer";
+import { checkExperimentalAnswer, checkModelAnswer } from "@/game/nics/answer";
 import { Brain, Cpu, Database, Loader2, Sprout } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { Shell } from "@/game/state/ui";
@@ -19,7 +19,7 @@ const Num = ({ label, v }: { label: string; v: number }) => (
 );
 
 /** Ask the live release; it runs on the server, the page only gets the checked answer. */
-function TryLive({ t }: { t: ReturnType<typeof mindStrings> }) {
+function TryLive({ t, experimental }: { t: ReturnType<typeof mindStrings>; experimental: boolean }) {
   const { session } = useAccount();
   const [pick, setPick] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -33,12 +33,14 @@ function TryLive({ t }: { t: ReturnType<typeof mindStrings> }) {
     setError(null);
     const r = await askMind(session, topic, question);
     setBusy(false);
-    if (r.ok === false) setError(r.error === "too_many" ? t.tooMany : t.loadError);
-    else setAnswer(r.text === null ? null : checkModelAnswer(r.text, topic, sampleFacts(topic)));
+    if (r.ok === false) setError(r.error === "too_many" ? t.tooMany : r.error === "busy" ? t.busy : t.loadError);
+    else if (r.text === null) setAnswer(null);
+    else setAnswer((experimental ? checkExperimentalAnswer : checkModelAnswer)(r.text, topic, sampleFacts(topic)));
   };
   return (
     <Panel title={t.tryTitle} icon={Cpu}>
       <p className="text-sm text-muted-foreground">{t.tryNote}</p>
+      {experimental && <p className="text-sm text-amber-200">{t.experimentalTry}</p>}
       {!session ? (
         <Link to="/login" className="text-sm text-primary underline">{t.signIn}</Link>
       ) : (
@@ -53,7 +55,7 @@ function TryLive({ t }: { t: ReturnType<typeof mindStrings> }) {
             </button>
           </div>
           {error && <p className="text-sm text-amber-200">{error}</p>}
-          {answer !== undefined && (answer ? <p className="rounded-lg border border-cyan-400/40 bg-cyan-400/10 p-3 text-sm">{answer}</p> : <p className="text-sm text-amber-200">{t.failedCheck}</p>)}
+          {answer !== undefined && (answer ? <p className="rounded-lg border border-cyan-400/40 bg-cyan-400/10 p-3 text-sm">{answer}</p> : <p className="text-sm text-amber-200">{experimental ? t.failedExperimental : t.failedCheck}</p>)}
         </div>
       )}
     </Panel>
@@ -81,13 +83,19 @@ const Mind = () => {
               <div className="space-y-1 text-sm">
                 <p className="font-display text-xl font-bold text-cyan-100">{s.live.modelId} · {t.version(s.live.version)}</p>
                 <p className="text-muted-foreground">{t.params(s.live.params)} · {t.step(s.live.step)} · {s.live.exam ? t.exam(s.live.exam.passed, s.live.exam.total) : t.examNone}</p>
+                {s.live.experimental && (
+                  <>
+                    <p className="inline-block rounded-full border border-amber-300/50 bg-amber-300/10 px-2 py-0.5 text-xs font-semibold text-amber-200">{t.experimental}</p>
+                    <p className="text-xs text-muted-foreground">{t.experimentalNote}</p>
+                  </>
+                )}
               </div>
             ) : (
               <p className="text-sm">{t.noLive}</p>
             )}
             <p className="text-xs text-muted-foreground">{t.examRule(s.examMin)}</p>
           </Panel>
-          {s.live && <TryLive t={t} />}
+          {s.live && <TryLive t={t} experimental={!!s.live.experimental} />}
           <Panel title={t.releasesTitle} icon={Sprout}>
             {s.releases.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t.noReleases}</p>
@@ -96,7 +104,7 @@ const Mind = () => {
                 {s.releases.map((r) => (
                   <li key={r.version} className="flex flex-wrap items-baseline justify-between gap-2 rounded-lg border border-border px-3 py-2">
                     <span className="font-semibold">{t.version(r.version)} <span className="text-muted-foreground">· {t.params(r.params)} · {t.step(r.step)}</span></span>
-                    <span className={r.status === "live" ? "text-emerald-300" : "text-muted-foreground"}>{t.status[r.status]}{r.exam ? ` · ${t.exam(r.exam.passed, r.exam.total)}` : ""}</span>
+                    <span className={r.status === "live" ? "text-emerald-300" : "text-muted-foreground"}>{t.status[r.status === "live" && r.experimental ? "experimental" : r.status]}{r.exam ? ` · ${t.exam(r.exam.passed, r.exam.total)}` : ""}</span>
                   </li>
                 ))}
               </ul>

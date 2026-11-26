@@ -58,3 +58,30 @@ export const checkModelAnswer = (raw: unknown, topic: Topic, facts: Facts): stri
   if (/https?:|www\.|[<>{}[\]`]|@/i.test(bare)) return null;
   return fill(text, facts);
 };
+
+/*
+ * An experimental release (live below the exam bar on purpose) may show its own words, but
+ * only sentences that pass the safety part of the check: no digits of its own (no made-up
+ * numbers), no links, no markup, no emails, no unknown placeholders. Repeated sentences are
+ * shown once. Null when nothing safe is left.
+ */
+export const checkExperimentalAnswer = (raw: unknown, topic: Topic, facts: Facts): string | null => {
+  if (typeof raw !== "string") return null;
+  const allowed = new Set<string>(TOPIC_FACTS[topic]);
+  const seen = new Set<string>();
+  const keep: string[] = [];
+  for (const s of raw.replace(/<\|[a-z_:]+\|>/g, " ").split(/(?<=[.!?])\s+|\n+/)) {
+    const t = s.replace(/\s+/g, " ").trim();
+    if (t.length < 4 || seen.has(t.toLowerCase())) continue;
+    seen.add(t.toLowerCase());
+    if (slots(t).some((k) => !allowed.has(k))) continue;
+    const bare = t.replace(SLOT, "");
+    if (/[0-9]/.test(bare) || /https?:|www\.|[<>{}[\]`]|@/i.test(bare)) continue;
+    const f = fill(t, facts);
+    if (!f) continue;
+    if ([...keep, f].join(" ").length > MAX_MODEL_CHARS) break;
+    keep.push(f);
+    if (keep.length >= 3) break;
+  }
+  return keep.length ? keep.join(" ") : null;
+};

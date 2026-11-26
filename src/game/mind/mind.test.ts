@@ -63,3 +63,12 @@ describe("exam", () => {
     expect(r.passed).toBeLessThan(r.total * 0.9);
   });
 });
+
+describe("experimental answers", () => {
+  it("keeps only safe sentences, once each", async () => {
+    const { checkExperimentalAnswer } = await import("@/game/nics/answer");
+    const raw = "The city is open.\nThe city is open.\nIt costs 500 TIDE.\nSee https://x.org now.\nYour balance is {balance}.";
+    expect(checkExperimentalAnswer(raw, "wallet", { balance: "640 TIDE" } as never)).toBe("The city is open. Your balance is 640 TIDE.");
+    expect(checkExperimentalAnswer("Pay 12 now. <b>", "wallet", {} as never)).toBeNull();
+  });
+});
