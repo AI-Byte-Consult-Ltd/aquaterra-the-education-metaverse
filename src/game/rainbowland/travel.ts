@@ -9,11 +9,15 @@
 import type { World } from "../world/generator";
 import { landOf, type Network } from "../travel/network";
 import { RAINBOW_DISTRICT } from "./grid";
+import { PRISM_DISTRICT } from "./prism";
 
 const CAPITAL = 0;
 /** Lengths of the crossings, in tiles: across the ocean, longer than any crossing on the map. */
 export const RAINBOW_FERRY = 360;
 export const RAINBOW_BRIDGE = 420;
+/** Prism Hills lies beside Rainbowland: a short ferry and the Prism Causeway (road and rail). */
+export const PRISM_FERRY = 90;
+export const PRISM_CAUSEWAY = 110;
 
 /** Point on the edge of the map, in line from the centre through (x, y). */
 export function edgePoint(world: World, x: number, y: number) {
@@ -35,12 +39,17 @@ export function rainbowLinks(world: World, net: Network): Network & { extraCentr
     ...net.hubs,
     { id: `port:${RAINBOW_DISTRICT}`, kind: "port" as const, district: RAINBOW_DISTRICT, name: "Rainbow Harbour", x: shore.x, y: shore.y },
     { id: `station:${RAINBOW_DISTRICT}`, kind: "station" as const, district: RAINBOW_DISTRICT, name: "Rainbowland Station", x: shore.x, y: shore.y },
+    { id: `port:${PRISM_DISTRICT}`, kind: "port" as const, district: PRISM_DISTRICT, name: "Prism Harbour", x: shore.x, y: shore.y },
+    { id: `station:${PRISM_DISTRICT}`, kind: "station" as const, district: PRISM_DISTRICT, name: "Prism Hills Station", x: shore.x, y: shore.y },
   ];
   const routes = [
     ...net.routes,
     ...(port ? [{ mode: "ferry" as const, a: port.district, b: RAINBOW_DISTRICT, dist: RAINBOW_FERRY }] : []),
     { mode: "car" as const, a: CAPITAL, b: RAINBOW_DISTRICT, dist: RAINBOW_BRIDGE },
     { mode: "train" as const, a: CAPITAL, b: RAINBOW_DISTRICT, dist: RAINBOW_BRIDGE },
+    { mode: "ferry" as const, a: RAINBOW_DISTRICT, b: PRISM_DISTRICT, dist: PRISM_FERRY },
+    { mode: "car" as const, a: RAINBOW_DISTRICT, b: PRISM_DISTRICT, dist: PRISM_CAUSEWAY },
+    { mode: "train" as const, a: RAINBOW_DISTRICT, b: PRISM_DISTRICT, dist: PRISM_CAUSEWAY },
   ];
-  return { hubs, routes, extraCentres: [[RAINBOW_DISTRICT, shore.x, shore.y]] };
+  return { hubs, routes, extraCentres: [[RAINBOW_DISTRICT, shore.x, shore.y], [PRISM_DISTRICT, shore.x, shore.y]] };
 }

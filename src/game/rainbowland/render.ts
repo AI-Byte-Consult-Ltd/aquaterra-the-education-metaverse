@@ -16,14 +16,14 @@ const hash = (x: number, y: number) => {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
 };
 /** Smooth value noise, 0..1. */
-function noise(x: number, y: number) {
+export function noise(x: number, y: number) {
   const xi = Math.floor(x), yi = Math.floor(y);
   const fx = x - xi, fy = y - yi;
   const s = (t: number) => t * t * (3 - 2 * t);
   const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1);
   return a + (b - a) * s(fx) + (c - a) * s(fy) + (a - b - c + d) * s(fx) * s(fy);
 }
-const mix = (a: number[], b: number[], t: number) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+export const mix = (a: number[], b: number[], t: number) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
 
 /** Distance in cells from the grid to a point of the image, for the coast. */
 function gridDistance(ix: number, iy: number) {
@@ -220,7 +220,7 @@ export function drawScene(
   }
 }
 
-function label3(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, size: number, fill = "#fff") {
+export function label3(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, size: number, fill = "#fff") {
   ctx.font = `700 ${Math.round(size)}px Inter, system-ui, sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
