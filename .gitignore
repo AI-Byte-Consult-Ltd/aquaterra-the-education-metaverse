@@ -27,3 +27,4 @@ dist-ssr
 public/land-registry.json
 # generated before each build (scripts/export-districts.ts)
 public/world/
+__pycache__/
