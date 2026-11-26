@@ -260,7 +260,8 @@ BEGIN
   SELECT r->>'tower', (r->>'tokenId')::int, (r->>'floor')::int, left(r->>'number', 20), left(coalesce(nullif(r->>'type', ''), 'Residential'), 40),
     left(r->>'view', 40), nullif(r->>'area', '')::int, nullif(r->>'bedrooms', '')::int, nullif(r->>'rooms', '')::int, left(r->>'image', 200)
   FROM jsonb_array_elements(rows) r
-  WHERE r->>'tower' IN (SELECT id FROM aquaterra_towers) AND (r->>'floor') ~ '^-?[0-9]{1,5}$' AND (r->>'tokenId') ~ '^[0-9]{1,9}$'
+  WHERE r->>'tower' IN (SELECT id FROM aquaterra_towers) AND (r->>'floor') ~ '^-?[0-9]' AND length(r->>'floor') <= 6 AND substr(r->>'floor', 2) !~ '[^0-9]'
+    AND (r->>'tokenId') ~ '^[0-9]' AND length(r->>'tokenId') <= 9 AND (r->>'tokenId') !~ '[^0-9]'
   ON CONFLICT (tower, token_id) DO UPDATE SET floor = EXCLUDED.floor, number = EXCLUDED.number, apt_type = EXCLUDED.apt_type,
     view = EXCLUDED.view, area = EXCLUDED.area, bedrooms = EXCLUDED.bedrooms, rooms = EXCLUDED.rooms, image = EXCLUDED.image;
   GET DIAGNOSTICS n = ROW_COUNT;
