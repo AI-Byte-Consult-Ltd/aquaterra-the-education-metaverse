@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, UserRound, Waves, X, ZoomIn, ZoomOut, Trophy } from "lucide-react";
+import { ArrowLeft, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, Sparkles, UserRound, Waves, X, ZoomIn, ZoomOut, Trophy } from "lucide-react";
 import { NicsChatButton } from "@/game/nics/NicsChat";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -34,6 +34,7 @@ import { arcadeStrings } from "@/game/arcade/strings";
 import { DEFAULT_LAWS, dealDuty, useLaws } from "@/game/bank/api";
 import { bankStrings } from "@/game/bank/strings";
 import { roadsStrings } from "@/game/roads/strings";
+import { questsStrings } from "@/game/quests/strings";
 import { RoadsHere } from "@/game/roads/RoadsHere";
 import { useBankT } from "@/game/bank/ui";
 import Tour, { tourDone } from "@/game/tour/Tour";
@@ -69,6 +70,7 @@ const City = () => {
   const ts = stateStrings(language);
   const tBank = bankStrings(language);
   const tr = roadsStrings(language);
+  const tq = questsStrings(language);
   const tt = travelStrings(language);
   // open votes, for the lights on the plaza buildings and their cards
   const [openVotes, setOpenVotes] = useState<Proposal[]>([]);
@@ -565,6 +567,15 @@ const City = () => {
           className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-amber-400/50 bg-amber-400/10 px-2.5 text-sm font-semibold text-amber-200 hover:border-amber-300"
         >
           <Trophy className="h-4 w-4 text-amber-300" />
+        </Link>
+        <Link
+          to="/quests"
+          title={tq.title}
+          aria-label={tq.title}
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-sky-400/50 bg-sky-400/10 px-2.5 text-sm font-semibold text-sky-200 hover:border-sky-300"
+        >
+          <Sparkles className="h-4 w-4 text-sky-300" />
+          <span className="hidden sm:inline">{tq.short}</span>
         </Link>
         <Link
           to="/arcade"
