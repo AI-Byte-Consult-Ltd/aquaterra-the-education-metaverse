@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS aquaterra_nft_collections (
   chain text NOT NULL REFERENCES aquaterra_nft_chains (id),
   contract text NOT NULL,            -- lower case 0x address (EVM) or collection id (Bitcoin)
   name text NOT NULL,
-  kind text NOT NULL DEFAULT 'asset', -- land | house | car | asset | tower
+  kind text NOT NULL DEFAULT 'asset', -- land | house | car | asset | tower | planet
   standard text NOT NULL DEFAULT 'erc721',
   swap_tide bigint NOT NULL DEFAULT 0,  -- Tide paid instead of a plot
   allow_plot boolean NOT NULL DEFAULT true,
@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS aquaterra_nft_swaps (
   email text NOT NULL REFERENCES aquaterra_players (email),
   collection_id int NOT NULL REFERENCES aquaterra_nft_collections (id),
   token_id text NOT NULL,            -- decimal
-  choice text NOT NULL,              -- plot | tide
+  choice text NOT NULL,              -- plot | tide | apartment | planet
   status text NOT NULL DEFAULT 'checking', -- checking | open | done | rejected | cancelled
   owner_address text,                -- the linked wallet that held it when the swap opened
   fee bigint NOT NULL DEFAULT 0,
@@ -402,7 +402,7 @@ BEGIN
       v_tok := btrim(coalesce(req->>'tokenId', ''));
       IF v_tok !~ '^[0-9]{1,78}' OR length(v_tok) > 78 OR v_tok ~ '[^0-9]' THEN RAISE EXCEPTION 'token'; END IF;
       v_tok := ltrim(v_tok, '0'); IF v_tok = '' THEN v_tok := '0'; END IF;
-      v_choice := CASE WHEN col.kind = 'tower' THEN 'apartment' WHEN req->>'choice' = 'plot' AND col.allow_plot THEN 'plot' ELSE 'tide' END;
+      v_choice := CASE WHEN col.kind = 'tower' THEN 'apartment' WHEN col.kind = 'planet' THEN 'planet' WHEN req->>'choice' = 'plot' AND col.allow_plot THEN 'plot' ELSE 'tide' END;
       IF v_choice = 'tide' AND col.swap_tide <= 0 THEN RAISE EXCEPTION 'choice'; END IF;
       IF v_choice = 'apartment' THEN
         IF length(v_tok) > 9 THEN RAISE EXCEPTION 'token'; END IF;
@@ -410,6 +410,11 @@ BEGIN
         WHERE t2.collection_id = col.id AND a.token_id = v_tok::int;
         IF ap.tower IS NULL THEN RAISE EXCEPTION 'token'; END IF;
         IF ap.owner IS NOT NULL THEN RAISE EXCEPTION 'swapped'; END IF;
+      END IF;
+      IF v_choice = 'planet' THEN
+        -- Milky Way Marvels: token N becomes Orbit claim N (server/orbit/orbit.sql).
+        IF length(v_tok) > 6 OR NOT EXISTS (SELECT 1 FROM aquaterra_planets WHERE token_id = v_tok::int) THEN RAISE EXCEPTION 'token'; END IF;
+        IF EXISTS (SELECT 1 FROM aquaterra_planets WHERE token_id = v_tok::int AND owner IS NOT NULL) THEN RAISE EXCEPTION 'swapped'; END IF;
       END IF;
       IF NOT EXISTS (SELECT 1 FROM aquaterra_wallet_links WHERE email = me AND chain_family = 'evm') THEN RAISE EXCEPTION 'no_wallet'; END IF;
       IF EXISTS (SELECT 1 FROM aquaterra_nft_swaps WHERE collection_id = col.id AND token_id = v_tok AND status = 'done') THEN RAISE EXCEPTION 'swapped'; END IF;
@@ -570,6 +575,12 @@ BEGIN
     ELSIF req->>'step' = 'confirm' AND s.status = 'open' THEN
       IF own = '' THEN RAISE EXCEPTION 'chain'; END IF;
       IF own <> coalesce(aquaterra_hs('vault_address'), '-') THEN RAISE EXCEPTION 'not_received'; END IF;
+      IF s.choice = 'planet' THEN
+        IF NOT aquaterra_orbit_give(s.token_id, s.email) THEN RAISE EXCEPTION 'swapped'; END IF;
+        UPDATE aquaterra_nft_swaps SET status = 'done', done_at = now() WHERE id = s.id;
+        SELECT * INTO s FROM aquaterra_nft_swaps WHERE id = s.id;
+        RETURN jsonb_build_object('ok', true, 'swap', aquaterra_h_swap_json(s));
+      END IF;
       IF s.choice = 'apartment' THEN
         UPDATE aquaterra_apartments a SET owner = s.email, owned_at = now(), income_from = now()
         FROM aquaterra_towers t2 WHERE t2.id = a.tower AND t2.collection_id = s.collection_id AND a.token_id::text = s.token_id AND a.owner IS NULL;

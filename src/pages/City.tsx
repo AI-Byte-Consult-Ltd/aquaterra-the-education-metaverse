@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, Sparkles, UserRound, Users, Waves, X, ZoomIn, ZoomOut, Trophy } from "lucide-react";
+import { ArrowLeft, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, Sparkles, UserRound, Users, Waves, X, ZoomIn, ZoomOut, Trophy, Orbit as OrbitIcon } from "lucide-react";
 import { NicsChatButton } from "@/game/nics/NicsChat";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -38,6 +38,7 @@ import { DEFAULT_LAWS, dealDuty, useLaws } from "@/game/bank/api";
 import { bankStrings } from "@/game/bank/strings";
 import { roadsStrings } from "@/game/roads/strings";
 import { questsStrings } from "@/game/quests/strings";
+import { orbitStrings } from "@/game/orbit/strings";
 import { RoadsHere } from "@/game/roads/RoadsHere";
 import { useBankT } from "@/game/bank/ui";
 import { avatarOf, fetchResidents, type ResidentsMap } from "@/game/residents/api";
@@ -78,6 +79,7 @@ const City = () => {
   const tBank = bankStrings(language);
   const tr = roadsStrings(language);
   const tq = questsStrings(language);
+  const to = orbitStrings(language);
   const tt = travelStrings(language);
   // open votes, for the lights on the plaza buildings and their cards
   const [openVotes, setOpenVotes] = useState<Proposal[]>([]);
@@ -631,6 +633,15 @@ const City = () => {
         >
           <Sparkles className="h-4 w-4 text-sky-300" />
           <span className="hidden sm:inline">{tq.short}</span>
+        </Link>
+        <Link
+          to="/orbit"
+          title={to.title}
+          aria-label={to.title}
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-indigo-400/50 bg-indigo-400/10 px-2.5 text-sm font-semibold text-indigo-200 hover:border-indigo-300"
+        >
+          <OrbitIcon className="h-4 w-4 text-indigo-300" />
+          <span className="hidden sm:inline">{to.short}</span>
         </Link>
         <Link
           to="/arcade"
