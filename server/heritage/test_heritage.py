@@ -109,7 +109,7 @@ A1, B1 = "0x" + "a1" * 20, "0x" + "b1" * 20
 
 info = her(action="info")
 check(info["ok"] and info["fee"] == 600 and info["vault"] == VAULT and info["reserve"] == 2, f"info {info}")
-check([c["kind"] for c in info["collections"]] == ["tower"], "only the tower is on at the start")
+check([c["kind"] for c in info["collections"]] == ["tower", "tower"], "only the two towers are on at the start")
 check([c["id"] for c in info["chains"]] == ["cronos", "polygon", "ethereum", "bitcoin"], "four chains")
 check(her(action="me")["error"] == "session", "me needs a session")
 
@@ -151,7 +151,7 @@ her("alex", action="admin_collection", chain="bitcoin", contract="inscriptions-x
 
 # Swap 1: Bea swaps LAND #42 for a plot. Fee 600 out of her 1,000 welcome coins.
 check(her("cid", action="swap", collectionId=land_id, tokenId="42", choice="plot")["error"] == "no_wallet", "needs a wallet")
-check(her("bea", action="swap", collectionId=tower_id, tokenId="1", choice="tide")["error"] == "collection", "tower is not swapped")
+check(her("bea", action="swap", collectionId=tower_id, tokenId="1", choice="tide")["error"] == "token", "a tower token needs its apartment loaded")
 check(her("bea", action="swap", collectionId=btc_id, tokenId="1", choice="tide")["error"] == "chain_soon", "bitcoin later")
 check(her("bea", action="swap", collectionId=land_id, tokenId="4x", choice="plot")["error"] == "token", "token id digits")
 r = her("bea", action="swap", collectionId=land_id, tokenId="0042", choice="plot")
@@ -223,6 +223,40 @@ check(her("alex", action="admin_setting", key="heritage_district", value="Nowher
 a = her("alex", action="admin")
 check(a["ok"] and len(a["swaps"]) >= 4 and a["wallets"] == 2, f"admin view {a.get('wallets')}")
 check(her("bea", action="admin")["error"] == "forbidden", "admin view needs a role")
+
+# Towers: each NFT of a tower collection becomes the same apartment, 1:1.
+check(psql("SELECT string_agg(id, ',' ORDER BY sort) FROM aquaterra_towers") == "first-light,second-light", "two towers")
+TW1 = int(psql("SELECT collection_id FROM aquaterra_towers WHERE id = 'first-light'"))
+ld = J("""SELECT aquaterra_apt_load('[{"tower":"first-light","tokenId":"2","floor":"36","number":"3608","type":"Residential","view":"City","area":"150","bedrooms":"1","rooms":"2","image":"ipfs://a"},
+ {"tower":"first-light","tokenId":"7","floor":"108","number":"10801","type":"Penthouse","view":"Sea","area":"400"},
+ {"tower":"nowhere","tokenId":"8","floor":"1","number":"1"},{"tower":"first-light","tokenId":"9","floor":"x","number":"1"}]'::jsonb)""")
+check(ld["loaded"] == 2 and ld["total"] == 2, f"load skips bad rows {ld}")
+t = her(action="tower", tower="first-light")
+check(t["ok"] and t["tower"]["floors"] == 108 and len(t["apartments"]) == 2 and t["apartments"][0][7] is None, f"tower view {t}")
+check(her(action="tower", tower="x")["error"] == "not_found", "unknown tower")
+link("bea", B1)
+check(her("bea", action="swap", collectionId=TW1, tokenId="3")["error"] == "token", "no such apartment")
+r = her("bea", action="swap", collectionId=TW1, tokenId="7", choice="tide")
+check(r["ok"] and r["check"]["tokenId"] == "7", f"tower swap opens {r}")
+o = internal(action="owner", swapId=r["check"]["swapId"], step="open", owner=B1)
+check(o["ok"] and o["swap"]["choice"] == "apartment" and o["swap"]["status"] == "open", f"apartment chosen {o}")
+d = internal(action="owner", swapId=o["swap"]["id"], step="confirm", owner=her(action="info")["vault"])
+check(d["ok"] and d["swap"]["status"] == "done" and d["swap"]["apartment"]["number"] == "10801", f"apartment given {d}")
+check(her("alex", action="swap", collectionId=TW1, tokenId="7")["error"] == "swapped", "apartment swaps once")
+t = her("bea", action="tower", tower="first-light")
+check(t["apartments"][1][7] == "Bea" and t["apartments"][1][8] is True and t["tower"]["owned"] == 1, "owner shown")
+check(J("SELECT aquaterra_apt_load('[{\"tower\":\"first-light\",\"tokenId\":\"7\",\"floor\":\"108\",\"number\":\"10801\",\"type\":\"Penthouse\"}]'::jsonb)")["ok"]
+      and psql("SELECT owner FROM aquaterra_apartments WHERE token_id = 7") == "bea@x", "reload keeps the owner")
+m = her("bea", action="me")
+check(len(m["apartments"]) == 1 and m["apartments"][0]["rate"] == 15, f"my apartments {m['apartments']}")
+check(her("bea", action="apt_collect")["error"] == "nothing", "nothing yet")
+psql("UPDATE aquaterra_apartments SET income_from = now() - interval '2 days' WHERE token_id = 7")
+before = bal("bea@x")
+c = her("bea", action="apt_collect")
+check(c["ok"] and c["gross"] == 30 and c["net"] + c["tax"] == 30 and bal("bea@x") == before + c["net"], f"collect {c}")
+psql("UPDATE aquaterra_apartments SET income_from = now() - interval '90 days' WHERE token_id = 7")
+check(her("bea", action="apt_collect")["gross"] == 450, "income caps at 30 days")
+check(her("bea", action="unlink", address=B1)["ok"], "unlink again")
 
 # Ledger adds up: no Tide created or lost.
 check(int(psql("SELECT sum(balance) FROM aquaterra_wallets")) == int(psql("SELECT value FROM aquaterra_economy_params WHERE key = 'genesis_supply'")), "supply unchanged")
