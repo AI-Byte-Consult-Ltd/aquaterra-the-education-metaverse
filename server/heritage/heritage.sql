@@ -298,12 +298,14 @@ INSERT INTO aquaterra_nft_collections (chain, contract, name, kind, swap_tide, a
   ('ethereum', '0x3a11eed29d57b8f247ff181dd21a53c27b4134f1', 'Rainbowland LANDs (RWL)', 'land', 0, false, true,
    'Each LAND becomes an island of its own in the Heritage Sea, the size of the LAND.'),
   ('ethereum', '0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', 'Rainbowland Kingdom (RBL)', 'asset', 0, false, true,
-   'Titles, certificates and collectibles of the Kingdom of Rainbowland: a compensation in Tide.')
+   'Titles, certificates and collectibles of the Kingdom of Rainbowland: a compensation in Tide.'),
+  ('ethereum', '0x4303d88988785ac933471e0eb3fbf6b19ff8ad92', 'Crypto Planets (Rainbowland)', 'asset', 0, false, true,
+   'Planets of the Rainbowland creator: a compensation in Tide.')
 ON CONFLICT (chain, contract) DO NOTHING;
 UPDATE aquaterra_nft_collections SET listed = true, allow_plot = false,
   standard = CASE WHEN contract = '0x495f947276749ce646f68ac8c248420045cb7b5e' THEN 'erc1155' ELSE 'erc721' END
 WHERE chain = 'ethereum' AND contract IN ('0x495f947276749ce646f68ac8c248420045cb7b5e', '0x8a125f154dffe9c5991d0a6a81b067be5e97325d',
-  '0x3a11eed29d57b8f247ff181dd21a53c27b4134f1', '0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0') AND NOT listed;
+  '0x3a11eed29d57b8f247ff181dd21a53c27b4134f1', '0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '0x4303d88988785ac933471e0eb3fbf6b19ff8ad92') AND NOT listed;
 
 INSERT INTO aquaterra_heritage_items (collection_id, token_id, seq, title, gives, tide, tiles, price, place)
 SELECT c.id, v.token_id, v.seq, v.title, v.gives, v.tide, v.tiles, v.price, v.place
@@ -343,7 +345,12 @@ FROM (VALUES
   ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '14', 33, 'Certificate: Character in The Book', 'tide', 1500, 0, 0, NULL),
   ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '16', 34, 'Real House in Bulgaria', 'tide', 1500, 0, 0, NULL),
   ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '19', 35, 'Black Sea Coast, Burgas', 'tide', 1500, 0, 0, NULL),
-  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '20', 36, 'Beautiful Istanbul', 'tide', 1500, 0, 0, NULL)
+  ('0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0', '20', 36, 'Beautiful Istanbul', 'tide', 1500, 0, 0, NULL),
+  ('0x495f947276749ce646f68ac8c248420045cb7b5e', '37198557236742699499983501232576879831168205667897545918004480138043260403713', 37, 'Museum Plot', 'island', 0, 4, 1500, 'Museum Isle, Heritage Sea'),
+  ('0x495f947276749ce646f68ac8c248420045cb7b5e', '37198557236742699499983501232576879831168205667897545918004479674049353482241', 38, 'Bergelmir', 'tide', 1000, 0, 0, NULL),
+  ('0x495f947276749ce646f68ac8c248420045cb7b5e', '37198557236742699499983501232576879831168205667897545918004479041830167511041', 39, 'The Best Cocktails in The World (book)', 'tide', 1500, 0, 0, NULL),
+  ('0x4303d88988785ac933471e0eb3fbf6b19ff8ad92', '37198557236742699499983501232576879831168205667897545918004478672394260578307', 40, 'Mercury #2', 'tide', 1000, 0, 0, NULL),
+  ('0x4303d88988785ac933471e0eb3fbf6b19ff8ad92', '37198557236742699499983501232576879831168205667897545918004478672394260578306', 41, 'Saturn LXV #01', 'tide', 1000, 0, 0, NULL)
 ) AS v (contract, token_id, seq, title, gives, tide, tiles, price, place)
 JOIN aquaterra_nft_collections c ON c.chain = 'ethereum' AND c.contract = v.contract
 ON CONFLICT DO NOTHING;

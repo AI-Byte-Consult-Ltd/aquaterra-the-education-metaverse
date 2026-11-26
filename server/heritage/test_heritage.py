@@ -110,7 +110,7 @@ A1, B1 = "0x" + "a1" * 20, "0x" + "b1" * 20
 info = her(action="info")
 check(info["ok"] and info["fee"] == 600 and info["vault"] == VAULT and info["reserve"] == 2, f"info {info}")
 check([c["kind"] for c in info["collections"] if not c["listed"]] == ["tower", "tower"], "only the two towers are on at the start, besides listed ones")
-check(sum(len(c["items"]) for c in info["collections"] if c["listed"]) == 36 and all(c["chain"] == "ethereum" for c in info["collections"] if c["listed"]), "36 listed Ethereum tokens")
+check(sum(len(c["items"]) for c in info["collections"] if c["listed"]) == 41 and all(c["chain"] == "ethereum" for c in info["collections"] if c["listed"]), "41 listed Ethereum tokens")
 check([c["id"] for c in info["chains"]] == ["cronos", "polygon", "ethereum", "bitcoin"], "four chains")
 check(her(action="me")["error"] == "session", "me needs a session")
 
