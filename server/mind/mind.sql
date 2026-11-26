@@ -33,6 +33,21 @@ CREATE TABLE IF NOT EXISTS aquaterra_mind_releases (
   live_at timestamptz
 );
 
+-- Experimental release (Alexander 2026-11-26: "пусть выходит, в этом и эксперимент"): a release may go
+-- live below the exam bar when the lab key asks for it; the site then labels it "experimental, still learning".
+ALTER TABLE aquaterra_mind_releases ADD COLUMN IF NOT EXISTS experimental boolean NOT NULL DEFAULT false;
+
+-- The release files, kept in the database (private, never served) until the R2 bucket is connected.
+-- weights.bin in parts of 6 MB; n8n joins them in order. Only n8n reads this table.
+CREATE TABLE IF NOT EXISTS aquaterra_mind_files (
+  version int NOT NULL,
+  file text NOT NULL CHECK (file IN ('weights', 'tokenizer')),
+  part int NOT NULL,
+  data bytea NOT NULL,
+  PRIMARY KEY (version, file, part)
+);
+INSERT INTO aquaterra_mind_settings (key, value) VALUES ('asks_per_minute_all', '6') ON CONFLICT (key) DO NOTHING;
+
 -- residents whose lines are kept out of training (set by hand after abuse)
 CREATE TABLE IF NOT EXISTS aquaterra_mind_muted (
   resident text PRIMARY KEY,
@@ -69,7 +84,7 @@ LANGUAGE sql STABLE AS $fn$
   SELECT jsonb_build_object('version', r.version, 'modelId', r.model_id, 'step', r.step, 'params', r.params,
     'status', r.status, 'weightsBytes', r.params * CASE WHEN r.manifest->>'dtype' = 'f32' THEN 4 ELSE 2 END,
     'eval', COALESCE(r.manifest->'eval', '{}'::jsonb), 'exam', r.exam,
-    'registeredAt', r.registered_at, 'liveAt', r.live_at)
+    'registeredAt', r.registered_at, 'liveAt', r.live_at, 'experimental', r.experimental)
 $fn$;
 
 -- The lines the lab may learn from, after the anti-poisoning rules:
@@ -150,6 +165,9 @@ BEGIN
     who := aquaterra_nics_resident(who);
     SELECT count(*) INTO n FROM aquaterra_mind_asks WHERE resident = who AND at > now() - interval '1 hour';
     IF n >= COALESCE(aquaterra_mind_setting('asks_per_hour'), '20')::int THEN RETURN aquaterra_mind_err('too_many'); END IF;
+    -- the model runs on the shared n8n server: a few answers a minute for the whole city
+    SELECT count(*) INTO n FROM aquaterra_mind_asks WHERE at > now() - interval '1 minute';
+    IF n >= COALESCE(aquaterra_mind_setting('asks_per_minute_all'), '6')::int THEN RETURN aquaterra_mind_err('busy'); END IF;
     INSERT INTO aquaterra_mind_asks (resident, version) VALUES (who, r.version);
     RETURN jsonb_build_object('ok', true, 'version', r.version, 'topic', req->>'topic', 'question', COALESCE(req->>'question', ''),
       'run', jsonb_build_object('prefix', r.base_url, 'weights', r.manifest->>'weights_file', 'tokenizer', r.manifest->>'tokenizer_file',
@@ -201,12 +219,14 @@ BEGIN
     rate := (req#>>'{exam,passed}')::numeric / (req#>>'{exam,total}')::numeric;
     UPDATE aquaterra_mind_releases SET exam = jsonb_build_object('total', (req#>>'{exam,total}')::int,
       'passed', (req#>>'{exam,passed}')::int, 'rate', round(rate, 3), 'at', now()) WHERE version = v;
-    IF rate < aquaterra_mind_setting('exam_min_pass')::numeric THEN
+    IF rate < aquaterra_mind_setting('exam_min_pass')::numeric AND req->>'experimental' IS DISTINCT FROM 'true' THEN
       RETURN jsonb_build_object('ok', true, 'live', false, 'rate', round(rate, 3));
     END IF;
     UPDATE aquaterra_mind_releases SET status = 'retired' WHERE status = 'live' AND version <> v;
-    UPDATE aquaterra_mind_releases SET status = 'live', live_at = now() WHERE version = v;
-    RETURN jsonb_build_object('ok', true, 'live', true, 'rate', round(rate, 3));
+    UPDATE aquaterra_mind_releases SET status = 'live', live_at = now(),
+      experimental = rate < aquaterra_mind_setting('exam_min_pass')::numeric WHERE version = v;
+    RETURN jsonb_build_object('ok', true, 'live', true, 'rate', round(rate, 3),
+      'experimental', rate < aquaterra_mind_setting('exam_min_pass')::numeric);
   END IF;
 
   IF act = 'retire' THEN

@@ -83,3 +83,14 @@ If it comes back, it must share only gradients for lab-chosen batches, with serv
 - `PGHOST=/var/tmp/pg PGPORT=5433 python3 server/mind/test_mind.py`: the SQL side.
 
 n8n: `[74 PUBLIC] AquaTerra City Mind` (webhook `aquaterra-mind`) → `aquaterra_mind(req)`.
+
+## Experimental release and where the files live (2026-11-26)
+
+- `promote` with `"experimental": true` (release key) puts a release live below the exam bar.
+  Alexander chose this for version 1 (step 12021, exam 1/30): "пусть выходит, в этом и эксперимент".
+  /mind labels it "Experimental version, still learning" and shows only sentences without numbers
+  of their own, links or markup (`checkExperimentalAnswer`).
+- Until the private R2 bucket is connected, release files live in `aquaterra_mind_files`
+  (weights in 6 MB parts + tokenizer), read only by n8n `[75 INTERNAL] AquaTerra City Mind Answer`
+  (saves no execution data). `[74]` calls it for an accepted `ask`; at most `asks_per_minute_all`
+  answers a minute for the whole city, `asks_per_hour` per resident.

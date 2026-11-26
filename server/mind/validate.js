@@ -12,6 +12,7 @@ if (b.version !== undefined) req.version = int(b.version, 999999);
 if (b.after !== undefined) req.after = int(b.after, 1e15);
 if (b.limit !== undefined) req.limit = int(b.limit, 2000);
 if (b.civic === true) req.civic = 'true';
+if (b.experimental === true) req.experimental = 'true';
 if (typeof b.prefix === 'string') req.prefix = b.prefix.slice(0, 300);
 const sess = String(b.session || '').replace(/[^a-f0-9]/g, '').slice(0, 64);
 if (sess) req.session = sess;
