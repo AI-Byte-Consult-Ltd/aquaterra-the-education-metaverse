@@ -25,6 +25,8 @@ import SetupPage from "./pages/arcade/SetupPage";
 import { CharterPage } from "./pages/state/CharterPage";
 import Roads from "./pages/Roads";
 import Heritage from "./pages/Heritage";
+import Quests from "./pages/Quests";
+import Rich from "./pages/Rich";
 import Bank from "./pages/Bank";
 import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
@@ -61,6 +63,8 @@ const App = () => (
             <Route path="/bank" element={<Bank />} />
             <Route path="/roads" element={<Roads />} />
             <Route path="/heritage" element={<RequireAccount><Heritage /></RequireAccount>} />
+            <Route path="/quests" element={<Quests />} />
+            <Route path="/rich" element={<Rich />} />
             <Route path="/state/journal" element={<JournalPage />} />
             <Route path="/state/districts" element={<DistrictsPage />} />
             <Route path="/state/p/:id" element={<ProposalPage />} />

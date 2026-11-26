@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, Sparkles, UserRound, Users, Waves, X, ZoomIn, ZoomOut, Trophy } from "lucide-react";
 import { NicsChatButton } from "@/game/nics/NicsChat";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -34,8 +34,16 @@ import { arcadeStrings } from "@/game/arcade/strings";
 import { DEFAULT_LAWS, dealDuty, useLaws } from "@/game/bank/api";
 import { bankStrings } from "@/game/bank/strings";
 import { roadsStrings } from "@/game/roads/strings";
+import { questsStrings } from "@/game/quests/strings";
 import { RoadsHere } from "@/game/roads/RoadsHere";
 import { useBankT } from "@/game/bank/ui";
+import { avatarOf, fetchResidents, type ResidentsMap } from "@/game/residents/api";
+import { spread } from "@/game/residents/avatars";
+import AvatarPreview from "@/game/residents/AvatarPreview";
+import { residentsStrings } from "@/game/residents/strings";
+import { useMyAvatar } from "@/game/residents/useMyAvatar";
+import Tour, { tourDone } from "@/game/tour/Tour";
+import { tourStrings } from "@/game/tour/strings";
 
 const ARCADE_GLYPH: Record<MapAttraction["template"], string> = { quiz: "?", crystals: "◆", maze: "#", range: "◎", race: "≈" };
 
@@ -67,6 +75,7 @@ const City = () => {
   const ts = stateStrings(language);
   const tBank = bankStrings(language);
   const tr = roadsStrings(language);
+  const tq = questsStrings(language);
   const tt = travelStrings(language);
   // open votes, for the lights on the plaza buildings and their cards
   const [openVotes, setOpenVotes] = useState<Proposal[]>([]);
@@ -127,6 +136,12 @@ const City = () => {
   const [buildRules, setBuildRules] = useState<BuildRules | null>(null);
   const [myBuildings, setMyBuildings] = useState<MyBuilding[]>([]);
   const [plotOpen, setPlotOpen] = useState<Plot | null>(null);
+  // first-visit tour, once per resident on this device; the Tour button replays it
+  const tTour = tourStrings(language);
+  const [tourOpen, setTourOpen] = useState(false);
+  useEffect(() => {
+    if (player?.email && !tourDone(player.email)) setTourOpen(true);
+  }, [player?.email]);
   const loadBuilt = useCallback(async () => {
     const [m, mine] = await Promise.all([fetchBuildMap(), session ? fetchMyBuildings(session) : Promise.resolve(null)]);
     if (m.ok) {
@@ -157,15 +172,55 @@ const City = () => {
   const [travelling, setTravelling] = useState(false);
   const travellingRef = useRef(false);
   const centred = useRef(false);
-  const hue = useMemo(() => dropHue(player?.email ?? "guest"), [player?.email]);
+  const [myAvatar] = useMyAvatar(session, player?.email);
+  const avatar = useMemo(() => avatarOf(myAvatar, dropHue(player?.email ?? "guest")), [myAvatar, player?.email]);
+  const hue = avatar.hue;
   const placeDrop = useCallback(
     (loc: Location | null) => {
       const r = rendererRef.current;
       if (!r) return;
-      r.player = loc ? { x: loc.x, y: loc.y, hue, label: tt.you } : null;
+      r.player = loc ? { x: loc.x, y: loc.y, hue, label: tt.you, style: avatar.style } : null;
     },
-    [hue, tt.you],
+    [hue, avatar.style, tt.you],
   );
+  // a new avatar or colour shows at once, where the resident stands
+  useEffect(() => {
+    const r = rendererRef.current;
+    if (r?.player) {
+      r.player.hue = hue;
+      r.player.style = avatar.style;
+    }
+  }, [hue, avatar.style]);
+
+  // --- the other residents: real people, where they really are --------------
+  const tres = residentsStrings(language);
+  const [crowd, setCrowd] = useState<ResidentsMap | null>(null);
+  const [showCrowd, setShowCrowd] = useState(true);
+  const crowdRef = useRef<ReturnType<typeof spread<ResidentsMap["residents"][number] & { hue: number }>>>([]);
+  useEffect(() => {
+    if (!session) return;
+    let stop = false;
+    const load = async () => {
+      if (document.hidden) return;
+      const r = await fetchResidents(session);
+      if (stop || !r.ok) return;
+      setCrowd(r.data);
+      crowdRef.current = spread(r.data.residents.map((x) => ({ ...x, hue: x.hue ?? dropHue(x.key) })));
+      if (rendererRef.current) rendererRef.current.residents = crowdRef.current;
+    };
+    void load();
+    const id = window.setInterval(load, 30_000);
+    const onShow = () => !document.hidden && void load();
+    document.addEventListener("visibilitychange", onShow);
+    return () => {
+      stop = true;
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onShow);
+    };
+  }, [session]);
+  useEffect(() => {
+    if (rendererRef.current) rendererRef.current.showResidents = showCrowd;
+  }, [showCrowd]);
   const loadNetwork = useCallback(async () => {
     const r = await fetchNetwork(session);
     if (!r.ok) {
@@ -198,6 +253,8 @@ const City = () => {
   const netRef = useRef(net);
   const meRef = useRef(me);
   const hueRef = useRef(hue);
+  const styleRef = useRef(avatar.style);
+  styleRef.current = avatar.style;
   const labelRef = useRef(tt.you);
   netRef.current = net;
   meRef.current = me;
@@ -224,11 +281,12 @@ const City = () => {
     if (builtRef.current.size) r.setBuilt(builtRef.current);
     r.owned = ownedRef.current;
     r.attractions = attractionsRef.current;
+    r.residents = crowdRef.current;
     r.fit();
     centred.current = false;
     if (netRef.current) r.ports = netRef.current.hubs.filter((h) => h.kind === "port").map((h) => ({ x: h.x, y: h.y }));
     if (meRef.current) {
-      r.player = { x: meRef.current.x, y: meRef.current.y, hue: hueRef.current, label: labelRef.current };
+      r.player = { x: meRef.current.x, y: meRef.current.y, hue: hueRef.current, label: labelRef.current, style: styleRef.current };
       if (!new URLSearchParams(window.location.search).get("at")) r.focusPoint(meRef.current.x, meRef.current.y, 0.7);
       centred.current = true;
     }
@@ -551,6 +609,23 @@ const City = () => {
           <span className="hidden sm:inline">{tr.title}</span>
         </Link>
         <Link
+          to="/rich"
+          title="Richest residents"
+          aria-label="Richest residents"
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-amber-400/50 bg-amber-400/10 px-2.5 text-sm font-semibold text-amber-200 hover:border-amber-300"
+        >
+          <Trophy className="h-4 w-4 text-amber-300" />
+        </Link>
+        <Link
+          to="/quests"
+          title={tq.title}
+          aria-label={tq.title}
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-sky-400/50 bg-sky-400/10 px-2.5 text-sm font-semibold text-sky-200 hover:border-sky-300"
+        >
+          <Sparkles className="h-4 w-4 text-sky-300" />
+          <span className="hidden sm:inline">{tq.short}</span>
+        </Link>
+        <Link
           to="/arcade"
           title={tg.arcade}
           aria-label={tg.arcade}
@@ -593,8 +668,24 @@ const City = () => {
             title={tt.findMe}
             className="absolute bottom-3 left-3 flex max-w-[70%] items-center gap-2 rounded-full border border-cyan-300/50 bg-background/85 px-3 py-1.5 text-sm backdrop-blur hover:border-cyan-200"
           >
-            <Droplet className="h-4 w-4 shrink-0" style={{ color: `hsl(${hue},95%,65%)`, fill: `hsl(${hue},95%,55%)` }} />
+            <AvatarPreview avatar={avatar} size={22} className="-my-1 shrink-0" />
             <span className="truncate">{travelling ? tt.going : tt.youAreIn(me.district ?? city.districts[me.districtId]?.name ?? "")}</span>
+          </button>
+        )}
+
+        {crowd && (
+          <button
+            onClick={() => setShowCrowd((v) => !v)}
+            title={showCrowd ? tres.hideResidents : tres.showResidents}
+            aria-pressed={showCrowd}
+            className={`absolute left-3 flex max-w-[70%] items-center gap-2 rounded-full border bg-background/85 px-3 py-1 text-xs backdrop-blur ${me ? "bottom-14" : "bottom-3"} ${showCrowd ? "border-emerald-300/50" : "border-border text-muted-foreground"}`}
+          >
+            <span className={`h-2 w-2 shrink-0 rounded-full ${crowd.online ? "bg-emerald-400 shadow-[0_0_8px] shadow-emerald-400" : "bg-muted-foreground"}`} />
+            <span className="truncate">
+              {crowd.online ? tres.online(crowd.online) : tres.aloneNow}
+              {crowd.recent > crowd.online && <span className="hidden sm:inline">{` · ${tres.recent(crowd.recent)}`}</span>}
+            </span>
+            <Users className="h-3.5 w-3.5 shrink-0 opacity-70" />
           </button>
         )}
 
@@ -606,6 +697,7 @@ const City = () => {
             { icon: RotateCcw, label: t.rotateLeft, on: () => rotate(-1) },
             { icon: RotateCw, label: t.rotateRight, on: () => rotate(1) },
             { icon: Building2, label: t.tower, on: () => select({ kind: "tower" }, true) },
+            ...(player ? [{ icon: HelpCircle, label: tTour.label, on: () => { select(null); setTourOpen(true); } }] : []),
           ].map(({ icon: Icon, label, on }) => (
             <button
               key={label}
@@ -618,6 +710,10 @@ const City = () => {
             </button>
           ))}
         </div>
+
+        {tourOpen && player && !selection && !plotOpen && (
+          <Tour email={player.email} balance={economy.wallet?.balance ?? null} onFindMe={findMe} onClose={() => setTourOpen(false)} />
+        )}
 
         {/* selection card: bottom sheet on phones, side card on desktop */}
         {selection && (
