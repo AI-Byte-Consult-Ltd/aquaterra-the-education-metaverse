@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Anchor, Check, Copy, Loader2, Repeat, Wallet as WalletIcon } from "lucide-react";
+import { Anchor, Check, Copy, Loader2, Repeat, Sparkles, Wallet as WalletIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { useAccount } from "@/game/account/AccountContext";
@@ -8,6 +8,7 @@ import { useEconomy } from "@/game/economy/EconomyContext";
 import { Shell } from "@/game/state/ui";
 import { Panel, btnMain, btnSoft, input } from "@/game/bank/ui";
 import {
+  ipfsImage,
   cancelSwap, confirmSwap, fetchHeritageMe, linkChallenge, linkWallet, startSwap, unlinkWallet,
   type HeritageError, type HeritageMe, type Swap,
 } from "@/game/heritage/api";
@@ -216,6 +217,22 @@ const Heritage = () => {
             <p className="text-xs text-muted-foreground">{t.feeRule}</p>
           </Panel>
 
+          {(me.companions?.length ?? 0) > 0 && (
+            <Panel title={t.companions} icon={Sparkles} className="md:col-span-2">
+              <p className="text-xs text-muted-foreground">{t.companionNote}</p>
+              <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {me.companions!.map((c) => (
+                  <li key={c.token} className="overflow-hidden rounded-lg border border-border">
+                    {ipfsImage(c.image) && <img src={ipfsImage(c.image)!} alt={c.name} loading="lazy" className="aspect-square w-full object-cover" />}
+                    <div className="px-2 py-1.5 text-xs">
+                      <p className="font-semibold">{c.name}</p>
+                      <p className="text-muted-foreground">{[c.pantheon, c.domain].filter(Boolean).join(" · ")}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          )}
           {me.swaps.length > 0 && (
             <Panel title={t.mySwaps} icon={Anchor} className="md:col-span-2">
               <ul className="space-y-3">

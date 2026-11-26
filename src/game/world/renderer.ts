@@ -6,7 +6,7 @@ import { LAGOON, baseColor, daylight, shade, skyColor, treeColor, type RGB } fro
 import { groundTurnMatrix, toViewPoint, turn, viewMaps, type Rotation } from "./view";
 import { CIVIC, civicHit, drawCivic, type CivicId } from "./civic";
 import { drawTrail, type Point, type TripPlayer } from "../travel/drop";
-import { drawAvatar, seed, type AvatarStyle } from "../residents/avatars";
+import { drawAvatar, drawCompanion, seed, type AvatarStyle } from "../residents/avatars";
 
 export const TW = 32;
 export const TH = 16;
@@ -85,7 +85,9 @@ export class WorldRenderer {
   /** The signed-in resident's drop: where it stands (world tiles), its colour and label. */
   player: { x: number; y: number; hue: number; label: string; style?: AvatarStyle } | null = null;
   /** Other residents (real ones, from the server), already spread around shared spots: world tiles, fractional. */
-  residents: { key: string; fx: number; fy: number; style: AvatarStyle; hue: number; name: string; online: boolean }[] = [];
+  residents: { key: string; fx: number; fy: number; style: AvatarStyle; hue: number; name: string; online: boolean; companion?: string | null }[] = [];
+  /** My AI companion (NICS AI Agent), floating beside me. */
+  myCompanion: string | null = null;
   showResidents = true;
   /** A trip being played: the drop moves along it, the camera follows while `follow` is on. */
   trip: TripPlayer | null = null;
@@ -610,6 +612,7 @@ export class WorldRenderer {
       this.camera.cy += (py - this.camera.cy) * 0.12;
     }
     drawAvatar(ctx, px, py, s, { style: me.style ?? "drop", hue: me.hue }, time, { lift, label: me.label, online: true });
+    if (this.myCompanion) drawCompanion(ctx, px, py - lift * 70 / s, s, this.myCompanion, time, { label: s >= 0.9 });
   }
 
   /** Other residents where they stand: names when close enough, quieter when away. */
@@ -634,6 +637,7 @@ export class WorldRenderer {
         phase: seed(r.key) * 7,
         label: named && (r.online || s >= 1.6) ? r.name : undefined,
       });
+      if (r.companion) drawCompanion(ctx, p.px, p.py, s, r.companion, time, { dim: !r.online, phase: seed(r.key) * 5, label: named && s >= 1.6 });
     }
   }
 

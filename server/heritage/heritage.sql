@@ -355,9 +355,110 @@ FROM (VALUES
 JOIN aquaterra_nft_collections c ON c.chain = 'ethereum' AND c.contract = v.contract
 ON CONFLICT DO NOTHING;
 
+-- NICS AI Agents (Ethereum 0x55e9…, symbol NOVA, 2026-11-26): each agent becomes the AI companion of
+-- the resident who swaps it in (name and picture in the profile, next to the avatar on the map),
+-- plus 1,000 TIDE. Founder decision.
+CREATE TABLE IF NOT EXISTS aquaterra_companions (
+  collection_id int NOT NULL,
+  token_id text NOT NULL,
+  email text NOT NULL,
+  name text NOT NULL,
+  pantheon text,
+  domain text,
+  image text,                        -- ipfs CID of the picture
+  since timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (collection_id, token_id)
+);
+CREATE INDEX IF NOT EXISTS aquaterra_companions_email ON aquaterra_companions (email);
+ALTER TABLE aquaterra_heritage_items ADD COLUMN IF NOT EXISTS meta jsonb;
+ALTER TABLE aquaterra_heritage_items DROP CONSTRAINT IF EXISTS aquaterra_heritage_items_gives_check;
+ALTER TABLE aquaterra_heritage_items ADD CONSTRAINT aquaterra_heritage_items_gives_check CHECK (gives IN ('island', 'house', 'tide', 'companion'));
+INSERT INTO aquaterra_nft_collections (chain, contract, name, kind, swap_tide, allow_plot, enabled, note) VALUES
+  ('ethereum', '0x55e9f906866c364fe330a3de88e2e06d075e1a83', 'NICS AI Agents (NOVA)', 'asset', 0, false, true,
+   'Each agent becomes your AI companion in AquaTerra: name and picture in your profile and next to you on the map, plus 1,000 TIDE.')
+ON CONFLICT (chain, contract) DO NOTHING;
+UPDATE aquaterra_nft_collections SET listed = true, allow_plot = false, standard = 'erc721'
+WHERE chain = 'ethereum' AND contract = '0x55e9f906866c364fe330a3de88e2e06d075e1a83' AND NOT listed;
+INSERT INTO aquaterra_heritage_items (collection_id, token_id, seq, title, gives, tide, tiles, price, place, meta)
+SELECT c.id, v.token_id, v.seq, v.title, 'companion', 1000, 0, 0, NULL,
+  jsonb_build_object('pantheon', v.pantheon, 'domain', v.domain, 'image', v.image)
+FROM (VALUES
+  ('1', 42, 'Ra', 'Egyptian', 'Sun & Creation', 'bafybeiawyfmtcmlhgs6u7gmtak4poge46gl6nr4ks6tuqe7tkhqutqdagu'),
+  ('2', 43, 'Odin', 'Norse', 'Wisdom & War', 'bafybeienzn7hwrtvie2ioeejxknqkfotxnbxlwe22fgouyn2cb6bavc66e'),
+  ('3', 44, 'Shiva', 'Hindu', 'Destruction & Creation', 'bafybeigrzk2kqx2f6nu6vgizgm2vqmi6pioixqgyflc2dtqhompcwhdk4e'),
+  ('4', 45, 'Amaterasu', 'Shinto', 'Sun & Light', 'bafybeidpvkk2lk527mlf5fqgr5xnmv2n4erbhjvyf7ozjhp7nb2kborqwy'),
+  ('5', 46, 'Quetzalcoatl', 'Aztec', 'Wisdom & Wind', 'bafybeifirv7vs6qs4rogluqha4genwlvo3brxlmlh2teyg4sxdk3ktkpyq'),
+  ('6', 47, 'Jupiter', 'Roman', 'Sky & Authority', 'bafybeieavf3bbcd27cvc7pt33elqv4b5me6ksrkmv5blrcaaqbobtg74zu'),
+  ('7', 48, 'Athena', 'Greek', 'Wisdom & War', 'bafybeigbndc2mijaiyaimkszaldpo4ue6ll6ask6xrvdmqjawdyk7qftge'),
+  ('8', 49, 'Apollo', 'Greek', 'Sun & Arts', 'bafybeid5gr4333c3whsxbimfrlaeajmyey5htc5ovzngem2xnprsomnd3u'),
+  ('9', 50, 'Cupid', 'Roman', 'Love & Affection', 'bafybeiggos5xra2idmulwtu6pzvzh2fc7lj2orpi6guddym4nlaczrwzaq'),
+  ('10', 51, 'Hermes', 'Greek', 'Travel, Communication & Commerce', 'bafybeiajexhqoqbf5zhj6vvryztajuju26lpu76xzha573otkt3nzgif7m'),
+  ('11', 52, 'Guan Yu', 'Chinese', 'War & Loyalty', 'bafybeigpaexbjfaoopqiwqw5mh434ocx7abeuzyufnyrzvrjkcui62q5li'),
+  ('12', 53, 'Anubis', 'Egyptian', 'Death & Afterlife', 'bafybeieofwkcpvur7pnmwyihizktxjjdzophfi5y3p5zaoqlm3ywuzz7ae'),
+  ('13', 54, 'Bastet', 'Egyptian', 'Protection & Home', 'bafybeiarlhgpetxufrkzym2bc57cjx5hpkopgdkli2o2c25bh6nnlv3t4y'),
+  ('14', 55, 'Frey', 'Norse', 'Fertility, Prosperity & Sun', 'bafybeie43k6lmcqytjspltgsposfdggzvjmibulqq2c56qyer2mpy6g3mq'),
+  ('15', 56, 'Valkyrie', 'Norse', 'Courage & Guardianship', 'bafybeibsiyadmuucyplqugjg7dlhz4j4ovamiib6ws4mvq7e46c47ghiqm'),
+  ('16', 57, 'Heru (Horus)', 'Egyptian', 'Sky, Protection & Kingship', 'bafybeicfgjgisxhdmgiv6ldurlt4j46ke5tkzo36dvsdkfiyedoj3h7lne'),
+  ('17', 58, 'Johann Weissmann', '', 'Scientist & Inventor', 'bafybeibvxftmuclwejvprfpzb2k77r4ej4fgjmlvpifmc2fkdx2ew5od6u'),
+  ('18', 59, 'Osiris', 'Egyptian', 'Afterlife, Resurrection & Fertility', 'bafybeicpoiwwg2rj3qoojaimcmzv4et4xo4owqzn2vd5cik7jdxsavx57e'),
+  ('19', 60, 'Auset', 'Egyptian', 'Wisdom, Protection & Nurturing', 'bafybeiadf6cwylxw52ck7b74fqukwutwpo77ps24pod3y5e2vp5udundmu'),
+  ('20', 61, 'Thoth', 'Egyptian', 'Wisdom, Writing & Knowledge', 'bafybeif33qsgoavevouofajyo62jywpze5baz3qyfkr7cimtxjljfftsfy'),
+  ('21', 62, 'Set (Seth)', 'Egyptian', 'Chaos, Storms & Protection', 'bafybeibhuwdvsf2on5wau4hovvtii7nc46bs5kgxaefud5ihpaqmdmarvi'),
+  ('22', 63, 'Tutankhamun', 'Historical Human', 'Leader & Protector', 'bafybeibvcndlfk2wpdahgrlht3fibyjpz7kyejubfrmbnmfdn6subfh2xy'),
+  ('23', 64, 'Socrates', '', 'Philosopher', 'bafybeidmqxjy2n65krdspryrq2ybaq5kqowtocovhjor6fw56tzuqoavpq'),
+  ('24', 65, 'Aeternus Scriptor', 'Medieval Humanist', 'Scholar, Writer, AI, Avatar', 'bafybeidf2ubisfjbu6yh2k47fegub3pkqgsy352u24jyubdrth63wvnr44'),
+  ('25', 66, 'Alaric the Arcane', 'Medieval European', 'Mage, Spirit, AI, Avatar', 'bafybeibnxus6qlmmqb6miiamduds4nbkl25cyxqyb4na76we264hws63aq'),
+  ('26', 67, 'Neptune', 'Roman', 'God, Spirit, AI, Avatar', 'bafybeibu44maxyklurwr5sqla6u73xbvenbhl333zmbum5yrfz7676d6zy'),
+  ('27', 68, 'Thor', 'Norse (Aesir)', 'God, Spirit, AI, Avatar', 'bafybeifw5j4lqf5mzmnk2wfl5lelqfvskupimgpb766yrns6f6ykb6jtlq'),
+  ('28', 69, 'Poseidon', 'Greek', 'God, Spirit, AI, Avatar', 'bafybeicuvgrubdiqu3mg5gwls4vvpphjcdsjzdvztjnxjeivepowkmhxxe'),
+  ('29', 70, 'Baba Yaga', 'Slavic', 'Witch, Spirit, AI, Avatar', 'bafybeifcxtirkk4t6z3e4cu6tjvl5bmvvjj47a3znnmyoff4chocgcds5y'),
+  ('30', 71, 'Odùduwà', 'Yoruba', 'Orisha, Divine King, AI, Avatar', 'bafybeicgjihajxhyomojm73rmy5vo5wt5kaflpuifocfucjzogsoshpxui'),
+  ('31', 72, 'Olódùmarè', 'Yoruba', 'Deity, Spirit, AI, Avatar', 'bafybeifqrzy6eyjv6fpzm5qgcuawj277uzr3myjz4piq5wjtthbdxre2hu'),
+  ('32', 73, 'Orunmila', 'Yoruba', 'Orisha, Spirit, AI, Avatar', 'bafybeibp2s2pesbb6xbti7uothcpbgjqbrztrsy6lp42k5np3bb3goaija'),
+  ('33', 74, 'Eshu / Èṣù / Elegbara', 'Yoruba', 'Orisha, Trickster, Messenger, AI Avatar', 'bafybeiati2bwkywac7frx2wkhnewh463b6c7gaznfqfe5sx3a5qer3njce'),
+  ('34', 75, 'Ogun', 'Yoruba', 'Orisha, Spirit, AI, Avatar', 'bafybeibjfuupces2czpt3etffypneh2opojvbqorhi6pjpmhlgpspwwzo4'),
+  ('35', 76, 'Oya', 'Yoruba', 'Orisha, Spirit, AI, Avatar', 'bafybeicfj2ycj3fbtixxwomaqh2yn44tqivj7ssuyzek2abxnzfqaexkni'),
+  ('36', 77, 'Shango', 'Yoruba', 'Orisha, Spirit, AI, Avatar', 'bafybeih5qxe53mrrnmq67377otrvcmhxgaoas44werkcfgk5dq5mucap6m'),
+  ('37', 78, 'Oshun', 'Yoruba', 'Orisha, Spirit, AI, Avatar', 'bafybeigutxk6itlbl4cwpgcpbuzaakusz4pdkxbfwc45xdbvbktlps7rau'),
+  ('38', 79, 'Obatala', 'Yoruba', 'Orisha, Spirit, AI, Avatar', 'bafybeia7hzw2feuky5ncrcdh7nmhmqtoqkkrfmcw53tmjty575zkvnd2by'),
+  ('39', 80, 'Yemayá', 'Yoruba', 'Orisha, Spirit, AI, Avatar', 'bafybeiaknkkc3wdujwz7ias52qj4djjwblmoosud72qecwct2ymai354bm'),
+  ('40', 81, 'Loki of Asgard', 'Norse / Aesir', 'God, Trickster, Shapeshifter, AI Avatar', 'bafybeiadkpo3gyizos6qfpy3zpkkkcznjp6coodn2d55mmagfzbuxv4fku'),
+  ('41', 82, 'Pumpkin King', 'Halloween / Folklore', 'Spirit, Trickster, Shadow Guide, AI Avatar', 'bafybeicfcpr7ndsndq7nnkyw2rw7xgioucosncpfndbudexljbggxkchim'),
+  ('42', 83, 'Living Skeleton', 'Halloween / Supernatural', 'Undead, Spirit, AI, Avatar', 'bafybeidrzztkggx2hz2dm5wxweoaihzrfxb66s4avw3muz3rq5s5nzc42a'),
+  ('43', 84, 'Olokun', 'Yoruba', 'Orisha, Spirit, AI Avatar', 'bafybeicfjabqd5td3splnzraet7i7t5i2mely6o6vuoj7cmigxtrou6nwe'),
+  ('44', 85, 'Oba', 'Yoruba', 'Orisha, Goddess, AI, Avatar', 'bafybeihg52azsm67bsd3waokris7nvgnuz7276pxb7ohkb3ytkum3uwkga'),
+  ('45', 86, 'Leonardo da Vinci', 'Renaissance Masters', 'Human Genius, Polymath, AI Avatar', 'bafybeif324w2w3bpvisnip4yclimdtvrubkynyqklnzjji5pr55xp5xztq'),
+  ('46', 87, 'Lucien Deverne', 'Culinary Legends', 'Chef, Alchemist, AI Avatar', 'bafybeihvduh7udsznryjxrifd7pphwqbzijmbrzthx63xcqyiupls2g57e'),
+  ('47', 88, 'Gaius Julius Caesar', 'Roman', 'General, Statesman, AI Avatar', 'bafybeifltr5dete6dekl66b7ejzmibrcennlmq4ujjrdcowiydwo2dqxhi'),
+  ('48', 89, 'Cleopatra', 'Egyptian', 'Pharaoh, AI, Avatar, Spirit', 'bafybeib7vimrvyezmtlaecifhbhd27xpwzzydxvcon77uzirsfo5ph7hiq'),
+  ('49', 90, 'Aganju', 'Yoruba', 'Orisha, AI Avatar, Elemental Force', 'bafybeiczcqwzzfiulfx5hfs5okyl4d7xo4l72fulhjglej2svx7a2c4zdu'),
+  ('50', 91, 'Ibeji', 'Yoruba', 'Orisha Twins, AI Avatars', 'bafybeigwub57nbtbowd4csxe5pedr4huizwsxyzvu3ze5sa3j7f65vbiuu'),
+  ('51', 92, 'Erinle', 'Yoruba', 'Orisha, AI Avatar, Healer', 'bafybeibw72vecphl35hjlztat6kv4m75tgibgqdmxvptoand6j257n7nlm'),
+  ('52', 93, 'Oko', 'Yoruba', 'Orisha, AI Avatar, Guardian of the Fields', 'bafybeigepjcz5draloxsvpwo74q4i6ysa5xyeachki4dsjljerxsrvp3ja'),
+  ('53', 94, 'Ozain', 'Yoruba', 'Orisha, AI Avatar, Guardian of Forests', 'bafybeiezj67fbamb66niyppetyldye44fquyfvypzviy5fubr5z3lhf7uy'),
+  ('54', 95, 'Maat', 'Egyptian', 'Goddess, AI Avatar, Judge', 'bafybeial2yccjdwc3leu63pf325yi2gf4saewmuqfoep7t7ej4a6lfru6e'),
+  ('55', 96, 'Maat', 'Egyptian', 'Goddess, AI Avatar, Judge', 'bafybeial2yccjdwc3leu63pf325yi2gf4saewmuqfoep7t7ej4a6lfru6e'),
+  ('56', 97, 'Ptah', 'Egyptian', 'God, AI Architect, Creator', 'bafybeiayjvltilewerjafy3nn5tfduau5tq4y6gy3yhtemairpnbbjsngq'),
+  ('57', 98, 'Michael Myers', 'Modern Legends', 'Silent Figure, AI Avatar', 'bafybeibv7vxrsgs4ka32a322a63vymjompww7p32gkrthgikdr4fwnomia'),
+  ('58', 99, 'Captain Planet', 'Elemental / Environmental', 'Elemental Spirit, AI Guardian, Protector', 'bafybeihy2iyuuk7ylgygj5anlblzrf5a76j7rictyvrlooknjsaoy7raw4'),
+  ('59', 100, 'Solar Guardian', 'Cosmic Protectors', 'AI Avatar, Celestial Hero', 'bafybeigw6a7kdm6hm55mb3kgqnjrh4uddt2xlksmcrna3eyittgp22qdny'),
+  ('60', 101, 'Scarlet Velocity', 'Cosmic Protectors', 'AI Avatar, Temporal Guardian', 'bafybeidxhtzg5x3nvzfmyj3jx6acojby6vdzj3pjz3bjqf63ws4bh6af6i'),
+  ('61', 102, 'Emerald Guardian', 'Cosmic Protectors', 'AI Avatar, Universal Hero', 'bafybeiauxk3jp2wu5x4cjh56wik4dxrsuemtecj7ji2fsr6bd5yloeolu4'),
+  ('62', 103, 'Isis', 'Egyptian', 'Goddess, AI Avatar, Healer', 'bafybeicke53aihhtlxzi4xoahq76pgi43joru5xay5d3kq4zfgeogvxwoe'),
+  ('63', 104, 'The Werewolf', 'Night Beasts', 'AI Avatar, Mythic Creature', 'bafybeiclxgqegxmrcse6krtpiv3fi23qidgmewbcnsvvqdcrhf2y56lmpa')
+) AS v (token_id, seq, title, pantheon, domain, image)
+JOIN aquaterra_nft_collections c ON c.chain = 'ethereum' AND c.contract = '0x55e9f906866c364fe330a3de88e2e06d075e1a83'
+ON CONFLICT DO NOTHING;
+
+CREATE OR REPLACE FUNCTION aquaterra_companions_json(who text) RETURNS jsonb LANGUAGE sql STABLE AS $fn$
+  SELECT COALESCE(jsonb_agg(jsonb_build_object('token', token_id, 'name', name, 'pantheon', pantheon, 'domain', domain,
+    'image', image, 'since', since) ORDER BY since, token_id), '[]'::jsonb)
+  FROM aquaterra_companions WHERE email = who
+$fn$;
+
 CREATE OR REPLACE FUNCTION aquaterra_h_items_json(cid int) RETURNS jsonb LANGUAGE sql STABLE AS $fn$
   SELECT COALESCE(jsonb_agg(jsonb_build_object('tokenId', token_id, 'title', title, 'gives', gives, 'tide', tide,
-    'tiles', tiles, 'place', place, 'taken', email IS NOT NULL) ORDER BY seq), '[]'::jsonb)
+    'tiles', tiles, 'place', place, 'taken', email IS NOT NULL, 'image', meta->>'image', 'about', meta->>'domain') ORDER BY seq), '[]'::jsonb)
   FROM aquaterra_heritage_items WHERE collection_id = cid
 $fn$;
 
@@ -368,7 +469,12 @@ BEGIN
   SELECT * INTO it FROM aquaterra_heritage_items WHERE collection_id = s.collection_id AND token_id = s.token_id FOR UPDATE;
   IF it.seq IS NULL THEN RAISE EXCEPTION 'token'; END IF;
   IF it.email IS NOT NULL THEN RAISE EXCEPTION 'swapped'; END IF;
-  IF it.gives = 'tide' THEN
+  IF it.gives IN ('tide', 'companion') THEN
+    IF it.gives = 'companion' THEN
+      INSERT INTO aquaterra_companions (collection_id, token_id, email, name, pantheon, domain, image)
+      VALUES (it.collection_id, it.token_id, s.email, it.title, it.meta->>'pantheon', it.meta->>'domain', it.meta->>'image')
+      ON CONFLICT (collection_id, token_id) DO NOTHING;
+    END IF;
     UPDATE aquaterra_heritage_items SET email = s.email WHERE collection_id = it.collection_id AND token_id = it.token_id;
     UPDATE aquaterra_nft_swaps SET status = 'done', tide = it.tide, done_at = now() WHERE id = s.id;
     IF it.tide > 0 THEN
@@ -478,6 +584,7 @@ BEGIN
           'swaps', COALESCE((SELECT jsonb_agg(aquaterra_h_swap_json(x) ORDER BY x.id DESC) FROM aquaterra_nft_swaps x
             WHERE x.email = me AND x.status <> 'checking'), '[]'::jsonb),
           'apartments', COALESCE((SELECT jsonb_agg(aquaterra_apt_json(a) ORDER BY a.tower, a.floor, a.number) FROM aquaterra_apartments a WHERE a.owner = me), '[]'::jsonb),
+          'companions', aquaterra_companions_json(me),
           'balance', aquaterra_balance(me),
           'feeFree', greatest(0, aquaterra_balance(me) - aquaterra_swap_locked(me)));
       END IF;
