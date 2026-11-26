@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, Sparkles, UserRound, Users, Waves, X, ZoomIn, ZoomOut, Trophy, Orbit as OrbitIcon } from "lucide-react";
+import { ArrowLeft, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, Sparkles, UserRound, Users, Waves, X, ZoomIn, ZoomOut, Trophy, Rainbow, Orbit as OrbitIcon } from "lucide-react";
 import { NicsChatButton } from "@/game/nics/NicsChat";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -633,6 +633,15 @@ const City = () => {
         >
           <Sparkles className="h-4 w-4 text-sky-300" />
           <span className="hidden sm:inline">{tq.short}</span>
+        </Link>
+        <Link
+          to="/rainbowland"
+          title="Rainbowland"
+          aria-label="Rainbowland"
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-pink-400/50 bg-gradient-to-r from-rose-500/15 via-amber-400/15 to-violet-500/15 px-2.5 text-sm font-semibold text-pink-100 hover:border-pink-300"
+        >
+          <Rainbow className="h-4 w-4 text-pink-300" />
+          <span className="hidden sm:inline">Rainbowland</span>
         </Link>
         <Link
           to="/orbit"

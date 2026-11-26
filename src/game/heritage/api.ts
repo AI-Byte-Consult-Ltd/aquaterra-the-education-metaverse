@@ -8,7 +8,7 @@ export const HERITAGE_ENDPOINT = (import.meta.env.VITE_HERITAGE_ENDPOINT as stri
 
 const ERRORS = [
   "session", "address", "not_linked", "already_mine", "linked_elsewhere", "too_many", "signature", "expired", "wallet_limit",
-  "swap_open", "closed", "collection", "chain_soon", "token", "choice", "no_wallet", "swapped", "reserve_empty", "plot_limit",
+  "swap_open", "cell_taken", "closed", "collection", "chain_soon", "token", "choice", "no_wallet", "swapped", "reserve_empty", "plot_limit",
   "insufficient", "not_found", "not_open", "not_owner", "not_received", "chain", "forbidden", "district", "kind", "key", "amount", "action", "nothing",
 ] as const;
 export type HeritageError = (typeof ERRORS)[number] | "network" | "no_wallet_app" | "rejected";

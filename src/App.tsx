@@ -25,6 +25,7 @@ import SetupPage from "./pages/arcade/SetupPage";
 import { CharterPage } from "./pages/state/CharterPage";
 import Roads from "./pages/Roads";
 import Heritage from "./pages/Heritage";
+import Rainbowland from "./pages/Rainbowland";
 import Quests from "./pages/Quests";
 import Orbit from "./pages/Orbit";
 import Rich from "./pages/Rich";
@@ -64,6 +65,7 @@ const App = () => (
             <Route path="/bank" element={<Bank />} />
             <Route path="/roads" element={<Roads />} />
             <Route path="/heritage" element={<RequireAccount><Heritage /></RequireAccount>} />
+            <Route path="/rainbowland" element={<Rainbowland />} />
             <Route path="/quests" element={<Quests />} />
             <Route path="/orbit" element={<Orbit />} />
             <Route path="/rich" element={<Rich />} />

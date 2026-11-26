@@ -40,15 +40,17 @@ export function tripSegments(world: World, net: NetworkInfo, from: Point, legs: 
     segs.push({ mode, pts, seconds: mode === "walk" ? Math.min(3, Math.max(0.6, len / 22)) : legSeconds(mode, len) });
     pos = to;
   };
+  // a district off this map (Rainbowland) is reached at its hub on the map edge
+  const centre = (d: number): Point => (world.districts[d] ? districtCentre(world, d) : hubOf(net, "ferry", d) ?? hubOf(net, "train", d) ?? pos);
   let cur = start;
   for (const l of legs) {
     if (l.mode === "walk") continue;
-    if (l.mode === "car") move("car", districtCentre(world, l.to));
+    if (l.mode === "car") move("car", centre(l.to));
     else {
       const a = hubOf(net, l.mode, cur);
       const b = hubOf(net, l.mode, l.to);
       if (a) move("walk", a);
-      move(l.mode, b ?? districtCentre(world, l.to));
+      move(l.mode, b ?? centre(l.to));
     }
     cur = l.to;
   }
