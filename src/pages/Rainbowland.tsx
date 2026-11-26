@@ -10,7 +10,7 @@ import { Panel, btnMain, btnSoft, input } from "@/game/bank/ui";
 import { fetchRainbowCell, fetchRainbowMap, type RainbowCell, type RainbowError, type RainbowMap } from "@/game/rainbowland/api";
 import { COLS, RAINBOW_DISTRICT, TIERS, TIER_COLOR, landName, parseCell } from "@/game/rainbowland/grid";
 import { loadTerrain, zoneAtCell, type Terrain } from "@/game/rainbowland/terrain";
-import { IMG_H, IMG_W, PAD, drawBase, drawScene, toImage, tokenAtImage, type View } from "@/game/rainbowland/render";
+import { IMG_H, IMG_W, PAD, drawBase, drawScene, toImage, tokenAtImage, cellAtImage, type View } from "@/game/rainbowland/render";
 import { rainbowStrings } from "@/game/rainbowland/strings";
 import { fetchNetwork, toRoutes, travel, type Location, type NetworkInfo } from "@/game/travel/api";
 import { DEFAULT_FARES, planTrips, type Plan } from "@/game/travel/network";
@@ -28,6 +28,9 @@ const Rainbowland = () => {
   const [map, setMap] = useState<RainbowMap | null>(null);
   const [error, setError] = useState<RainbowError | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
+  /** The tapped map cell: a LAND token or, outside the minted rows, a cell with no token yet. */
+  const [spot, setSpot] = useState<{ c: number; r: number } | null>(null);
+  const [cellFailed, setCellFailed] = useState(false);
   const [cell, setCell] = useState<RainbowCell | null>(null);
   const [query, setQuery] = useState("");
   const [me, setMe] = useState<Location | null>(null);
@@ -155,8 +158,8 @@ const Rainbowland = () => {
   }, [clampView]);
 
   // draw loop
-  const selectedRef = useRef<number | null>(null);
-  selectedRef.current = selected;
+  const selectedRef = useRef<{ c: number; r: number } | null>(null);
+  selectedRef.current = spot;
   useEffect(() => {
     let raf = 0;
     const tick = (time: number) => {
@@ -183,8 +186,10 @@ const Rainbowland = () => {
     (tok: number | null) => {
       setSelected(tok);
       setCell(null);
+      setCellFailed(false);
       if (tok == null) return;
-      fetchRainbowCell(tok, session).then((r) => r.ok && setCell(r.data.cell));
+      setSpot({ c: tok % COLS, r: Math.floor(tok / COLS) });
+      fetchRainbowCell(tok, session).then((r) => (r.ok ? setCell(r.data.cell) : setCellFailed(true)));
     },
     [session],
   );
@@ -247,7 +252,9 @@ const Rainbowland = () => {
       if (pts.size < 2) pinch = 0;
       if (p && moved < 6 && pts.size === 0) {
         const q = toImage(viewRef.current, p.x, p.y);
-        select(tokenAtImage(q.x, q.y));
+        const tok = tokenAtImage(q.x, q.y);
+        select(tok);
+        if (tok == null) setSpot(cellAtImage(q.x, q.y));
       }
     };
     const wheel = (e: WheelEvent) => {
@@ -273,7 +280,16 @@ const Rainbowland = () => {
     e.preventDefault();
     const tok = parseCell(query);
     if (tok == null) {
-      toast.error(t.notFound);
+      // a cell of the map with no token yet still opens its card
+      const xy = query.match(/(-?\d+)\s*[, ]\s*(-?\d+)/);
+      const c = xy ? Number(xy[1]) + 128 : -1, r = xy ? Number(xy[2]) + 128 : -1;
+      if (c < 0 || r < 0 || c >= IMG_W || r >= IMG_H) {
+        toast.error(t.notFound);
+        return;
+      }
+      focus(0, 14, { c, r });
+      select(null);
+      setSpot({ c, r });
       return;
     }
     focus(tok);
@@ -306,7 +322,8 @@ const Rainbowland = () => {
     return planTrips(toRoutes(net), me.districtId, here ? CAPITAL : RAINBOW_DISTRICT, fares).filter((p) => p.legs.length > 0);
   }, [net, me, here]);
   const harbour = net?.hubs.find((h) => h.kind === "port" && h.district !== RAINBOW_DISTRICT && net.routes.some((r) => r[0] === "ferry" && r[1] === h.district && r[2] === RAINBOW_DISTRICT));
-  const zone = selected != null && terrain ? zoneAtCell(terrain, selected % COLS, Math.floor(selected / COLS)) : null;
+  const zone = spot && terrain ? zoneAtCell(terrain, spot.c, spot.r) : null;
+  const spotName = spot ? `LAND (${spot.c - 128}, ${spot.r - 128})` : null;
 
   return (
     <Shell title={t.title} icon={Rainbow} accent="text-fuchsia-300">
@@ -344,13 +361,20 @@ const Rainbowland = () => {
       </div>
 
       <div className="mt-5 grid gap-5 md:grid-cols-2">
-        <Panel title={selected != null ? landName(selected) : t.cell} icon={Layers}>
-          {selected == null && <p className="text-sm text-muted-foreground">{t.hint}</p>}
+        <Panel title={selected != null ? landName(selected) : spotName ?? t.cell} icon={Layers}>
+          {spot == null && <p className="text-sm text-muted-foreground">{t.hint}</p>}
+          {selected == null && spot != null && (
+            <div className="space-y-2 text-sm">
+              <Row k={t.zone} v={zone?.name ?? t.openWater} />
+              <p className="text-muted-foreground">{t.noToken}</p>
+            </div>
+          )}
           {selected != null && (
             <div className="space-y-2 text-sm">
               <p className="text-muted-foreground">{t.token(selected)}</p>
               <Row k={t.zone} v={zone?.name ?? t.openWater} />
-              {!cell && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              {!cell && !cellFailed && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              {cellFailed && <p className="text-muted-foreground">{t.errors.network}</p>}
               {cell && (
                 <>
                   <Row k={t.rarity} v={cell.rarity || t.rarityUnknown} />
