@@ -90,7 +90,9 @@ const Heritage = () => {
   const rainbowToken = rainbow && token !== "" && Number(token) < RAINBOW_TOTAL ? Number(token) : null;
   const isTower = col?.kind === "tower";
   const isPlanet = col?.kind === "planet";
-  const plotOk = !isTower && !isPlanet && !!col?.allowPlot && (me?.reserve ?? 0) > 0;
+  const listed = col?.listed ? col.items ?? [] : null;
+  const item = listed?.find((i) => i.tokenId === token.replace(/^0+(?=\d)/, "")) ?? null;
+  const plotOk = !listed && !isTower && !isPlanet && !!col?.allowPlot && (me?.reserve ?? 0) > 0;
   const pick = plotOk ? choice : "tide";
   const evmChains = new Set((me?.chains ?? []).filter((c) => c.family === "evm" && c.enabled).map((c) => c.id));
   const chainName = (id: string) => me?.chains.find((c) => c.id === id)?.name ?? id;
@@ -170,7 +172,23 @@ const Heritage = () => {
                   <input className={input} inputMode="numeric" value={token} onChange={(e) => setToken(e.target.value.replace(/\D/g, "").slice(0, 78))} placeholder="1234" />
                   <span className="block text-xs text-muted-foreground">{t.tokenHint}</span>
                 </label>
-                {isPlanet ? (
+                {listed ? (
+                  <div className="space-y-1.5 text-sm">
+                    <p className="text-xs text-muted-foreground">{t.listedNote}</p>
+                    <ul className="max-h-48 space-y-1 overflow-y-auto">
+                      {listed.map((i) => (
+                        <li key={i.tokenId}>
+                          <button type="button" disabled={i.taken} onClick={() => setToken(i.tokenId)}
+                            className={`w-full rounded-lg border px-2 py-1.5 text-left disabled:opacity-40 ${item?.tokenId === i.tokenId ? "border-cyan-300 bg-cyan-400/10" : "border-border"}`}>
+                            <span className="font-medium">{i.title}</span>
+                            <span className="block text-xs text-muted-foreground">{t.gives(i.gives, i.tide, i.tiles)}{i.place ? ` · ${i.place}` : ""}{i.taken ? ` · ${t.taken}` : ""}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    {token !== "" && !item && <p className="text-xs text-destructive">{t.notListed}</p>}
+                  </div>
+                ) : isPlanet ? (
                   <p className="rounded-lg border border-indigo-300 bg-indigo-400/10 px-2 py-2 text-sm">{t.getPlanet} <Link to="/orbit" className="underline">Orbit</Link></p>
                 ) : isTower ? (
                   <p className="rounded-lg border border-cyan-300 bg-cyan-400/10 px-2 py-2 text-sm">{t.getApartment(col!.name)}</p>
@@ -186,7 +204,7 @@ const Heritage = () => {
                   </button>
                 </div>
                 )}
-                <button className={`${btnMain} w-full`} disabled={!!busy || !token || me.wallets.length === 0}>
+                <button className={`${btnMain} w-full`} disabled={!!busy || !token || me.wallets.length === 0 || (!!listed && !item)}>
                   {busy === "swap" && <Loader2 className="h-4 w-4 animate-spin" />}
                   {busy === "swap" ? t.checking : t.start(me.fee)}
                 </button>

@@ -109,7 +109,8 @@ A1, B1 = "0x" + "a1" * 20, "0x" + "b1" * 20
 
 info = her(action="info")
 check(info["ok"] and info["fee"] == 600 and info["vault"] == VAULT and info["reserve"] == 2, f"info {info}")
-check([c["kind"] for c in info["collections"]] == ["tower", "tower"], "only the two towers are on at the start")
+check([c["kind"] for c in info["collections"] if not c["listed"]] == ["tower", "tower"], "only the two towers are on at the start, besides listed ones")
+check(sum(len(c["items"]) for c in info["collections"] if c["listed"]) == 36 and all(c["chain"] == "ethereum" for c in info["collections"] if c["listed"]), "36 listed Ethereum tokens")
 check([c["id"] for c in info["chains"]] == ["cronos", "polygon", "ethereum", "bitcoin"], "four chains")
 check(her(action="me")["error"] == "session", "me needs a session")
 
@@ -257,6 +258,35 @@ check(c["ok"] and c["gross"] == 30 and c["net"] + c["tax"] == 30 and bal("bea@x"
 psql("UPDATE aquaterra_apartments SET income_from = now() - interval '90 days' WHERE token_id = 7")
 check(her("bea", action="apt_collect")["gross"] == 450, "income caps at 30 days")
 check(her("bea", action="unlink", address=B1)["ok"], "unlink again")
+
+# Listed collections: only listed tokens swap, each to its own island, villa or Tide.
+OS = next(c for c in her(action="info")["collections"] if c["contract"] == "0x495f947276749ce646f68ac8c248420045cb7b5e")
+RBL = next(c for c in her(action="info")["collections"] if c["contract"] == "0xe9b1746e72883eca1b3bd6b03ffb454a2ff8eda0")
+VILLA = "37198557236742699499983501232576879831168205667897545918004480931890655657985"
+player("dan@x", "Dan")
+D1 = "0x" + "d1" * 20
+link("dan", D1)
+check(her("dan", action="swap", collectionId=OS["id"], tokenId="1")["error"] == "token", "an unlisted token of the shared contract does not swap")
+r = her("dan", action="swap", collectionId=OS["id"], tokenId=VILLA)
+check(r["ok"] and r["check"]["standard"] == "erc1155" and r["check"]["holders"] == [D1], f"ERC-1155 check lists the linked wallets {r}")
+o = internal(action="owner", swapId=r["check"]["swapId"], step="open", owner=D1)
+check(o["ok"] and o["swap"]["choice"] == "item" and o["swap"]["status"] == "open", f"item swap open {o}")
+c2 = her("dan", action="confirm", swapId=o["swap"]["id"])
+check(c2.get("check", {}).get("holders") == [her(action="info")["vault"]], f"confirm asks the vault {c2} {VAULT}")
+d = internal(action="owner", swapId=o["swap"]["id"], step="confirm", owner=her(action="info")["vault"])
+check(d["ok"] and d["swap"]["status"] == "done" and d["swap"]["plotId"] == 2000003 and "Golden Villa Isle" in d["swap"]["plotAddress"], f"villa island given {d}")
+check(psql("SELECT owner FROM aquaterra_plot_owners WHERE plot_id = 2000003") == "dan@x", "island owned")
+check(her("bea", action="swap", collectionId=OS["id"], tokenId=VILLA)["error"] == "swapped", "a listed token swaps once")
+check(next(i for i in her(action="info")["collections"] if i["id"] == OS["id"])["items"][2]["taken"] is True, "item shown taken")
+player("eve@x", "Eve")
+E1 = "0x" + "e1" * 20
+link("eve", E1)
+r = her("eve", action="swap", collectionId=RBL["id"], tokenId="28")
+check(r["ok"] and r["check"]["standard"] == "erc721", "RBL is ERC-721")
+o = internal(action="owner", swapId=r["check"]["swapId"], step="open", owner=E1)
+before = bal("eve@x")
+d = internal(action="owner", swapId=o["swap"]["id"], step="confirm", owner=her(action="info")["vault"])
+check(d["ok"] and d["swap"]["tide"] == 7000 and bal("eve@x") == before + 7000, f"Prince of Butay pays 7000 TIDE {d}")
 
 # Ledger adds up: no Tide created or lost.
 check(int(psql("SELECT sum(balance) FROM aquaterra_wallets")) == int(psql("SELECT value FROM aquaterra_economy_params WHERE key = 'genesis_supply'")), "supply unchanged")
