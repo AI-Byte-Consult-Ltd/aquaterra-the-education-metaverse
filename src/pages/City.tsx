@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, UserRound, Waves, X, ZoomIn, ZoomOut } from "lucide-react";
 import { NicsChatButton } from "@/game/nics/NicsChat";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -36,6 +36,8 @@ import { bankStrings } from "@/game/bank/strings";
 import { roadsStrings } from "@/game/roads/strings";
 import { RoadsHere } from "@/game/roads/RoadsHere";
 import { useBankT } from "@/game/bank/ui";
+import Tour, { tourDone } from "@/game/tour/Tour";
+import { tourStrings } from "@/game/tour/strings";
 
 const ARCADE_GLYPH: Record<MapAttraction["template"], string> = { quiz: "?", crystals: "◆", maze: "#", range: "◎", race: "≈" };
 
@@ -127,6 +129,12 @@ const City = () => {
   const [buildRules, setBuildRules] = useState<BuildRules | null>(null);
   const [myBuildings, setMyBuildings] = useState<MyBuilding[]>([]);
   const [plotOpen, setPlotOpen] = useState<Plot | null>(null);
+  // first-visit tour, once per resident on this device; the Tour button replays it
+  const tTour = tourStrings(language);
+  const [tourOpen, setTourOpen] = useState(false);
+  useEffect(() => {
+    if (player?.email && !tourDone(player.email)) setTourOpen(true);
+  }, [player?.email]);
   const loadBuilt = useCallback(async () => {
     const [m, mine] = await Promise.all([fetchBuildMap(), session ? fetchMyBuildings(session) : Promise.resolve(null)]);
     if (m.ok) {
@@ -606,6 +614,7 @@ const City = () => {
             { icon: RotateCcw, label: t.rotateLeft, on: () => rotate(-1) },
             { icon: RotateCw, label: t.rotateRight, on: () => rotate(1) },
             { icon: Building2, label: t.tower, on: () => select({ kind: "tower" }, true) },
+            ...(player ? [{ icon: HelpCircle, label: tTour.label, on: () => { select(null); setTourOpen(true); } }] : []),
           ].map(({ icon: Icon, label, on }) => (
             <button
               key={label}
@@ -618,6 +627,10 @@ const City = () => {
             </button>
           ))}
         </div>
+
+        {tourOpen && player && !selection && !plotOpen && (
+          <Tour email={player.email} balance={economy.wallet?.balance ?? null} onFindMe={findMe} onClose={() => setTourOpen(false)} />
+        )}
 
         {/* selection card: bottom sheet on phones, side card on desktop */}
         {selection && (
