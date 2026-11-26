@@ -8,6 +8,9 @@
  *  - train: between railway stations
  *  - ferry: from a harbour to a harbour on another land (islands, Oceania)
  *  - plane: between airports
+ *  - boat:  a water taxi called where there is water on the way and no
+ *           bridge: across a river, to another islet, to a water plot.
+ *           Nobody walks on water.
  *
  * The build writes this network to public/world/travel.json; the travel server
  * ("[66 PUBLIC] AquaTerra Travel") loads it and charges the fares. The site
@@ -16,8 +19,11 @@
 import { KINDS, type Kind, type World } from "../world/generator";
 import { MinHeap } from "../world/noise";
 
-export type Mode = "walk" | "car" | "train" | "ferry" | "plane";
-export type TransitMode = Exclude<Mode, "walk">;
+export type Mode = "walk" | "car" | "train" | "ferry" | "plane" | "boat";
+/** Modes of the lines between districts (travel.json routes). */
+export type TransitMode = "car" | "train" | "ferry" | "plane";
+/** Modes that cost a fare. */
+export type PaidMode = TransitMode | "boat";
 export type HubKind = "station" | "airport" | "port";
 
 export interface Hub {
@@ -47,7 +53,7 @@ export interface Network {
 export const HUB_FOR: Record<TransitMode, HubKind | null> = { car: null, train: "station", ferry: "port", plane: "airport" };
 
 /** Fare rules: base + per 100 tiles, whole TIDE. The server keeps the live values; these are the starting ones. */
-export type FareParams = Record<`${TransitMode}_base` | `${TransitMode}_per100`, number>;
+export type FareParams = Record<`${PaidMode}_base` | `${PaidMode}_per100`, number>;
 export const DEFAULT_FARES: FareParams = {
   car_base: 2,
   car_per100: 8,
@@ -57,17 +63,19 @@ export const DEFAULT_FARES: FareParams = {
   ferry_per100: 10,
   plane_base: 30,
   plane_per100: 15,
+  boat_base: 3,
+  boat_per100: 15,
 };
 
 export const fare = (mode: Mode, dist: number, p: FareParams = DEFAULT_FARES): number =>
-  mode === "walk" ? 0 : p[`${mode}_base`] + Math.floor((dist * p[`${mode}_per100`]) / 100 + 0.5);
+  mode === "walk" ? 0 : (p[`${mode}_base`] ?? DEFAULT_FARES[`${mode}_base`]) + Math.floor((dist * (p[`${mode}_per100`] ?? DEFAULT_FARES[`${mode}_per100`])) / 100 + 0.5);
 
 /** Travel tax, the share of each fare that goes to the State Treasury (same rule as the server). */
 export const travelTax = (amount: number, pct: number): number =>
   pct > 0 && amount > 0 ? Math.min(amount, Math.max(1, Math.round((amount * pct) / 100))) : 0;
 
 /** Tiles per second on the map, for the trip animation only. */
-export const SPEED: Record<Mode, number> = { walk: 10, car: 26, train: 45, ferry: 24, plane: 70 };
+export const SPEED: Record<Mode, number> = { walk: 10, car: 26, train: 45, ferry: 24, plane: 70, boat: 18 };
 
 const K = Object.fromEntries(KINDS.map((k, i) => [k, i])) as Record<Kind, number>;
 const SEA = new Set([K.deep, K.ocean, K.shallow]);
@@ -77,12 +85,72 @@ const RAIL = new Set([K.rail, K.railbridge, K.station]);
 
 /** Step cost of a tile for each way of moving; Infinity: cannot pass. */
 const COST: Record<Mode, (k: number) => number> = {
-  walk: (k) => (ROADLIKE.has(k) || RAIL.has(k) ? 1 : k === K.tower ? 1 : k === K.land || k === K.beach || k === K.pier ? 1.6 : k === K.forest ? 2.2 : k === K.hill ? 3 : k === K.mountain || k === K.peak ? 6 : WATER.has(k) ? 30 : 2),
+  walk: (k) => (ROADLIKE.has(k) || RAIL.has(k) ? 1 : k === K.tower ? 1 : k === K.land || k === K.beach || k === K.pier ? 1.6 : k === K.forest ? 2.2 : k === K.hill ? 3 : k === K.mountain || k === K.peak ? 6 : WATER.has(k) ? Infinity : 2),
   car: (k) => (ROADLIKE.has(k) ? 1 : RAIL.has(k) ? 3 : k === K.tower || k === K.runway || k === K.apron || k === K.terminal ? 2 : WATER.has(k) ? Infinity : 6),
   train: (k) => (RAIL.has(k) ? 1 : ROADLIKE.has(k) ? 2 : Infinity),
   ferry: (k) => (SEA.has(k) ? 1 : k === K.pier ? 1 : Infinity),
   plane: () => 1,
+  // a water taxi: on the water, with a short walk to the shore at each end
+  boat: (k) => (WATER.has(k) || k === K.pier ? 1 : k === K.beach ? 1.5 : k === K.mountain || k === K.peak ? 12 : 4),
 };
+
+/** Can a resident stand on this tile on foot? */
+export const isWater = (k: number) => WATER.has(k);
+
+const islesCache = new WeakMap<World, Int32Array>();
+
+/**
+ * Land a resident can walk across without getting wet: each land tile gets
+ * the id of its piece of land (the smallest tile index in it, so ids stay the
+ * same while the world grows elsewhere); water is -1. Bridges join land.
+ */
+export function isles(world: World): Int32Array {
+  const hit = islesCache.get(world);
+  if (hit) return hit;
+  const n = world.size;
+  const id = new Int32Array(n * n).fill(-1);
+  const q: number[] = [];
+  for (let s = 0; s < n * n; s++) {
+    if (id[s] >= 0 || WATER.has(world.kind[s])) continue;
+    id[s] = s;
+    q.push(s);
+    while (q.length) {
+      const i = q.pop()!;
+      const x = i % n;
+      const y = (i - x) / n;
+      if (x > 0 && id[i - 1] < 0 && !WATER.has(world.kind[i - 1])) (id[i - 1] = s), q.push(i - 1);
+      if (x < n - 1 && id[i + 1] < 0 && !WATER.has(world.kind[i + 1])) (id[i + 1] = s), q.push(i + 1);
+      if (y > 0 && id[i - n] < 0 && !WATER.has(world.kind[i - n])) (id[i - n] = s), q.push(i - n);
+      if (y < n - 1 && id[i + n] < 0 && !WATER.has(world.kind[i + n])) (id[i + n] = s), q.push(i + n);
+    }
+  }
+  islesCache.set(world, id);
+  return id;
+}
+
+/**
+ * The piece of land a point stands on. A harbour sits on the water at its
+ * shore, so a water tile takes the land right next to it; open water is -1.
+ * The travel server keeps the same ids (travel.json) and uses the same rule.
+ */
+export function isleAt(world: World, x: number, y: number): number {
+  const n = world.size;
+  const ix = Math.round(x);
+  const iy = Math.round(y);
+  if (ix < 0 || iy < 0 || ix >= n || iy >= n) return -1;
+  const id = isles(world);
+  if (id[iy * n + ix] >= 0) return id[iy * n + ix];
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+    const nx = ix + dx;
+    const ny = iy + dy;
+    if (nx >= 0 && ny >= 0 && nx < n && ny < n && id[ny * n + nx] >= 0) return id[ny * n + nx];
+  }
+  return -1;
+}
+
+/** Straight distance for a boat ride, whole tiles, at least 1 (same rule as the server). */
+export const boatDist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+  Math.max(1, Math.round(Math.hypot(Math.round(a.x) - Math.round(b.x), Math.round(a.y) - Math.round(b.y))));
 
 /** Cheapest path on the tile grid (4 neighbours). Returns tile indices from start to goal, or null. */
 export function tilePath(world: World, mode: Mode, from: number, to: number, maxCost = Infinity): number[] | null {

@@ -598,11 +598,13 @@ export class WorldRenderer {
     const me = this.player;
     if (!me) return;
     let lift = 0;
+    let afloat = false;
     if (this.trip) {
       const st = this.trip.at(time);
       me.x = st.pos.x;
       me.y = st.pos.y;
       lift = st.lift;
+      afloat = st.mode === "boat" || st.mode === "ferry";
       drawTrail(ctx, st.ahead.map((q) => this.atPoint(q.x, q.y)), s, me.hue, time);
       if (this.trip.done) this.trip = null;
     }
@@ -611,6 +613,7 @@ export class WorldRenderer {
       this.camera.cx += (px - this.camera.cx) * 0.12;
       this.camera.cy += (py - this.camera.cy) * 0.12;
     }
+    if (afloat) drawHull(ctx, px, py, s, time);
     drawAvatar(ctx, px, py, s, { style: me.style ?? "drop", hue: me.hue }, time, { lift, label: me.label, online: true });
     if (this.myCompanion) drawCompanion(ctx, px, py - lift * 70 / s, s, this.myCompanion, time, { label: s >= 0.9 });
   }
@@ -1759,4 +1762,30 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
+}
+
+/** A small boat under the drop while it is on the water (boat or ferry). */
+function drawHull(ctx: CanvasRenderingContext2D, px: number, py: number, s: number, time: number) {
+  const k = Math.max(0.6, Math.min(1.6, s));
+  const bob = Math.sin(time / 260) * 1.2 * k;
+  const w = 15 * k;
+  const h = 5 * k;
+  const y = py + bob;
+  ctx.save();
+  ctx.fillStyle = "rgba(255,255,255,0.35)";
+  ctx.beginPath();
+  ctx.ellipse(px, y + h + 1.5 * k, w * 1.15, 2.2 * k, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#7c4a24";
+  ctx.strokeStyle = "#f5e6c8";
+  ctx.lineWidth = Math.max(1, k);
+  ctx.beginPath();
+  ctx.moveTo(px - w, y - h * 0.4);
+  ctx.lineTo(px + w, y - h * 0.4);
+  ctx.quadraticCurveTo(px + w * 0.7, y + h, px, y + h);
+  ctx.quadraticCurveTo(px - w * 0.7, y + h, px - w, y - h * 0.4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
 }

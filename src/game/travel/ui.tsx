@@ -1,70 +1,135 @@
 import { useMemo, useState } from "react";
-import { Car, Coins, Footprints, Loader2, Plane, Ship, TrainFront, type LucideIcon } from "lucide-react";
+import { Car, Coins, Footprints, Loader2, Plane, Sailboat, Ship, TrainFront, type LucideIcon } from "lucide-react";
 import type { World } from "@/game/world/generator";
 import type { HubInfo, Location, NetworkInfo } from "./api";
 import { toRoutes } from "./api";
-import { DEFAULT_FARES, HUB_FOR, districtCentre, fare, legSeconds, planTrips, tilePath, travelTax, type Leg, type Mode, type Plan } from "./network";
+import { DEFAULT_FARES, HUB_FOR, boatDist, districtCentre, fare, isWater, isleAt, legSeconds, planTrips, tilePath, travelTax, type Leg, type Mode, type Plan } from "./network";
 import { pathPoints, type Point, type TripSegment } from "./drop";
 import type { TravelStrings } from "./strings";
 
-export const MODE_ICON: Record<Mode, LucideIcon> = { walk: Footprints, car: Car, train: TrainFront, ferry: Ship, plane: Plane };
+export const MODE_ICON: Record<Mode, LucideIcon> = { walk: Footprints, car: Car, train: TrainFront, ferry: Ship, plane: Plane, boat: Sailboat };
 
 /** Where the drop of a location stands on the map. */
 export const locationPoint = (loc: Location): Point => ({ x: loc.x, y: loc.y });
 
 const hubOf = (net: NetworkInfo, mode: Mode, district: number) => {
-  const kind = mode === "walk" ? null : HUB_FOR[mode];
+  const kind = mode === "walk" || mode === "boat" ? null : HUB_FOR[mode];
   return kind ? net.hubs.find((h) => h.kind === kind && h.district === district) ?? null : null;
 };
 
+/** One move of the drop on the map. Boats are paid: `fare` is set for them. */
+export interface Move {
+  mode: Mode;
+  from: Point;
+  to: Point;
+  /** Index of the trip leg this move belongs to (-1: the walk to the plot at the end). */
+  leg: number;
+  fare: number;
+}
+
 /**
- * The trip on the map, leg by leg, from where the drop stands: a short walk
- * to the station or harbour, the ride along the rails, the road or the sea
- * lane, and at the end a walk to the plot.
+ * The trip as the drop makes it, move by move, from where it stands: to the
+ * station or harbour, the ride, and at the end to the plot. Wherever there is
+ * water on the way between two pieces of land (or to a water plot) the drop
+ * cannot walk: a boat is called and paid. The travel server charges the same
+ * boats by the same rule (server/travel/boats.sql).
  */
+export function tripMoves(world: World, net: NetworkInfo, from: Point, legs: { mode: Mode; to: number }[], plotAnchor: Point | null, start: number): Move[] {
+  const fares = { ...DEFAULT_FARES, ...net.fares };
+  const out: Move[] = [];
+  let pos = from;
+  // pieces of land are known only on this map; a land off it (Rainbowland) never needs a boat
+  let onMap = !!world.districts[start];
+  const same = (a: Point, b: Point) => Math.round(a.x) === Math.round(b.x) && Math.round(a.y) === Math.round(b.y);
+  const dry = (a: Point, b: Point) => {
+    const ia = isleAt(world, a.x, a.y);
+    return ia >= 0 && ia === isleAt(world, b.x, b.y);
+  };
+  const foot = (to: Point, leg: number, known: boolean) => {
+    if (same(pos, to)) return;
+    if (!onMap || !known || dry(pos, to)) out.push({ mode: "walk", from: pos, to, leg, fare: 0 });
+    else out.push({ mode: "boat", from: pos, to, leg, fare: fare("boat", boatDist(pos, to), fares) });
+    pos = to;
+  };
+  const ride = (mode: Mode, to: Point, leg: number) => {
+    if (!same(pos, to)) out.push({ mode, from: pos, to, leg, fare: 0 });
+    pos = to;
+  };
+  // a district off this map is reached at its hub on the map edge
+  const centre = (d: number): Point => (world.districts[d] ? districtCentre(world, d) : hubOf(net, "ferry", d) ?? hubOf(net, "train", d) ?? pos);
+  let cur = start;
+  legs.forEach((l, i) => {
+    if (l.mode === "walk" || l.mode === "boat") return;
+    if (l.mode === "car") {
+      const c = centre(cur);
+      // by road from where the drop stands; from another islet, by boat to the town first
+      if (onMap && world.districts[cur] && !same(pos, c) && !dry(pos, c)) foot(c, i, true);
+      ride("car", centre(l.to), i);
+    } else {
+      const a = hubOf(net, l.mode, cur);
+      const b = hubOf(net, l.mode, l.to);
+      if (a) foot(a, i, !!world.districts[cur]);
+      ride(l.mode, b ?? centre(l.to), i);
+    }
+    cur = l.to;
+    onMap = !!world.districts[cur];
+  });
+  if (plotAnchor) foot(plotAnchor, -1, true);
+  return out;
+}
+
+/** What the boats of a trip cost, TIDE. */
+export const boatsFare = (moves: Move[]) => moves.reduce((s, m) => s + m.fare, 0);
+
+/** The trip on the map, for the drop to play. */
 export function tripSegments(world: World, net: NetworkInfo, from: Point, legs: { mode: Mode; to: number }[], plotAnchor: Point | null, start: number): TripSegment[] {
   const n = world.size;
   const idx = (p: Point) => Math.round(p.y) * n + Math.round(p.x);
   const segs: TripSegment[] = [];
-  let pos = from;
-  const move = (mode: Mode, to: Point) => {
-    if (Math.round(pos.x) === Math.round(to.x) && Math.round(pos.y) === Math.round(to.y)) return;
-    let pts: Point[];
-    if (mode === "plane") pts = [pos, to];
-    else {
-      const p = tilePath(world, mode, idx(pos), idx(to), 20000);
-      pts = p ? pathPoints(p, n, mode === "walk" ? 1 : 2) : [pos, to];
-    }
+  const push = (mode: Mode, pts: Point[]) => {
     let len = 0;
     for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
     segs.push({ mode, pts, seconds: mode === "walk" ? Math.min(3, Math.max(0.6, len / 22)) : legSeconds(mode, len) });
-    pos = to;
   };
-  // a district off this map (Rainbowland) is reached at its hub on the map edge
-  const centre = (d: number): Point => (world.districts[d] ? districtCentre(world, d) : hubOf(net, "ferry", d) ?? hubOf(net, "train", d) ?? pos);
-  let cur = start;
-  for (const l of legs) {
-    if (l.mode === "walk") continue;
-    if (l.mode === "car") move("car", centre(l.to));
-    else {
-      const a = hubOf(net, l.mode, cur);
-      const b = hubOf(net, l.mode, l.to);
-      if (a) move("walk", a);
-      move(l.mode, b ?? centre(l.to));
+  for (const m of tripMoves(world, net, from, legs, plotAnchor, start)) {
+    if (m.mode === "plane") {
+      push("plane", [m.from, m.to]);
+      continue;
     }
-    cur = l.to;
+    const p = tilePath(world, m.mode, idx(m.from), idx(m.to), 20000);
+    if (!p) {
+      push(m.mode, [m.from, m.to]);
+      continue;
+    }
+    if (m.mode !== "boat") {
+      push(m.mode, pathPoints(p, n, m.mode === "walk" ? 1 : 2));
+      continue;
+    }
+    // a boat ride: walk to the shore, sail, step ashore
+    let run: number[] = [];
+    let wet = isWater(world.kind[p[0]]);
+    for (const i of p) {
+      const w = isWater(world.kind[i]);
+      if (w !== wet && run.length) {
+        push(wet ? "boat" : "walk", pathPoints([...run, i], n, wet ? 2 : 1));
+        run = [];
+        wet = w;
+      }
+      run.push(i);
+    }
+    if (run.length > 1 || !segs.length) push(wet ? "boat" : "walk", pathPoints(run, n, wet ? 2 : 1));
   }
-  if (plotAnchor) move("walk", plotAnchor);
   return segs;
 }
 
-const totalWithTax = (plan: Plan) => plan.fare;
 
 interface OptionsProps {
   world: World;
   net: NetworkInfo;
   me: Location;
   target: number;
+  /** The plot the trip ends at, if any: a boat may be needed for the last bit. */
+  plotAnchor?: Point | null;
   balance: number | null;
   busy: boolean;
   t: TravelStrings;
@@ -72,7 +137,7 @@ interface OptionsProps {
 }
 
 /** Ways to get to a district: the cheapest and the fastest, with fares. */
-export function TravelOptions({ world, net, me, target, balance, busy, t, onGo }: OptionsProps) {
+export function TravelOptions({ world, net, me, target, plotAnchor = null, balance, busy, t, onGo }: OptionsProps) {
   const fares = { ...DEFAULT_FARES, ...net.fares };
   const plans = useMemo(() => planTrips(toRoutes(net), me.districtId, target, fares), [net, me.districtId, target]); // eslint-disable-line react-hooks/exhaustive-deps
   const name = (d: number) => world.districts[d]?.name ?? "?";
@@ -80,7 +145,18 @@ export function TravelOptions({ world, net, me, target, balance, busy, t, onGo }
   return (
     <div className="space-y-2">
       {plans.map((p, k) => {
-        const cost = totalWithTax(p);
+        const boats = tripMoves(world, net, locationPoint(me), p.legs, plotAnchor, me.districtId).filter((m) => m.mode === "boat");
+        const cost = p.fare + boatsFare(boats);
+        const boatsOf = (leg: number) =>
+          boats
+            .filter((b) => b.leg === leg)
+            .map((b, j) => (
+              <li key={`b${leg}-${j}`} className="flex items-center gap-1.5">
+                <Sailboat className="h-3.5 w-3.5 shrink-0 text-primary" />
+                <span className="truncate">{t.boatRow}</span>
+                <span className="ml-auto shrink-0 text-muted-foreground">{b.fare} TIDE</span>
+              </li>
+            ));
         const short = balance !== null && balance < cost;
         return (
           <div key={k} className="rounded-lg border border-border/70 bg-muted/30 p-2.5">
@@ -93,16 +169,18 @@ export function TravelOptions({ world, net, me, target, balance, busy, t, onGo }
             <ol className="mb-2 space-y-1 text-xs">
               {p.legs.map((l, i) => {
                 const Icon = MODE_ICON[l.mode];
-                return (
+                return [
+                  ...boatsOf(i),
                   <li key={i} className="flex items-center gap-1.5">
                     <Icon className="h-3.5 w-3.5 shrink-0 text-primary" />
                     <span className="truncate">
                       {t.modes[l.mode]}: {name(l.from)} → {name(l.to)}
                     </span>
                     <span className="ml-auto shrink-0 text-muted-foreground">{l.fare} TIDE</span>
-                  </li>
-                );
+                  </li>,
+                ];
               })}
+              {boatsOf(-1)}
             </ol>
             <button
               disabled={busy || short}

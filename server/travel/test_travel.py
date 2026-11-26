@@ -17,7 +17,8 @@ DB = "aquaterra_travel_test"
 BASE = ["psql", "-U", os.environ.get("PGUSER", "postgres"), "-v", "ON_ERROR_STOP=1", "-q", "-tA"]
 
 def psql(sql, db=DB):
-    r = subprocess.run(BASE + ["-d", db, "-c", sql], capture_output=True, text=True)
+    # through stdin: travel.json is too long for one command-line argument
+    r = subprocess.run(BASE + ["-d", db], input=sql, capture_output=True, text=True)
     if r.returncode:
         raise SystemExit(f"SQL failed: {sql[:200]}\n{r.stderr}")
     return r.stdout.strip()
@@ -57,8 +58,18 @@ sample = [p for ps in by_d.values() for p in ps[:3]]
 psql("INSERT INTO aquaterra_plots (id, address, district, tiles, price) SELECT (e->>0)::int, e->>1, e->>2, (e->>3)::int, (e->>4)::bigint FROM jsonb_array_elements("
      + lit(json.dumps(sample)) + "::jsonb) e")
 
+# isles: a few plots that stand on other land than their town square (islets), for the boat checks
+cisle = {c[0]: c[3] for c in travel["centres"] if len(c) > 3}
+did = {v: k for k, v in name.items()}
+wet_plots = [p for p in reg if p[2] in did and len(anchors.get(p[0], [])) > 3 and anchors[p[0]][3] != cisle.get(did[p[2]])][:3]
+extra = [p for p in wet_plots if p not in sample]
+sample += extra
+if extra:
+    psql("INSERT INTO aquaterra_plots (id, address, district, tiles, price) SELECT (e->>0)::int, e->>1, e->>2, (e->>3)::int, (e->>4)::bigint FROM jsonb_array_elements("
+         + lit(json.dumps(extra)) + "::jsonb) e")
 for _ in range(2):
     load(os.path.join(HERE, "travel.sql"))
+    load(os.path.join(HERE, "boats.sql"))
 check("aquaterra_travel_may_buy" in psql("SELECT prosrc FROM pg_proc WHERE proname = 'aquaterra_economy'"), "economy patched once")
 check(psql("SELECT count(*) FROM regexp_matches((SELECT prosrc FROM pg_proc WHERE proname = 'aquaterra_economy'), 'aquaterra_travel_may_buy', 'g')") == "1", "patch is not doubled")
 
@@ -202,4 +213,40 @@ check(psql("SELECT count(*) FROM aquaterra_wallets WHERE balance < 0") == "0", "
 total = int(psql("SELECT sum(balance) FROM aquaterra_wallets"))
 check(total == 50_000_000, "no TIDE created or lost")
 
+
+# --- nobody walks on water: boats
+check(psql("SELECT count(*) FROM regexp_matches((SELECT prosrc FROM pg_proc WHERE proname = 'aquaterra_travel'), 'aquaterra_travel_boat\\(me, ''auto''', 'g')") == "1", "boats patch is not doubled")
+check(psql("SELECT count(*) FROM aquaterra_plots WHERE isle IS NOT NULL") == str(len(sample)), "sync stores the isle of each plot")
+check(psql("SELECT count(*) FROM aquaterra_travel_hubs WHERE isle IS NOT NULL") != "0", "and of hubs")
+check(len(wet_plots) > 0, "the map has islets in a district")
+import math
+wp = wet_plots[0]
+wd = did[wp[2]]
+cx = [c for c in travel["centres"] if c[0] == wd][0]
+psql(f"UPDATE aquaterra_locations SET district_id = {wd}, spot = 'centre', plot_id = NULL, x = {cx[1]}, y = {cx[2]} WHERE email = 'ava@x'")
+J(f"SELECT aquaterra_economy({lit(json.dumps({'action': 'admin_grant', 'session': S['Alexander'], 'to': 'ava@x', 'amount': 500}))}::jsonb)")
+a0, s0 = bal("ava@x"), bal("state:treasury")
+r = travel_("Ava", action="go", legs=[{"mode": "walk", "plot": wp[0]}])
+check(r.get("error") == "boat" and bal("ava@x") == a0, f"cannot walk across water to an islet of {wp[2]}")
+dist = max(1, round(math.hypot(cx[1] - anchors[wp[0]][1], cx[2] - anchors[wp[0]][2])))
+bfare = 3 + int(dist * 15 / 100 + 0.5)
+btax = max(1, round(bfare * 0.10))
+r = travel_("Ava", action="go", legs=[{"mode": "boat", "plot": wp[0]}])
+check(r["ok"] and r["fare"] == bfare and r["tax"] == btax and r["me"]["plotId"] == wp[0] and r["legs"][0]["mode"] == "boat", f"boat to the islet for {bfare} TIDE")
+check(a0 - bal("ava@x") == bfare and bal("state:treasury") - s0 == bfare, "boats are the state's: fare and tax to the treasury")
+check(psql("SELECT count(*) FROM aquaterra_ledger WHERE ref = 'travel:boat'") == "1", "boat fare booked")
+check(psql(f"SELECT count(*) FROM aquaterra_trips WHERE fare = {bfare}") != "0", "a paid boat is a trip")
+check(travel_("Ava", action="go", legs=[{"mode": "walk"}])["error"] == "boat", "no walk back over the water")
+out = [x for x in travel["routes"] if x[0] == "car" and wd in (x[1], x[2])]
+if out:
+    to = out[0][2] if out[0][1] == wd else out[0][1]
+    a0 = bal("ava@x")
+    r = travel_("Ava", action="go", legs=[{"mode": "car", "to": to}])
+    check(r["ok"] and r["legs"][0]["mode"] == "boat" and r["legs"][1]["mode"] == "car" and a0 - bal("ava@x") == r["fare"], "from the islet: a boat to the town square, then the car")
+    r = travel_("Ava", action="go", legs=[{"mode": "car", "to": wd}])
+    check(r["ok"] and len(r["legs"]) == 1, "from town square to town square: no boat")
+if water:
+    psql(f"UPDATE aquaterra_locations SET district_id = {port_d}, spot = 'centre', plot_id = NULL WHERE email = 'ava@x'")
+    check(travel_("Ava", action="go", legs=[{"mode": "walk", "plot": water[0]}])["error"] == "boat", "no walking onto a water plot")
+    check(travel_("Ava", action="go", legs=[{"mode": "boat", "plot": water[0]}])["ok"], "a boat to the water plot")
 print(f"OK: {passed} checks passed")
