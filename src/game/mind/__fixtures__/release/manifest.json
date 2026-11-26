@@ -3,7 +3,7 @@
  "model_id": "fixture",
  "version": 1,
  "step": 0,
- "created_at": "2026-11-26T21:21:31+00:00",
+ "created_at": "2026-11-26T21:29:36+00:00",
  "config": {
   "vocab_size": 679,
   "d_model": 48,
@@ -142,5 +142,7 @@
  "weights_sha256": "34af9a54d3188946bccf63bc65b9576bf72df0e90e3d546b653108bd1a291dfa",
  "tokenizer_file": "tokenizer.json",
  "tokenizer_sha256": "f3aad83079a50467a0ebf3c18c3bf10c6941ddf9d5ca6f5d998b017fee04eee4",
+ "lab_release": "fixture-step-000000",
+ "lab_sha256": "ab2134d7ecd39234ecf0e5eee3ae110c50b8193b1116b0fd97c42df6dced9473",
  "eval": {}
 }

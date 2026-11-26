@@ -5,17 +5,20 @@ There is **one** model, NICS Language, and it lives and trains in the NICS lab
 numbered releases, examines them with its own checks, runs the live one in residents' browsers,
 and hands consented game data back to the lab.
 
-## 1. Making a release (in the lab)
+## 1. Making a release
+
+In the lab: `scripts/release_language.py` (nics-ai-lab 0.22.0) makes
+`releases/language/<model_id>-step-XXXXXX/` with model.safetensors, tokenizer.json, config.yaml,
+training-manifest.json, sha256sums.txt. The game takes that folder as it is and packs it for
+browsers (checks the lab's checksums, writes the same weights as float16, the tied head once):
 
 ```
-python server/mind/export_release.py --checkpoint <step-dir>/trainer-state.pt \
-  --tokenizer data/processed/language/tokenizer-24k.json --config configs/text/micro.yaml \
-  --version 1 --out releases/nics-text-micro-v1
+python3 server/mind/pack_release.py <lab release folder> --version 1 --out web/nics-text-micro-v1
 ```
 
-The folder (`nics-release-v1`) holds `manifest.json`, `weights.bin` (float16, ~47 MB for micro)
-and `tokenizer.json`. Put it at any public https address that sends CORS headers for
-`https://aquaterra.aibyteconsult.com` (for example Cloudflare R2), then register it:
+The packed folder (`nics-release-v1`: manifest.json with `lab_release` and `lab_sha256`,
+weights.bin ~47 MB for micro, tokenizer.json) goes to any public https address that sends CORS
+headers for `https://aquaterra.aibyteconsult.com` (for example Cloudflare R2). Then register it:
 
 ```
 POST https://n8n.aibyteconsult.com/webhook/aquaterra-mind
