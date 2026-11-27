@@ -127,6 +127,8 @@ check(farm("ann", action="plant", plotId=1, crop="rose")["error"] == "planted", 
 check(farm("ann", action="harvest", plotId=1)["error"] == "not_ripe", "not ripe yet")
 f = next(x for x in farm("ann", action="me")["plots"] if x["plotId"] == 1)["field"]
 check(f["crop"] == "rose" and f["units"] == 10, f"field {f}")
+fl = farm(action="fields")
+check(fl["ok"] and [r[:2] for r in fl["fields"]] == [[1, "rose"]] and fl["fields"][0][3] > fl["fields"][0][2] and fl["wiltHours"] == 48, f"public fields for the map {fl}")
 
 psql("UPDATE aquaterra_farm_fields SET ready_at = now() - interval '1 minute' WHERE plot_id = 1")
 h = farm("ann", action="harvest")

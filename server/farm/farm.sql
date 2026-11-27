@@ -237,7 +237,7 @@ BEGIN
     SELECT s.email INTO me FROM aquaterra_sessions s
     WHERE s.token_hash = encode(sha256(convert_to(req->>'session', 'UTF8')), 'hex') AND s.expires_at > now();
   END IF;
-  IF act NOT IN ('market', 'book') AND me IS NULL THEN
+  IF act NOT IN ('market', 'book', 'fields') AND me IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'error', 'session', 'status', 401);
   END IF;
   v_crop := left(coalesce(req->>'crop', ''), 20);
@@ -252,6 +252,13 @@ BEGIN
 
     ELSIF act = 'me' THEN
       NULL;
+
+    ELSIF act = 'fields' THEN
+      -- public: what grows where, for the world map (plot, crop, planted, ripe, in unix seconds)
+      res := jsonb_build_object('wiltHours', aquaterra_farm_law('farm_wilt_hours'), 'now', floor(extract(epoch FROM now())),
+        'fields', COALESCE((SELECT jsonb_agg(jsonb_build_array(ff.plot_id, ff.crop,
+            floor(extract(epoch FROM ff.planted_at)), floor(extract(epoch FROM ff.ready_at))) ORDER BY ff.plot_id)
+          FROM aquaterra_farm_fields ff), '[]'::jsonb));
 
     ELSIF act = 'plant' THEN
       pid := CASE WHEN coalesce(req->>'plotId', '') ~ '^[0-9]' AND length(req->>'plotId') <= 9 AND (req->>'plotId') !~ '[^0-9]' THEN (req->>'plotId')::int END;

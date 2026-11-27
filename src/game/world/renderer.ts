@@ -6,6 +6,7 @@ import { LAGOON, baseColor, daylight, shade, skyColor, treeColor, type RGB } fro
 import { groundTurnMatrix, toViewPoint, turn, viewMaps, type Rotation } from "./view";
 import { CIVIC, civicHit, drawCivic, type CivicId } from "./civic";
 import { drawTrail, type Point, type TripPlayer } from "../travel/drop";
+import { drawFieldTile, fieldStage, fieldTint, type FieldStage, type MapField } from "../farm/map";
 import { drawAvatar, drawCompanion, seed, type AvatarStyle } from "../residents/avatars";
 
 export const TW = 32;
@@ -100,6 +101,9 @@ export class WorldRenderer {
   private second: Plot | null = null;
   /** Plots whose building a resident changed (built, raised, cleared). */
   private builtIds = new Set<number>();
+  /** Farms: what grows on each plot and how far it has grown. */
+  private fields = new Map<number, { f: MapField; s: { grow: number; stage: FieldStage } }>();
+  private fieldsKey = "";
   /** Plot whose house stands on this tile, or -1. */
   private houseAt: Int32Array;
   /** Skyscraper column on this tile: building index and its height in floors. */
@@ -251,6 +255,23 @@ export class WorldRenderer {
 
   get buildingsVisible() {
     return this.showBuildings;
+  }
+
+  /** Farms from the server: plot id to crop and times. The ground redraws only when a stage changes. */
+  setFields(fields: Map<number, MapField>, wiltHours: number, now = Date.now() / 1000) {
+    const next = new Map<number, { f: MapField; s: { grow: number; stage: FieldStage } }>();
+    const key: string[] = [];
+    for (const [id, f] of fields) {
+      const st = fieldStage(f, now, wiltHours);
+      next.set(id, { f, s: st });
+      key.push(`${id}:${f.crop}:${st.stage}:${Math.round(st.grow * 8)}`);
+    }
+    this.fields = next;
+    const k = key.join(",");
+    if (k !== this.fieldsKey) {
+      this.fieldsKey = k;
+      this.groundKey = "";
+    }
   }
 
   setBuildingsVisible(on: boolean) {
@@ -785,10 +806,18 @@ export class WorldRenderer {
         ctx.closePath();
         ctx.fill();
 
-        if (!detailed) continue;
+        const pid = w.plotOf[i];
+        const field = pid >= 0 ? this.fields.get(pid) : undefined;
+        if (!detailed) {
+          // from afar a farm is a patch of its colour
+          if (field) {
+            ctx.fillStyle = fieldTint(field.f.crop, field.s.stage, w.plots[pid].water);
+            ctx.fill();
+          }
+          continue;
+        }
         const k = kinds[i];
         // plot borders
-        const pid = w.plotOf[i];
         if (pid >= 0) {
           ctx.strokeStyle = w.plots[pid].water ? "rgba(255,255,255,0.22)" : "rgba(20,24,30,0.35)";
           ctx.lineWidth = 0.9;
@@ -826,6 +855,11 @@ export class WorldRenderer {
         } else if (k === "terminal") {
           ctx.fillStyle = night ? "rgba(255,230,160,0.9)" : "rgba(255,255,255,0.7)";
           ctx.fillRect(px - 5, py + hh - 1, 10, 2);
+        }
+        if (field) {
+          // a farm covers the whole plot: no starter house on it
+          drawFieldTile(ctx, px, py, TW, TH, i, field.f, field.s, w.plots[pid].water, night, performance.now());
+          continue;
         }
         if (this.showBuildings && this.houseAt[i] >= 0) this.drawBuilding(ctx, px, py + hh, this.houseAt[i]);
         else if (this.showBuildings && this.towerAt[i] >= 0) this.drawTowerColumn(ctx, px, py, x, y, this.buildings[this.towerAt[i]]!.tower!);

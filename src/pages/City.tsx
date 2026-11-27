@@ -11,6 +11,8 @@ import TowerPanel from "@/game/heritage/TowerPanel";
 import type { TowerId } from "@/game/heritage/api";
 import { towerOnPlot } from "@/game/world/landmarks";
 import PlotPreview from "@/game/build/PlotPreview";
+import { fetchFields } from "@/game/farm/api";
+import type { MapField } from "@/game/farm/map";
 import { fetchBuildMap, fetchMyBuildings, toBuilt, type BuildRules, type MyBuilding } from "@/game/build/api";
 import { buildStrings } from "@/game/build/strings";
 import { WorldRenderer } from "@/game/world/renderer";
@@ -118,6 +120,29 @@ const City = () => {
   useEffect(() => {
     if (rendererRef.current) rendererRef.current.busyCivic = new Set(civicOpen.keys());
   }, [civicOpen]);
+  // farms: what grows on each plot, drawn on its tiles
+  const fieldsRef = useRef<{ map: Map<number, MapField>; wilt: number; skew: number }>({ map: new Map(), wilt: 48, skew: 0 });
+  useEffect(() => {
+    let stop = false;
+    const load = async () => {
+      const r = await fetchFields();
+      if (stop || !r.ok) return;
+      fieldsRef.current = {
+        map: new Map(r.data.fields.map(([id, crop, planted, ready]) => [id, { crop, planted, ready }])),
+        wilt: r.data.wiltHours,
+        // the server clock decides when a crop is ripe
+        skew: r.data.now - Date.now() / 1000,
+      };
+      const f = fieldsRef.current;
+      rendererRef.current?.setFields(f.map, f.wilt, Date.now() / 1000 + f.skew);
+    };
+    void load();
+    const id = window.setInterval(load, 60_000);
+    return () => {
+      stop = true;
+      window.clearInterval(id);
+    };
+  }, []);
   // arcade attractions: a sign over each plot that has one
   const tg = arcadeStrings(language);
   const attractionsRef = useRef<Map<number, { ai: boolean; glyph: string }>>(new Map());
@@ -294,6 +319,7 @@ const City = () => {
     if (builtRef.current.size) r.setBuilt(builtRef.current);
     r.owned = ownedRef.current;
     r.attractions = attractionsRef.current;
+    if (fieldsRef.current.map.size) r.setFields(fieldsRef.current.map, fieldsRef.current.wilt, Date.now() / 1000 + fieldsRef.current.skew);
     r.residents = crowdRef.current;
     r.myCompanion = companionRef.current;
     r.fit();
