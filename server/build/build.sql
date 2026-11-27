@@ -175,6 +175,23 @@ BEGIN
   RETURN jsonb_build_object('ok', true, 'changed', n, 'total', (SELECT count(*) FROM aquaterra_build_sites));
 END $fn$;
 
+-- Materials (server/industry/industry.sql, 2026-11-27): when industry is installed every construction uses
+-- the owner materials first (that part of the cost is not charged) and demolition gives part of them back.
+-- Without it both hooks do nothing, so this file still works on its own.
+CREATE OR REPLACE FUNCTION aquaterra_build_materials(who text, pid int, k text, lvl int, cost bigint, own boolean) RETURNS bigint
+LANGUAGE plpgsql AS $fn$
+BEGIN
+  IF to_regprocedure('aquaterra_industry_use(text,integer,text,integer,bigint,boolean)') IS NULL THEN RETURN 0; END IF;
+  RETURN aquaterra_industry_use(who, pid, k, lvl, cost, own);
+END $fn$;
+
+CREATE OR REPLACE FUNCTION aquaterra_build_salvage(who text, pid int, act text, starter boolean) RETURNS jsonb
+LANGUAGE plpgsql AS $fn$
+BEGIN
+  IF to_regprocedure('aquaterra_industry_salvage(text,integer,text,boolean)') IS NULL THEN RETURN '{}'::jsonb; END IF;
+  RETURN aquaterra_industry_salvage(who, pid, act, starter);
+END $fn$;
+
 -- The build API. req: {action, session, plotId, kind, design, replace, key, value}.
 CREATE OR REPLACE FUNCTION aquaterra_build(req jsonb) RETURNS jsonb LANGUAGE plpgsql AS $fn$
 DECLARE
@@ -183,6 +200,7 @@ DECLARE
   pid int; v_plot aquaterra_plots; site aquaterra_build_sites; b aquaterra_buildings; v_owner text;
   v_kind text; v_level int; v_cost bigint; v_fee bigint; v_hours bigint; v_free bigint; v_floors int; v_got jsonb;
   v_total bigint := 0; v_tax bigint := 0; v_refund bigint; v bigint; r record; v_has boolean;
+  v_save bigint := 0; v_salvage jsonb := '{}'::jsonb;
 BEGIN
   IF COALESCE(req->>'session', '') <> '' THEN
     SELECT p.email, p.role INTO me, my_role
@@ -232,6 +250,7 @@ BEGIN
         IF NOT v_has THEN RAISE EXCEPTION 'nothing_here'; END IF;
         IF act = 'build' AND NOT COALESCE((req->>'replace')::boolean, false) THEN RAISE EXCEPTION 'occupied'; END IF;
         PERFORM aquaterra_build_collect(pid, me);
+        v_salvage := aquaterra_build_salvage(me, pid, act, b.plot_id IS NULL);
         v_refund := CASE WHEN act = 'sell' THEN floor(COALESCE(b.invested, 0) * aquaterra_build_param('sell_back_pct') / 100.0)::bigint ELSE 0 END;
         IF act = 'sell' THEN
           PERFORM aquaterra_build_pay('treasury', me, v_refund, 'building_sale', pid, 'Building sold to the Reserve, ' || v_plot.address, me);
@@ -245,7 +264,7 @@ BEGIN
         ON CONFLICT (plot_id) DO UPDATE SET kind = 'empty', level = 0, design = 0, invested = 0, ready_at = now(), income_from = now(), built_by = me, updated_at = now();
         INSERT INTO aquaterra_build_log (plot_id, actor, action, kind, level, cost, fee) VALUES (pid, me, act, b.kind, b.level, COALESCE(v_refund, 0), COALESCE(v_fee, 0));
         SELECT * INTO b FROM aquaterra_buildings WHERE plot_id = pid;
-        res := jsonb_build_object('refund', COALESCE(v_refund, 0), 'fee', COALESCE(v_fee, 0));
+        res := jsonb_build_object('refund', COALESCE(v_refund, 0), 'fee', COALESCE(v_fee, 0), 'salvage', v_salvage);
       END IF;
 
       IF act IN ('build', 'upgrade') THEN
@@ -272,9 +291,11 @@ BEGIN
         v_floors := aquaterra_build_floors(v_kind, v_level);
         IF site.centre AND v_floors > aquaterra_build_law('centre_height_floors', 60) THEN RAISE EXCEPTION 'height_limit'; END IF;
         v_fee := round(v_cost * aquaterra_build_param('permit_pct') / 100.0);
-        IF v_free < v_cost + v_fee THEN RAISE EXCEPTION 'insufficient'; END IF;
+        -- materials from the storehouse first: their depot value is not charged
+        v_save := aquaterra_build_materials(me, pid, v_kind, v_level, v_cost, COALESCE((req->>'own')::boolean, true));
+        IF v_free < v_cost - v_save + v_fee THEN RAISE EXCEPTION 'insufficient'; END IF;
         PERFORM aquaterra_build_collect(pid, me);
-        PERFORM aquaterra_build_pay(me, 'treasury', v_cost, 'build', pid,
+        PERFORM aquaterra_build_pay(me, 'treasury', v_cost - v_save, 'build', pid,
           CASE WHEN v_kind = 'cottage' THEN 'Cottage' WHEN v_level = 0 THEN 'Skyscraper foundation' ELSE format('Skyscraper to %s floors', v_floors) END || ', ' || v_plot.address, me);
         PERFORM aquaterra_build_pay(me, 'state:treasury', v_fee, 'permit', pid, 'Building permit, ' || v_plot.address, me);
         INSERT INTO aquaterra_buildings (plot_id, kind, level, design, invested, ready_at, income_from, built_by)
@@ -286,7 +307,7 @@ BEGIN
           ready_at = EXCLUDED.ready_at, income_from = EXCLUDED.income_from, built_by = me, updated_at = now();
         INSERT INTO aquaterra_build_log (plot_id, actor, action, kind, level, cost, fee) VALUES (pid, me, act, v_kind, v_level, v_cost, v_fee);
         SELECT * INTO b FROM aquaterra_buildings WHERE plot_id = pid;
-        res := res || jsonb_build_object('cost', v_cost, 'permit', v_fee);
+        res := res || jsonb_build_object('cost', v_cost, 'permit', v_fee, 'materialsSaved', v_save, 'paid', v_cost - v_save);
       END IF;
       res := res || jsonb_build_object('building', aquaterra_build_public(b), 'floors', aquaterra_build_floors(b.kind, b.level));
 
