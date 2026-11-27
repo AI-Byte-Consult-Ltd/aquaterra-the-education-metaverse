@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Brain, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Sailboat, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, Sparkles, UserRound, Users, Waves, X, ZoomIn, ZoomOut, Trophy, Rainbow, Orbit as OrbitIcon, Sprout, Factory, ClipboardList } from "lucide-react";
+import { ArrowLeft, Brain, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Sailboat, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, Sparkles, UserRound, Users, Waves, X, ZoomIn, ZoomOut, Trophy, Rainbow, Orbit as OrbitIcon, Sprout, Factory, ClipboardList, Lightbulb } from "lucide-react";
 import { NicsChatButton } from "@/game/nics/NicsChat";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -735,6 +735,15 @@ const City = () => {
         >
           <ClipboardList className="h-4 w-4 text-sky-300" />
           <span className="hidden sm:inline">Orders</span>
+        </Link>
+        <Link
+          to="/ideas"
+          title="Ideas for NICS"
+          aria-label="Ideas for NICS"
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-cyan-400/50 bg-cyan-400/10 px-2.5 text-sm font-semibold text-cyan-200 hover:border-cyan-300"
+        >
+          <Lightbulb className="h-4 w-4 text-cyan-300" />
+          <span className="hidden sm:inline">Ideas</span>
         </Link>
         <Link
           to="/agency"

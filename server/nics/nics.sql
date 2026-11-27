@@ -89,6 +89,11 @@ DECLARE
     'council', 'elections', 'vote', 'home', 'tower', 'travel', 'help', 'unknown'];
   langs text[] := ARRAY['en', 'fr', 'it', 'de', 'id', 'ar', 'bg', 'ru'];
 BEGIN
+  -- the ideas board lives in ideas.sql
+  IF act IN ('ideas', 'idea_submit', 'idea_support', 'idea_withdraw', 'idea_decide', 'ideas_export') THEN
+    RETURN aquaterra_nics_ideas(req);
+  END IF;
+
   -- public: is the live model switched on?
   IF act = 'status' THEN
     RETURN jsonb_build_object('ok', true, 'queue', aquaterra_nics_setting('queue_enabled') = '1',

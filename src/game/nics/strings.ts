@@ -58,6 +58,7 @@ const en = {
   consentYes: "Yes, help it learn",
   consentNo: "Not now",
   terms: "Terms of play",
+  shareIdea: "Share an idea",
   learningOn: "Your conversations help NICS AI learn.",
   learningOff: "Conversations are not saved.",
   turnOn: "Turn on",
