@@ -8,6 +8,7 @@ import { CIVIC, civicHit, drawCivic, type CivicId } from "./civic";
 import { drawTrail, type Point, type TripPlayer } from "../travel/drop";
 import { drawFieldTile, fieldStage, fieldTint, type FieldStage, type MapField } from "../farm/map";
 import { drawAvatar, drawCompanion, seed, type AvatarStyle } from "../residents/avatars";
+import { walkerAt, type Walker } from "../orders/workers";
 
 export const TW = 32;
 export const TH = 16;
@@ -90,6 +91,8 @@ export class WorldRenderer {
   /** My AI companion (NICS AI Agent), floating beside me. */
   myCompanion: string | null = null;
   showResidents = true;
+  /** NPC workers walking between the homes and workplaces of their owner (server/city). */
+  workers: Walker[] = [];
   /** A trip being played: the drop moves along it, the camera follows while `follow` is on. */
   trip: TripPlayer | null = null;
   follow = false;
@@ -629,6 +632,7 @@ export class WorldRenderer {
         ctx.fillText("⚓", px, py - 9.5 * k);
       }
     }
+    if (this.showResidents && this.workers.length) this.drawWorkers(time);
     if (this.showResidents && this.residents.length) this.drawResidents(time);
     const me = this.player;
     if (!me) return;
@@ -651,6 +655,51 @@ export class WorldRenderer {
     if (afloat) drawHull(ctx, px, py, s, time);
     drawAvatar(ctx, px, py, s, { style: me.style ?? "drop", hue: me.hue }, time, { lift, label: me.label, online: true });
     if (this.myCompanion) drawCompanion(ctx, px, py - lift * 70 / s, s, this.myCompanion, time, { label: s >= 0.9 });
+  }
+
+  /** NPC workers: small figures in hard hats, only when the map is close enough to see them. */
+  private drawWorkers(time: number) {
+    const s = this.camera.scale;
+    if (s < 0.45) return;
+    const { ctx } = this;
+    const w = this.width / s;
+    const h = this.height / s;
+    const k = 1 / s;
+    const list = this.workers
+      .map((wk) => {
+        const at = walkerAt(wk, time);
+        return { p: this.atPoint(at.x - 0.5, at.y - 0.5), moving: at.moving, ph: wk.phase };
+      })
+      .filter(({ p }) => Math.abs(p.px - this.camera.cx) < w && Math.abs(p.py - this.camera.cy) < h)
+      .sort((a, b) => a.p.py - b.p.py);
+    for (const { p, moving, ph } of list) {
+      const step = moving ? Math.sin(time / 140 + ph * 20) : 0;
+      const z = 1.3 * Math.max(0.55, Math.min(1, s)) * k;
+      const x = p.px;
+      const y = p.py;
+      ctx.fillStyle = "rgba(0,0,0,0.25)";
+      ctx.beginPath();
+      ctx.ellipse(x, y, 4 * z, 1.8 * z, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#334155";
+      ctx.lineWidth = 1.6 * z;
+      ctx.beginPath();
+      ctx.moveTo(x - 1.2 * z, y - 5 * z);
+      ctx.lineTo(x - 1.2 * z - step * 1.6 * z, y);
+      ctx.moveTo(x + 1.2 * z, y - 5 * z);
+      ctx.lineTo(x + 1.2 * z + step * 1.6 * z, y);
+      ctx.stroke();
+      ctx.fillStyle = "#f97316";
+      ctx.fillRect(x - 2.6 * z, y - 11 * z, 5.2 * z, 6.5 * z);
+      ctx.fillStyle = "#f1c27d";
+      ctx.beginPath();
+      ctx.arc(x, y - 13.2 * z, 2.2 * z, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#facc15";
+      ctx.beginPath();
+      ctx.arc(x, y - 14 * z, 2.6 * z, Math.PI, 0);
+      ctx.fill();
+    }
   }
 
   /** Other residents where they stand: names when close enough, quieter when away. */
