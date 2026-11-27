@@ -8,6 +8,7 @@ import { Anchor, Building2, Coins, Link2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { collectApartments, fetchTower, type TowerId, type TowerView } from "./api";
 import { heritageStrings } from "./strings";
+import ApartmentPreview, { floorLabel, TOWER_META_BY_ID } from "./ApartmentPreview";
 import type { Language } from "@/i18n/translations";
 
 const en = {
@@ -43,6 +44,7 @@ export default function TowerPanel({ tower, session, language, children }: { tow
   const [failed, setFailed] = useState(false);
   const [floor, setFloor] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [picked, setPicked] = useState<number | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -114,18 +116,22 @@ export default function TowerPanel({ tower, session, language, children }: { tow
             <select
               className="h-9 flex-1 rounded-md border border-border bg-background px-2 text-base md:text-sm"
               value={shown ?? ""}
-              onChange={(e) => setFloor(Number(e.target.value))}
+              onChange={(e) => {
+                setFloor(Number(e.target.value));
+                setPicked(null);
+              }}
             >
               {floors.map((f) => (
                 <option key={f} value={f}>
-                  {f} · {rows.filter((a) => a[1] === f).length}
+                  {floorLabel(f)} · {rows.filter((a) => a[1] === f).length}
                 </option>
               ))}
             </select>
           </label>
           <ul className="max-h-44 space-y-1 overflow-y-auto text-xs">
             {onFloor.map((a) => (
-              <li key={a[0]} className={`rounded-md border px-2 py-1.5 ${a[8] ? "border-cyan-300 bg-cyan-400/10" : "border-border"}`}>
+              <li key={a[0]} onClick={() => setPicked(picked === a[0] ? null : a[0])}
+                className={`cursor-pointer rounded-md border px-2 py-1.5 ${a[8] || picked === a[0] ? "border-cyan-300 bg-cyan-400/10" : "border-border"}`}>
                 <div className="flex justify-between gap-2">
                   <span className="font-semibold">
                     {a[2]} · {a[3]}
@@ -140,6 +146,8 @@ export default function TowerPanel({ tower, session, language, children }: { tow
               </li>
             ))}
           </ul>
+          {picked != null && <ApartmentPreview folder={TOWER_META_BY_ID[tower]} tokenId={String(picked)} />}
+          {picked == null && <p className="text-xs text-muted-foreground">Tap an apartment to see its plan.</p>}
         </div>
       )}
       {mine > 0 && session && (

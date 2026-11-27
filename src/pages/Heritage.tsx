@@ -1,3 +1,4 @@
+import ApartmentPreview, { towerMetaFolder } from "@/game/heritage/ApartmentPreview";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Anchor, Check, Copy, Loader2, Repeat, Sparkles, Wallet as WalletIcon } from "lucide-react";
@@ -197,7 +198,10 @@ const Heritage = () => {
                 ) : isPlanet ? (
                   <p className="rounded-lg border border-indigo-300 bg-indigo-400/10 px-2 py-2 text-sm">{t.getPlanet} <Link to="/orbit" className="underline">Orbit</Link></p>
                 ) : isTower ? (
-                  <p className="rounded-lg border border-cyan-300 bg-cyan-400/10 px-2 py-2 text-sm">{t.getApartment(col!.name)}</p>
+                  <div className="space-y-2">
+                    <p className="rounded-lg border border-cyan-300 bg-cyan-400/10 px-2 py-2 text-sm">{t.getApartment(col!.name)}</p>
+                    {token !== "" && towerMetaFolder(col!.contract) && <ApartmentPreview folder={towerMetaFolder(col!.contract)!} tokenId={String(Number(token))} />}
+                  </div>
                 ) : (
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <button type="button" disabled={!plotOk} onClick={() => setChoice("plot")}
