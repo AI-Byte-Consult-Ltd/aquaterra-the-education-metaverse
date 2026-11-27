@@ -12,7 +12,7 @@ export const SECOND_TOWER = {
   plotId: 44,
   address: "13 Velvet Highway",
   /** Top floor from the NFT metadata. The First Light Tower has 108. */
-  floors: 763,
+  floors: 791,
 };
 
 /** Design with a tapering profile and a spire: the tallest tower in the city should look like one. */
