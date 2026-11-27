@@ -338,7 +338,7 @@ export default function PlotView({ world, plot, built, rules, mine, owner, sessi
               )}
             </section>
           )}
-          {yours && !plot.water && (
+          {yours && (
             <Link to={`/farm?plot=${plot.id}`} className="flex h-9 items-center justify-center gap-2 rounded-md border border-emerald-400/50 text-sm text-emerald-200 hover:bg-emerald-400/10">
               <Sprout className="h-4 w-4" />
               {t.farm}
