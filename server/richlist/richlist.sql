@@ -1,6 +1,7 @@
 -- AquaTerra World: public list of the richest residents (/rich).
 -- One-off migration, rerun-safe. Read-only function, no DDL in the request path.
 -- Net worth = TIDE on the wallet + land at the price paid + money put into buildings
+--             + transport bought from the state (stations, harbours, airports, roads) at its price
 --             + bank deposit - open bank debt. Only real ledger values, nothing estimated.
 -- Shown: display name only (never an email). System accounts (treasury, state:*, bank:*, nics-ai) are left out.
 CREATE OR REPLACE FUNCTION aquaterra_richlist(lim int DEFAULT 50) RETURNS jsonb
@@ -8,12 +9,14 @@ LANGUAGE plpgsql STABLE AS $fn$
 DECLARE
   has_build boolean := to_regclass('aquaterra_buildings') IS NOT NULL;
   has_bank boolean := to_regclass('aquaterra_bank_loans') IS NOT NULL AND to_regclass('aquaterra_bank_deposits') IS NOT NULL;
+  has_hubs boolean := to_regclass('aquaterra_travel_hubs') IS NOT NULL;
+  has_roads boolean := to_regclass('aquaterra_roads') IS NOT NULL;
   rows jsonb;
   total int;
 BEGIN
   EXECUTE format($q$
     WITH p AS (
-      SELECT pl.email, coalesce(nullif(trim(pl.display_name), ''), NULL) AS name, pl.role,
+      SELECT pl.email, coalesce(nullif(trim(pl.display_name), ''), NULL) AS name, pl.handle, pl.role,
              coalesce(w.balance, 0) AS tide
       FROM aquaterra_players pl LEFT JOIN aquaterra_wallets w ON w.account = pl.email
     ), land AS (
@@ -22,18 +25,22 @@ BEGIN
       %s
     ), bank AS (
       %s
+    ), tr AS (
+      SELECT email, sum(price) AS transport, count(*) AS lines FROM (%s UNION ALL %s) t GROUP BY email
     ), net AS (
-      SELECT p.name, p.role, p.tide, coalesce(land.land, 0) AS land, coalesce(land.plots, 0) AS plots,
+      SELECT p.name, p.handle, p.role, p.tide, coalesce(land.land, 0) AS land, coalesce(land.plots, 0) AS plots,
              coalesce(b.build, 0) AS build, coalesce(b.buildings, 0) AS buildings,
+             coalesce(tr.transport, 0) AS transport, coalesce(tr.lines, 0) AS lines,
              coalesce(bank.dep, 0) AS dep, coalesce(bank.debt, 0) AS debt
       FROM p LEFT JOIN land ON land.email = p.email LEFT JOIN b ON b.email = p.email LEFT JOIN bank ON bank.email = p.email
+             LEFT JOIN tr ON tr.email = p.email
     ), ranked AS (
-      SELECT *, tide + land + build + dep - debt AS worth FROM net
-      WHERE tide + land + build + dep > 0
+      SELECT *, tide + land + build + transport + dep - debt AS worth FROM net
+      WHERE tide + land + build + transport + dep > 0
     )
     SELECT coalesce(jsonb_agg(jsonb_build_object(
-             'rank', rk, 'name', name, 'founder', role = 'founder', 'worth', worth, 'tide', tide, 'land', land,
-             'plots', plots, 'build', build, 'buildings', buildings, 'deposit', dep, 'debt', debt) ORDER BY rk), '[]'::jsonb),
+             'rank', rk, 'name', name, 'handle', handle, 'founder', role = 'founder', 'worth', worth, 'tide', tide, 'land', land,
+             'plots', plots, 'build', build, 'buildings', buildings, 'transport', transport, 'lines', lines, 'deposit', dep, 'debt', debt) ORDER BY rk), '[]'::jsonb),
            (SELECT count(*) FROM ranked)::int
     FROM (SELECT *, row_number() OVER (ORDER BY worth DESC, land DESC, name) AS rk FROM ranked) r WHERE rk <= $1
   $q$,
@@ -46,7 +53,11 @@ BEGIN
        FROM (SELECT email FROM aquaterra_bank_deposits UNION SELECT email FROM aquaterra_bank_loans) e
        LEFT JOIN aquaterra_bank_deposits d ON d.email = e.email
        LEFT JOIN (SELECT email, sum(outstanding) AS debt FROM aquaterra_bank_loans WHERE status = ''open'' GROUP BY email) l ON l.email = e.email'
-    ELSE 'SELECT NULL::text AS email, 0::bigint AS dep, 0::bigint AS debt WHERE false' END)
+    ELSE 'SELECT NULL::text AS email, 0::bigint AS dep, 0::bigint AS debt WHERE false' END,
+    CASE WHEN has_hubs THEN 'SELECT owner AS email, price FROM aquaterra_travel_hubs WHERE owner IS NOT NULL'
+    ELSE 'SELECT NULL::text AS email, 0::bigint AS price WHERE false' END,
+    CASE WHEN has_roads THEN 'SELECT owner AS email, price FROM aquaterra_roads WHERE owner IS NOT NULL'
+    ELSE 'SELECT NULL::text AS email, 0::bigint AS price WHERE false' END)
   INTO rows, total USING greatest(1, least(coalesce(lim, 50), 100));
   RETURN jsonb_build_object('ok', true, 'status', 200, 'residents', rows, 'total', total, 'at', now());
 END

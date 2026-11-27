@@ -30,6 +30,7 @@ import PrismHills from "./pages/PrismHills";
 import Quests from "./pages/Quests";
 import Orbit from "./pages/Orbit";
 import Farm from "./pages/Farm";
+import Industry from "./pages/Industry";
 import Agency from "./pages/Agency";
 import Mind from "./pages/Mind";
 import Rich from "./pages/Rich";
@@ -74,6 +75,7 @@ const App = () => (
             <Route path="/quests" element={<Quests />} />
             <Route path="/orbit" element={<Orbit />} />
             <Route path="/farm" element={<Farm />} />
+            <Route path="/industry" element={<Industry />} />
             <Route path="/agency" element={<Agency />} />
             <Route path="/mind" element={<Mind />} />
             <Route path="/rich" element={<Rich />} />

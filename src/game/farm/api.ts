@@ -7,19 +7,21 @@ export const FARM_ENDPOINT = (import.meta.env.VITE_FARM_ENDPOINT as string | und
 
 export const FARM_ERRORS = [
   "session", "not_found", "not_owner", "crop", "land", "building", "planted", "not_ripe", "insufficient",
-  "nothing", "units", "too_little", "cap", "side", "price", "too_many", "place", "action",
+  "nothing", "units", "too_little", "cap", "side", "price", "too_many", "place", "works", "action",
 ] as const;
 export type FarmError = (typeof FARM_ERRORS)[number] | "network";
 const KNOWN = new Set<string>(FARM_ERRORS);
 
 export type Result<T> = { ok: true; data: T; error?: undefined } | { ok: false; data?: undefined; error: FarmError };
 
-export type CropGroup = "flowers" | "fruit" | "vegetables" | "grain" | "plantation" | "sea";
+export type CropGroup = "flowers" | "fruit" | "vegetables" | "grain" | "plantation" | "sea" | "raw" | "material" | "orbit";
 export interface Crop {
   key: string;
   group: CropGroup;
   /** grows on water plots (sea farm) instead of land */
   water: boolean;
+  /** farm: can be planted; industry: made by companies; orbit: shipped down from Orbit */
+  source?: "farm" | "industry" | "orbit";
   hours: number;
   seedPerTile: number;
   yieldPerTile: number;
@@ -55,7 +57,7 @@ export interface FarmPlot {
   district: string;
   tiles: number;
   water: boolean;
-  block: "land" | "building" | null;
+  block: "land" | "building" | "works" | null;
   field: Field | null;
 }
 export interface Order {
@@ -71,7 +73,7 @@ export interface MyFarm extends Market {
   plots: FarmPlot[];
   barn: { crop: string; units: number; price: number; value: number }[];
   orders: Order[];
-  log: { kind: "plant" | "harvest" | "clear" | "reserve" | "buy" | "sell" | "barter"; crop: string; units: number; tide: number; at: string }[];
+  log: { kind: "plant" | "harvest" | "clear" | "reserve" | "buy" | "sell" | "barter" | "produce" | "setup" | "dismantle" | "ship" | "build" | "salvage"; crop: string; units: number; tide: number; at: string }[];
   reserveToday: number;
   balance: number;
   free: number;

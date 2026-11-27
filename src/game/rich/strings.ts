@@ -8,7 +8,7 @@ const en = {
   title: "Richest residents",
   intro:
     "Every resident of AquaTerra World, ranked by net worth in Tide. Live from the city ledger: nothing here is estimated.",
-  formula: "Net worth = TIDE on the wallet + land at the price paid + money put into buildings + bank deposit − open bank debt.",
+  formula: "Net worth = TIDE on the wallet + land at the price paid + money put into buildings + transport bought (stations, harbours, airports, roads) + bank deposit − open bank debt.",
   rank: "#",
   resident: "Resident",
   worth: "Net worth",
@@ -21,6 +21,7 @@ const en = {
   plots: (k: number) => `${n(k)} ${k === 1 ? "plot" : "plots"}`,
   houses: (k: number) => `${n(k)} built`,
   debt: (v: number) => `debt ${tide(v)}`,
+  transport: (v: number, n: number) => `transport ${tide(v)} · ${n} ${n === 1 ? "line" : "lines"}`,
   deposit: (v: number) => `deposit ${tide(v)}`,
   total: (k: number) => `${n(k)} ${k === 1 ? "resident" : "residents"} with property`,
   updated: (at: string) => `Updated ${new Date(at).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" })}`,

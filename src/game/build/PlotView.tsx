@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Building2, Car, Coins, Hammer, Home, Loader2, RotateCcw, RotateCw, Scale, Sprout, Trash2, X } from "lucide-react";
+import { Box, Building2, Car, Coins, Factory, Hammer, Home, Loader2, RotateCcw, RotateCw, Scale, Sprout, Trash2, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import type { Plot, World } from "@/game/world/generator";
@@ -25,6 +25,23 @@ import type { WorldStrings } from "@/game/world/strings";
 import type { PlotOwner } from "@/game/economy/EconomyContext";
 import { buildOn, collectIncome, demolish, raiseTower, sellBuilding, withPermit, type BuildRules, type MyBuilding, type Result } from "./api";
 import type { BuildStrings } from "./strings";
+import { fetchCatalog, materialsSaving, recipeFor, type MyIndustry } from "@/game/industry/api";
+import { farmStrings, goodName } from "@/game/farm/strings";
+
+const tfarm = farmStrings("en");
+
+/** What a construction takes in materials, and how much of the price the storehouse covers. */
+function Materials({ cat, kind, cost }: { cat: MyIndustry | null; kind: "cottage" | "tower"; cost: number }) {
+  if (!cat?.recipes) return null;
+  const saved = materialsSaving(cat, cat.store ?? {}, kind, cost);
+  return (
+    <p className="text-xs text-amber-200/90">
+      Materials: {recipeFor(cat, kind, cost).map((x) => `${x.qty} ${goodName(tfarm, x.key)}`).join(", ")}.{" "}
+      {saved > 0 ? `Your storehouse covers ${saved.toLocaleString("en")} TIDE of it.` : "Missing ones come from the Builder Depot, inside the price."}{" "}
+      <Link to="/industry" className="underline">Industry</Link>
+    </p>
+  );
+}
 
 interface Props {
   world: World;
@@ -48,6 +65,10 @@ export default function PlotView({ world, plot, built, rules, mine, owner, sessi
   const [choice, setChoice] = useState<Choice>(null);
   const [busy, setBusy] = useState(false);
   const [arm, setArm] = useState<string | null>(null);
+  const [cat, setCat] = useState<MyIndustry | null>(null);
+  useEffect(() => {
+    if (session) void fetchCatalog(session).then((r) => r.ok && setCat(r.data));
+  }, [session, busy]);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 30000);
@@ -233,6 +254,7 @@ export default function PlotView({ world, plot, built, rules, mine, owner, sessi
                 <div className="space-y-1.5 rounded-lg border border-cyan-400/40 bg-cyan-400/5 p-3">
                   <p className="text-sm font-medium">{t.raise(nextFloors)}</p>
                   <p className="text-xs text-muted-foreground">{t.cost(p[`tower_cost_${next}` as const], withPermit(p[`tower_cost_${next}` as const], rules) - p[`tower_cost_${next}` as const], p[`hours_${next}` as const])}</p>
+                  <Materials cat={cat} kind="tower" cost={p[`tower_cost_${next}` as const]} />
                   {overLimit ? (
                     <p className="text-xs text-rose-300">{t.errors.height_limit}</p>
                   ) : (
@@ -242,7 +264,7 @@ export default function PlotView({ world, plot, built, rules, mine, owner, sessi
                       className="flex h-9 w-full items-center justify-center gap-2 rounded-md bg-cyan-400 text-sm font-semibold text-black hover:bg-cyan-300 disabled:opacity-50"
                     >
                       {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Building2 className="h-4 w-4" />}
-                      {arm === "raise" ? t.confirm : building ? t.errors.building : t.pay(withPermit(p[`tower_cost_${next}` as const], rules))}
+                      {arm === "raise" ? t.confirm : building ? t.errors.building : t.pay(withPermit(p[`tower_cost_${next}` as const], rules) - (cat ? materialsSaving(cat, cat.store ?? {}, "tower", p[`tower_cost_${next}` as const]) : 0))}
                     </button>
                   )}
                 </div>
@@ -293,11 +315,12 @@ export default function PlotView({ world, plot, built, rules, mine, owner, sessi
                   <div className="space-y-1.5 rounded-lg border border-cyan-400/40 bg-cyan-400/5 p-3">
                     {(() => {
                       const cost = choice.kind === "cottage" ? p.cottage_cost : p.tower_cost_0;
-                      const total = withPermit(cost, rules) + (has ? p.demolish_cost : 0);
+                      const total = withPermit(cost, rules) + (has ? p.demolish_cost : 0) - (cat ? materialsSaving(cat, cat.store ?? {}, choice.kind, cost) : 0);
                       return (
                         <>
                           <p className="text-sm font-medium">{choice.kind === "cottage" ? t.buildCottage : t.buildTower}</p>
                           <p className="text-xs text-muted-foreground">{t.cost(cost, withPermit(cost, rules) - cost, choice.kind === "cottage" ? p.hours_cottage : p.hours_0)}</p>
+                          <Materials cat={cat} kind={choice.kind} cost={cost} />
                           {has && <p className="text-xs text-amber-300">{t.replaceNote}</p>}
                           <button
                             disabled={busy}
@@ -334,6 +357,7 @@ export default function PlotView({ world, plot, built, rules, mine, owner, sessi
                     <Trash2 className="h-4 w-4" />
                     {arm === "demolish" ? t.confirm : t.demolish(p.demolish_cost)}
                   </button>
+                  {cat?.laws && <p className="text-xs text-muted-foreground">Demolishing returns {cat.laws.salvagePct}% of the materials to your storehouse.</p>}
                 </div>
               )}
             </section>
@@ -342,6 +366,12 @@ export default function PlotView({ world, plot, built, rules, mine, owner, sessi
             <Link to={`/farm?plot=${plot.id}`} className="flex h-9 items-center justify-center gap-2 rounded-md border border-emerald-400/50 text-sm text-emerald-200 hover:bg-emerald-400/10">
               <Sprout className="h-4 w-4" />
               {t.farm}
+            </Link>
+          )}
+          {yours && (
+            <Link to={`/industry?plot=${plot.id}`} className="flex h-9 items-center justify-center gap-2 rounded-md border border-orange-400/50 text-sm text-orange-200 hover:bg-orange-400/10">
+              <Factory className="h-4 w-4" />
+              Set up a company
             </Link>
           )}
         </aside>
