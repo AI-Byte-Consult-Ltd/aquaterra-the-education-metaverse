@@ -7,23 +7,23 @@ ALTER TABLE aquaterra_players ADD COLUMN IF NOT EXISTS handle text;
 ALTER TABLE aquaterra_players ADD COLUMN IF NOT EXISTS handle_auto boolean NOT NULL DEFAULT true;
 ALTER TABLE aquaterra_players ADD COLUMN IF NOT EXISTS handle_changed_at timestamptz;
 
-CREATE OR REPLACE FUNCTION aquaterra_handle_reserved(h text) RETURNS boolean LANGUAGE sql IMMUTABLE AS $$
+CREATE OR REPLACE FUNCTION aquaterra_handle_reserved(h text) RETURNS boolean LANGUAGE sql IMMUTABLE AS $q$
   SELECT h = ANY (ARRAY['admin', 'administrator', 'founder', 'nics', 'nics_ai', 'nicsai', 'nics_world', 'city_mind',
     'aquaterra', 'aquaterra_world', 'treasury', 'reserve', 'state', 'state_treasury', 'council', 'directorate',
     'assembly', 'system', 'support', 'help', 'official', 'moderator', 'mod', 'staff', 'bank', 'market', 'tide',
     'citizen', 'resident', 'everyone', 'all', 'null', 'undefined', 'first_light', 'firstlight', 'mayor', 'heritage'])
     OR h LIKE 'nics%' OR h LIKE 'aquaterra%'
-$$;
+$q$;
 
 -- "Mary Ann.Lee" -> "mary_ann_lee"
-CREATE OR REPLACE FUNCTION aquaterra_handle_base(name text) RETURNS text LANGUAGE sql IMMUTABLE AS $$
+CREATE OR REPLACE FUNCTION aquaterra_handle_base(name text) RETURNS text LANGUAGE sql IMMUTABLE AS $q$
   SELECT CASE WHEN length(b) >= 3 THEN b ELSE 'resident' END
   FROM (SELECT btrim(left(btrim(regexp_replace(lower(coalesce(name, '')), '[^a-z0-9]+', '_', 'g'), '_'), 16), '_') AS b) s
-$$;
+$q$;
 
-CREATE OR REPLACE FUNCTION aquaterra_handle_ok(h text) RETURNS boolean LANGUAGE sql IMMUTABLE AS $$
-  SELECT coalesce(h ~ '^[a-z0-9_]{3,20}$' AND h !~ '^_|_$|__' AND NOT aquaterra_handle_reserved(h), false)
-$$;
+CREATE OR REPLACE FUNCTION aquaterra_handle_ok(h text) RETURNS boolean LANGUAGE sql IMMUTABLE AS $q$
+  SELECT coalesce(h ~ '^[a-z0-9_]{3,20}\Z' AND h !~ '^_|_\Z|__' AND NOT aquaterra_handle_reserved(h), false)
+$q$;
 
 -- First free handle for this base: base, base2, base3 ...
 CREATE OR REPLACE FUNCTION aquaterra_handle_free(base text, who text) RETURNS text LANGUAGE plpgsql AS $fn$
@@ -88,7 +88,7 @@ BEGIN
   IF act IN ('check', 'set') THEN
     h := lower(ltrim(btrim(coalesce(req->>'handle', '')), '@'));
     IF h = p.handle THEN RETURN jsonb_build_object('ok', true, 'handle', h, 'free', true, 'mine', true); END IF;
-    IF h !~ '^[a-z0-9_]{3,20}$' OR h ~ '^_|_$|__' THEN RETURN jsonb_build_object('ok', false, 'error', 'format', 'status', 400); END IF;
+    IF h !~ '^[a-z0-9_]{3,20}\Z' OR h ~ '^_|_\Z|__' THEN RETURN jsonb_build_object('ok', false, 'error', 'format', 'status', 400); END IF;
     IF aquaterra_handle_reserved(h) THEN RETURN jsonb_build_object('ok', false, 'error', 'reserved', 'status', 409); END IF;
     IF EXISTS (SELECT 1 FROM aquaterra_players WHERE handle = h) THEN RETURN jsonb_build_object('ok', false, 'error', 'taken', 'status', 409); END IF;
     IF act = 'check' THEN RETURN jsonb_build_object('ok', true, 'handle', h, 'free', true); END IF;
