@@ -3,7 +3,7 @@
 let b = $input.first().json.body || {};
 if (typeof b === 'string') { try { b = JSON.parse(b); } catch (e) { b = {}; } }
 if (!b || typeof b !== 'object' || Array.isArray(b)) b = {};
-const actions = ['market', 'book', 'me', 'plant', 'harvest', 'clear', 'reserve', 'order', 'cancel', 'works', 'setup', 'produce', 'dismantle', 'ship', 'city', 'deliver'];
+const actions = ['market', 'book', 'me', 'plant', 'harvest', 'clear', 'reserve', 'order', 'cancel', 'works', 'setup', 'produce', 'dismantle', 'ship', 'city', 'deliver', 'fields'];
 const req = { action: actions.includes(b.action) ? b.action : 'invalid' };
 const s = String(b.session || '').replace(/[^a-f0-9]/g, '').slice(0, 64);
 if (s) req.session = s;
