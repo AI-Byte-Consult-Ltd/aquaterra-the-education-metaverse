@@ -12,6 +12,7 @@ import type { TowerId } from "@/game/heritage/api";
 import { towerOnPlot } from "@/game/world/landmarks";
 import PlotPreview from "@/game/build/PlotPreview";
 import { fetchFields } from "@/game/farm/api";
+import { loadStaff, staffPlan, type Walker } from "@/game/orders/workers";
 import type { MapField } from "@/game/farm/map";
 import { fetchBuildMap, fetchMyBuildings, toBuilt, type BuildRules, type MyBuilding } from "@/game/build/api";
 import { buildStrings } from "@/game/build/strings";
@@ -197,6 +198,23 @@ const City = () => {
     if (rendererRef.current) rendererRef.current.owned = ownedRef.current;
   }, [economy.owners]);
   const city = useMemo(() => generateWorld(DEFAULT_WORLD), []);
+  // workers: NPC residents walking from homes to the companies and fields of their owner
+  const workersRef = useRef<Walker[]>([]);
+  useEffect(() => {
+    let stop = false;
+    const load = async () => {
+      const groups = await loadStaff(true);
+      if (stop) return;
+      workersRef.current = staffPlan(city, groups).walkers;
+      if (rendererRef.current) rendererRef.current.workers = workersRef.current;
+    };
+    void load();
+    const id = window.setInterval(load, 120_000);
+    return () => {
+      stop = true;
+      window.clearInterval(id);
+    };
+  }, [city]);
   const [params, setParams] = useSearchParams();
 
   // --- where the resident stands, and the transport network -----------------
@@ -321,6 +339,7 @@ const City = () => {
     r.attractions = attractionsRef.current;
     if (fieldsRef.current.map.size) r.setFields(fieldsRef.current.map, fieldsRef.current.wilt, Date.now() / 1000 + fieldsRef.current.skew);
     r.residents = crowdRef.current;
+    r.workers = workersRef.current;
     r.myCompanion = companionRef.current;
     r.fit();
     centred.current = false;

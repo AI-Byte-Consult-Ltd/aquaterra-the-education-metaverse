@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Building2, Car, Coins, Factory, Hammer, Home, Loader2, RotateCcw, RotateCw, Scale, Sprout, Trash2, X } from "lucide-react";
+import { Box, Building2, Car, Coins, Factory, Hammer, Home, Loader2, RotateCcw, RotateCw, Scale, Sprout, Trash2, Users, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import type { Plot, World } from "@/game/world/generator";
@@ -27,6 +27,7 @@ import { buildOn, collectIncome, demolish, raiseTower, sellBuilding, withPermit,
 import type { BuildStrings } from "./strings";
 import { fetchCatalog, materialsSaving, recipeFor, type MyIndustry } from "@/game/industry/api";
 import { farmStrings, goodName } from "@/game/farm/strings";
+import { loadStaff, staffPlan, type PlotStaff } from "@/game/orders/workers";
 
 const tfarm = farmStrings("en");
 
@@ -58,6 +59,32 @@ interface Props {
 }
 
 type Choice = { kind: "cottage" | "tower"; design: number } | null;
+
+/** Workers of this plot: people living in a home, or workers at a company or field (server/city). */
+function PlotWorkers({ world, plot }: { world: World; plot: Plot }) {
+  const [st, setSt] = useState<PlotStaff | null>(null);
+  useEffect(() => {
+    let stop = false;
+    void loadStaff().then((g) => !stop && setSt(staffPlan(world, g).perPlot.get(plot.id) ?? null));
+    return () => {
+      stop = true;
+    };
+  }, [world, plot.id]);
+  if (!st) return null;
+  return (
+    <section className="space-y-1 rounded-xl border border-orange-400/40 bg-orange-400/5 p-3 text-sm">
+      <h3 className="flex items-center gap-1.5 font-semibold text-orange-200"><Users className="h-4 w-4" />Workers</h3>
+      {st.people !== undefined && <p>{st.people} {st.people === 1 ? "person lives" : "people live"} here and work at the owner's companies and farms.</p>}
+      {st.jobs !== undefined && (
+        <p>
+          {st.workers} of {st.jobs} jobs filled · output {Math.round((st.output ?? 1) * 100)}%
+          {st.workers !== undefined && st.workers < st.jobs ? ". More homes bring more workers." : "."}
+        </p>
+      )}
+      <Link to="/orders" className="text-xs underline">Workforce and city orders</Link>
+    </section>
+  );
+}
 
 /** The plot opened on (almost) the whole screen: the main place where residents build. */
 export default function PlotView({ world, plot, built, rules, mine, owner, session, t, tw, onChanged, onClose }: Props) {
@@ -362,6 +389,7 @@ export default function PlotView({ world, plot, built, rules, mine, owner, sessi
               )}
             </section>
           )}
+          <PlotWorkers world={world} plot={plot} />
           {yours && (
             <Link to={`/farm?plot=${plot.id}`} className="flex h-9 items-center justify-center gap-2 rounded-md border border-emerald-400/50 text-sm text-emerald-200 hover:bg-emerald-400/10">
               <Sprout className="h-4 w-4" />

@@ -232,6 +232,14 @@ BEGIN
         'homes', jsonb_build_object('starter', aquaterra_city_law('workforce_starter'), 'cottage', aquaterra_city_law('workforce_cottage'),
           'tower1', aquaterra_city_law('workforce_tower_1'), 'tower2', aquaterra_city_law('workforce_tower_2'), 'tower3', aquaterra_city_law('workforce_tower_3'))),
       'jobs', (SELECT jsonb_object_agg(kind, workers) FROM aquaterra_city_jobs),
+      -- for the world map: per owner with jobs, homes [plot, people] and workplaces [plot, jobs]; no names
+      'staff', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+          'homes', (SELECT COALESCE(jsonb_agg(jsonb_build_array(h.plot_id, h.people) ORDER BY h.plot_id), '[]'::jsonb) FROM aquaterra_city_homes(e.owner) h),
+          'works', (SELECT jsonb_agg(jsonb_build_array(x.pid, x.j) ORDER BY x.pid) FROM (
+              SELECT w.plot_id AS pid, aquaterra_city_jobs_of(w.kind) AS j FROM aquaterra_works w WHERE w.owner = e.owner
+              UNION ALL SELECT f.plot_id, aquaterra_city_jobs_of(CASE WHEN aquaterra_farm_water(f.plot_id) THEN 'seafarm' ELSE 'farm' END)
+                FROM aquaterra_farm_fields f WHERE f.owner = e.owner) x)))
+        FROM (SELECT DISTINCT owner FROM aquaterra_works UNION SELECT DISTINCT owner FROM aquaterra_farm_fields) e), '[]'::jsonb),
       'city', (SELECT jsonb_build_object('people', COALESCE(sum(aquaterra_city_people(e.owner)), 0), 'jobs', COALESCE(sum(aquaterra_city_jobs_total(e.owner)), 0))
         FROM (SELECT DISTINCT owner FROM aquaterra_plot_owners) e));
     IF me IS NOT NULL THEN

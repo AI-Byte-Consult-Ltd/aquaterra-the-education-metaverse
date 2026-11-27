@@ -221,4 +221,6 @@ check(len(c["orders"]) == 4 and len(c["past"]) == 1 and c["past"][0]["orders"] =
 check(city("ann", action="deliver", orderId=999999)["error"] == "not_found", "unknown order")
 log = J("SELECT count(*) FROM aquaterra_farm_log WHERE kind = 'city'")
 check(log >= 2, "deliveries in the farm log")
+st = city(action="city")["staff"]
+check(len(st) >= 1 and all("homes" in x and "works" in x for x in st) and "@" not in json.dumps(st), f"public staff map without names {st}")
 print(f"city: {passed} checks passed")
