@@ -327,7 +327,7 @@ BEGIN
       IF hub.id IS NULL THEN RAISE EXCEPTION 'not_found'; END IF;
       IF hub.owner IS NOT NULL THEN RAISE EXCEPTION 'taken'; END IF;
       IF (SELECT district_id FROM aquaterra_locations WHERE email = me) <> hub.district_id THEN RAISE EXCEPTION 'not_here'; END IF;
-      IF (SELECT count(*) FROM aquaterra_travel_hubs WHERE owner = me) >= aquaterra_travel_param('max_hubs_per_citizen') THEN RAISE EXCEPTION 'hub_limit'; END IF;
+      IF (SELECT count(*) FROM aquaterra_travel_hubs WHERE owner = me) >= aquaterra_limit_for(me, 'max_hubs_per_citizen', aquaterra_travel_param('max_hubs_per_citizen')) THEN RAISE EXCEPTION 'hub_limit'; END IF;
       INSERT INTO aquaterra_wallets (account) VALUES (me) ON CONFLICT DO NOTHING;
       PERFORM 1 FROM aquaterra_wallets WHERE account = me FOR UPDATE;
       -- welcome coins are for land and travel; transport is bought with earned TIDE

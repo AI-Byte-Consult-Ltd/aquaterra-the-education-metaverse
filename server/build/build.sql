@@ -274,7 +274,7 @@ BEGIN
           IF v_kind NOT IN ('cottage', 'tower') THEN RAISE EXCEPTION 'kind'; END IF;
           IF v_kind = 'tower' AND NOT site.tower_ok THEN RAISE EXCEPTION 'tower_site'; END IF;
           IF v_kind = 'tower' AND (SELECT count(*) FROM aquaterra_buildings b2 JOIN aquaterra_plot_owners o ON o.plot_id = b2.plot_id
-              WHERE o.owner = me AND b2.kind = 'tower' AND b2.plot_id <> pid) >= aquaterra_build_param('max_towers_per_citizen') THEN
+              WHERE o.owner = me AND b2.kind = 'tower' AND b2.plot_id <> pid) >= aquaterra_limit_for(me, 'max_towers_per_citizen', aquaterra_build_param('max_towers_per_citizen')) THEN
             RAISE EXCEPTION 'tower_limit';
           END IF;
           v_level := 0;

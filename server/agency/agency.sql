@@ -350,10 +350,10 @@ BEGIN
         RETURN jsonb_build_object('ok', false, 'error', 'gone', 'status', 409);
       END IF;
       IF l.price > 1000000000 THEN RAISE EXCEPTION 'price'; END IF;
-      IF l.kind = 'plot' AND (SELECT count(*) FROM aquaterra_plot_owners WHERE owner = me) >= aquaterra_param('max_plots_per_citizen') THEN
+      IF l.kind = 'plot' AND (SELECT count(*) FROM aquaterra_plot_owners WHERE owner = me) >= aquaterra_limit_for(me, 'max_plots_per_citizen', aquaterra_param('max_plots_per_citizen')) THEN
         RAISE EXCEPTION 'plot_limit';
       END IF;
-      IF l.kind = 'road' AND (SELECT count(*) FROM aquaterra_roads WHERE owner = me) >= aquaterra_agency_law('road_max_per_citizen') THEN
+      IF l.kind = 'road' AND (SELECT count(*) FROM aquaterra_roads WHERE owner = me) >= aquaterra_limit_for(me, 'road_max_per_citizen', aquaterra_agency_law('road_max_per_citizen')) THEN
         RAISE EXCEPTION 'road_limit';
       END IF;
       PERFORM 1 FROM aquaterra_wallets WHERE account IN (me, l.seller) ORDER BY account FOR UPDATE;
