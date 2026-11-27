@@ -181,7 +181,9 @@ const Farm = () => {
                       <li key={b.crop} className="flex flex-wrap items-center gap-2 text-sm">
                         <span className="min-w-[9rem] font-semibold">{name(b.crop)}</span>
                         <span>{t.n(b.units)}</span>
-                        <span className="text-muted-foreground">{t.worth(b.value)}</span>
+                        <span className="text-muted-foreground">
+                          {b.value >= 1 ? t.worth(b.value) : t.notYet(b.units * b.price, Math.ceil(1 / Math.max(b.price, 0.001)))}
+                        </span>
                         <button type="button" className={btnSoft} disabled={b.value < 1 || busy !== null}
                           onClick={() => void act("reserve:" + b.crop, () => sellToReserve(session, b.crop), (d) => t.sold(d.sold ?? 0, name(b.crop), d.tide ?? 0))}>
                           {busy === "reserve:" + b.crop ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}{t.reserve}

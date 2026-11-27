@@ -73,6 +73,9 @@ const en = {
     `The Reserve buys at its base price, up to ${tide(cap)} a day (today ${tide(today)}). ${tax}% income tax goes to the State Treasury.`,
   sold: (units: number, crop: string, t: number) => `Sold ${n(units)} ${crop} to the Reserve for ${tide(t)}.`,
   worth: (v: number) => `Reserve pays ${tide(v)}`,
+  /** Too little for one whole TIDE at the Reserve yet: what it is worth and how many units make 1 TIDE. */
+  notYet: (worth: number, need: number) =>
+    `Worth ${Math.round(worth * 100) / 100} TIDE. The Reserve pays whole TIDE: keep ${need}+ to sell here, or sell on the Harvest Market now`,
   market: "Harvest Market",
   marketNote: (tax: number) => `Residents trade with each other at their own prices. Orders meet at the price of the order that was there first. The seller pays ${tax}% tax to the State Treasury.`,
   crop: "Crop",
