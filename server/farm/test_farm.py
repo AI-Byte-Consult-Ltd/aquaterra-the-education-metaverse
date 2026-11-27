@@ -101,7 +101,9 @@ check(m["ok"] and len(m["crops"]) == 15 and m["laws"]["marketTaxPct"] == 10, f"m
 check(farm(action="me")["error"] == "session", "me needs a session")
 me = farm("ann", action="me")
 blocks = {p["plotId"]: p["block"] for p in me["plots"]}
-check(blocks == {1: None, 2: "land", 3: "building"}, f"blocks {blocks}")
+check(blocks == {1: None, 2: "land", 3: None}, f"starter house is the farmhouse {blocks}")
+psql("INSERT INTO aquaterra_buildings (plot_id, kind, level) VALUES (3, 'cottage', 1)")
+check(farm("ann", action="me")["plots"][2]["block"] == "building", "a resident building blocks")
 
 # Plant: rose 16 h, seed 0.4 x 10 = 4 TIDE to the Reserve, yield 10.
 check(farm("ann", action="plant", plotId=2, crop="rose")["error"] == "land", "no farm on water")
