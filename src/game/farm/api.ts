@@ -113,6 +113,8 @@ async function call<T>(body: Record<string, unknown>): Promise<Result<T>> {
 }
 
 export const fetchMarket = () => call<Market>({ action: "market" });
+/** Public: what grows where, for the world map. Each row is [plotId, crop, planted, ripe] in unix seconds. */
+export const fetchFields = () => call<{ fields: [number, string, number, number][]; wiltHours: number; now: number }>({ action: "fields" });
 export const fetchBook = (crop: string) => call<{ book: Book }>({ action: "book", crop });
 export const fetchMyFarm = (session: string) => call<MyFarm>({ action: "me", session });
 export const plant = (session: string, plotId: number, crop: string) => call<MyFarm>({ action: "plant", session, plotId, crop });

@@ -256,7 +256,7 @@ BEGIN
   END IF;
   -- Companies on plots, materials and Orbit shipments: server/industry/industry.sql, same webhook.
   IF act IN ('works', 'setup', 'produce', 'dismantle', 'ship') THEN RETURN aquaterra_industry(req); END IF;
-  IF act NOT IN ('market', 'book') AND me IS NULL THEN
+  IF act NOT IN ('market', 'book', 'fields') AND me IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'error', 'session', 'status', 401);
   END IF;
   v_crop := left(coalesce(req->>'crop', ''), 20);
@@ -271,6 +271,13 @@ BEGIN
 
     ELSIF act = 'me' THEN
       NULL;
+
+    ELSIF act = 'fields' THEN
+      -- public: what grows where, for the world map (plot, crop, planted, ripe, in unix seconds)
+      res := jsonb_build_object('wiltHours', aquaterra_farm_law('farm_wilt_hours'), 'now', floor(extract(epoch FROM now())),
+        'fields', COALESCE((SELECT jsonb_agg(jsonb_build_array(ff.plot_id, ff.crop,
+            floor(extract(epoch FROM ff.planted_at)), floor(extract(epoch FROM ff.ready_at))) ORDER BY ff.plot_id)
+          FROM aquaterra_farm_fields ff), '[]'::jsonb));
 
     ELSIF act = 'plant' THEN
       pid := CASE WHEN coalesce(req->>'plotId', '') ~ '^[0-9]' AND length(req->>'plotId') <= 9 AND (req->>'plotId') !~ '[^0-9]' THEN (req->>'plotId')::int END;
