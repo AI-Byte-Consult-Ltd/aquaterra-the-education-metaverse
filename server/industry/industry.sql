@@ -176,9 +176,10 @@ BEGIN
   RETURN round(g * rich, 2);
 END $fn$;
 
--- Units a day a company makes.
+-- Units a day a company makes. Workers (server/city/city.sql): with too few people in the homes of the owner
+-- every company of the owner works slower (aquaterra_farm_staff is 1 while the city is not installed).
 CREATE OR REPLACE FUNCTION aquaterra_ind_per_day(w aquaterra_works) RETURNS numeric LANGUAGE sql STABLE AS
-$fn$ SELECT t.rate * p.tiles * w.factor * aquaterra_ind_law('industry_rate_pct') / 100.0
+$fn$ SELECT t.rate * p.tiles * w.factor * aquaterra_ind_law('industry_rate_pct') / 100.0 * aquaterra_farm_staff(w.owner)
   FROM aquaterra_works_types t, aquaterra_plots p WHERE t.key = w.kind AND p.id = w.plot_id $fn$;
 
 -- Units waiting (before inputs are checked).

@@ -119,6 +119,7 @@ const Industry = () => {
             <>
               <Panel title={t.myWorks} icon={Factory}>
                 <p className="text-xs text-muted-foreground">{t.capNote(data.laws.capHours)} {t.free(data.free)}</p>
+                <p className="text-xs text-muted-foreground">{t.workersNote} <Link to="/orders" className="text-primary underline">{t.workersLink}</Link></p>
                 {plots.length === 0 ? (
                   <p className="text-sm text-muted-foreground">{t.noPlots} <Link to="/world" className="text-primary underline">{t.backToWorld}</Link></p>
                 ) : (

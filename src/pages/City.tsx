@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Brain, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Sailboat, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, Sparkles, UserRound, Users, Waves, X, ZoomIn, ZoomOut, Trophy, Rainbow, Orbit as OrbitIcon, Sprout, Factory } from "lucide-react";
+import { ArrowLeft, Brain, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Sailboat, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, Sparkles, UserRound, Users, Waves, X, ZoomIn, ZoomOut, Trophy, Rainbow, Orbit as OrbitIcon, Sprout, Factory, ClipboardList } from "lucide-react";
 import { NicsChatButton } from "@/game/nics/NicsChat";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -707,6 +707,15 @@ const City = () => {
         >
           <Factory className="h-4 w-4 text-orange-300" />
           <span className="hidden sm:inline">Industry</span>
+        </Link>
+        <Link
+          to="/orders"
+          title="City Orders"
+          aria-label="City Orders"
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-sky-400/50 bg-sky-400/10 px-2.5 text-sm font-semibold text-sky-200 hover:border-sky-300"
+        >
+          <ClipboardList className="h-4 w-4 text-sky-300" />
+          <span className="hidden sm:inline">Orders</span>
         </Link>
         <Link
           to="/agency"
