@@ -16,9 +16,12 @@ export interface Expansion {
   /**
    * "island": one large ragged island; "archipelago": many islands, big and small, some mountainous;
    * "harbours": wild islands with ragged coasts, deep harbour bays, mountains, lakes, palms and fields,
-   * no towns or streets (a land from LATE_FROM on).
+   * no towns or streets (a land from LATE_FROM on);
+   * "airport": an island airport on land reclaimed from the sea (Hong Kong style), a flat platform with
+   * two parallel runways and a terminal, its town by the terminal and a few small hilly islands; reached
+   * by air and by sea, no bridge (a land from LATE_FROM on, one district).
    */
-  shape: "island" | "archipelago" | "harbours";
+  shape: "island" | "archipelago" | "harbours" | "airport";
   /** Rectangle of open sea it may rise in, in tiles: [x0, y0, x1, y1]. */
   area: [number, number, number, number];
   /** One district per entry, in order. Names continue each region's name list. */
@@ -27,6 +30,8 @@ export interface Expansion {
   seed: number;
   /** Lagoon colours for the shallow sea, as in Oceania. */
   lagoon?: boolean;
+  /** May also rise from the open (deep) sea of other lands, such as Oceania's, still MARGIN away from any coast. */
+  openSea?: boolean;
 }
 
 /**
@@ -63,5 +68,14 @@ export const EXPANSIONS: Expansion[] = [
     districts: ["palms", "palms", "palms", "palms"],
     seed: 1003,
     lagoon: true,
+  },
+  {
+    // between Stormcrest Isles and Lagoon Keys, with flights to and from every other airport
+    name: "Aeroheights Isles",
+    shape: "airport",
+    area: [338, 258, 432, 298],
+    districts: ["airport"],
+    seed: 1004,
+    openSea: true,
   },
 ];

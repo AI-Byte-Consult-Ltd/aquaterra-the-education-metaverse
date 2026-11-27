@@ -1493,7 +1493,7 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
     const [x0, y0, x1, y1] = ex.area.map((v) => Math.max(0, Math.min(size - 1, v)));
     if (x1 - x0 < 24 || y1 - y0 < 24) return;
     // open sea kept around everything that already exists (water plots of open sea do not count)
-    const isOld = (i: number) => zone[i] !== 0 || (kind[i] !== K.deep && kind[i] !== K.ocean);
+    const isOld = (i: number) => (zone[i] !== 0 && !ex.openSea) || (kind[i] !== K.deep && kind[i] !== K.ocean);
     const near = new Int16Array(N).fill(-1);
     const q: number[] = [];
     for (let y = Math.max(0, y0 - MARGIN); y <= Math.min(size - 1, y1 + MARGIN); y++)
@@ -1532,7 +1532,7 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
     const hw = (x1 - x0) / 2;
     const hh = (y1 - y0) / 2;
     const count = Math.max(3, Math.round((x1 - x0) / 30));
-    const bigs = Array.from({ length: count }, (_, b) => {
+    const bigs = Array.from({ length: ex.shape === "airport" ? 0 : count }, (_, b) => {
       const mountain = b % 3 !== 1;
       const r = Math.min(hh * 0.8, 9 + er() * 8);
       return {
@@ -1547,10 +1547,58 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
         bays: Array.from({ length: 2 + Math.floor(er() * 2) }, () => ({ ang: er() * Math.PI * 2, w: 0.18 + er() * 0.2, depth: 0.55 + er() * 0.3 })),
       };
     });
+    // an island airport (Hong Kong style): a dead flat platform reclaimed from the sea, two parallel
+    // runways with the apron between them, the terminal at the town end, a few small hilly islands
+    let field: { px0: number; py0: number; px1: number; py1: number; tx: number; ty: number } | null = null;
+    if (ex.shape === "airport") {
+      // 14 rows starting one row into a WATER_CELL square: no square of water plots is covered
+      // whole, so every water plot under it keeps a row of sea (and no pond lands on the airfield)
+      const PW = 66;
+      const PH = 14;
+      const px0 = Math.round(cx - PW / 2);
+      const px1 = px0 + PW - 1;
+      const py0 = Math.floor((cy - PH / 2) / WATER_CELL) * WATER_CELL + 1;
+      const py1 = py0 + PH - 1;
+      field = { px0, py0, px1, py1, tx: px0 + 58, ty: py0 + 7 };
+      const isl = [
+        { x: px0 - 5, y: py1 + 1, s: 5.5, h: 0.5 },
+        { x: px0 + 22, y: py1 + 4, s: 4, h: 0.34 },
+        { x: px1 + 5, y: py0 - 1, s: 5, h: 0.45 },
+        { x: px0 + 40, y: py0 - 4, s: 3.2, h: 0.26 },
+      ];
+      for (let y = y0; y <= y1; y++)
+        for (let x = x0; x <= x1; x++) {
+          const i = idx(x, y);
+          if (!free(i)) continue;
+          let h = -1;
+          const wx = x + warpA(x / 9, y / 9) * 2.5;
+          const wy = y + warpB(x / 9, y / 9) * 2.5;
+          for (const b of isl) {
+            const bump = Math.exp(-((Math.hypot(wx - b.x, wy - b.y) / b.s) ** 2));
+            if (bump > 0.1) h = Math.max(h, b.h * bump - 0.04 + fine(x / 4, y / 4) * 0.03 + Math.pow(crest(x / 8, y / 8), 2) * 0.08 * bump);
+          }
+          // straight sea walls, cut corners
+          const cdx = Math.min(x - px0, px1 - x);
+          const cdy = Math.min(y - py0, py1 - y);
+          if (cdx >= 0 && cdy >= 0 && cdx + cdy >= 3) h = 0.06;
+          if (h <= -0.045) continue;
+          height[i] = h;
+          kind[i] = h < 0 ? K.shallow : h < 0.035 ? K.beach : h > 0.72 ? K.peak : h > 0.55 ? K.mountain : h > 0.4 ? K.hill : K.land;
+          zone[i] = z;
+        }
+      for (let y = py0; y <= py1; y++)
+        for (let x = px0; x <= px0 + 50; x++) {
+          const i = idx(x, y);
+          if (!mine(i) || height[i] < 0) continue;
+          const onRunway = x >= px0 + 3 && x <= px0 + 48 && (y === py0 + 1 || y === py0 + 2 || y === py1 - 2 || y === py1 - 1);
+          const terminal = x >= px0 + 38 && y >= py0 + 5 && y <= py1 - 5;
+          kind[i] = onRunway ? K.runway : terminal ? K.terminal : K.apron;
+        }
+    }
     for (let y = y0; y <= y1; y++)
       for (let x = x0; x <= x1; x++) {
         const i = idx(x, y);
-        if (!free(i)) continue;
+        if (field || !free(i)) continue;
         const u = (x - cx) / hw;
         const v = (y - cy) / hh;
         const m = Math.min(1, Math.max(0, (1 - Math.max(Math.abs(u), Math.abs(v)) - warpA(u * 3, v * 3) * 0.06) / 0.14));
@@ -1613,6 +1661,8 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
         land++;
         if (height[i] > 0.05 && height[i] < 0.4) cands.push(i);
       }
+    // the airport's town stands on the platform, by the terminal
+    if (field && mine(idx(field.tx, field.ty))) cands.splice(0, cands.length, idx(field.tx, field.ty));
     const minD = Math.max(14, Math.sqrt(land / Math.max(1, ex.districts.length)) * 0.8);
     for (let tries = 0; tries < 6000 && districts.length - first < ex.districts.length && cands.length; tries++) {
       const i = cands[Math.floor(er() * cands.length)];
@@ -1649,8 +1699,18 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
         district[i] = best;
       }
 
+    // the airport town: its square, and a road from it to the terminal; the airport on the map
+    if (field && own[0].x === field.tx && own[0].y === field.ty) {
+      const { px0, tx, ty } = field;
+      for (let y = ty - 1; y <= ty + 1; y++) for (let x = tx - 1; x <= tx + 1; x++) if (mine(idx(x, y)) && height[idx(x, y)] >= 0) kind[idx(x, y)] = K.plaza;
+      const path: number[] = [];
+      for (let x = tx - 2; x >= px0 + 51; x--) path.push(idx(x, ty));
+      if (path.every((i) => mine(i) && height[i] >= 0)) layRoad(path, "street", `${own[0].name} Airport Road`);
+      airports.push({ name: `${own[0].name} International Airport`, x: px0 + 44, y: ty, district: own[0].id });
+    }
+
     // 3. palms along the shores and on the slopes, lakes in the valleys; open lowland stays
-    //    fields and meadows (the renderer draws the fields)
+    //    fields and meadows (the renderer draws the fields); none at an airport
     const palmN = fbm(S + 8, 3);
     const lakeM = fbm(S + 9, 3);
     const shore = new Int16Array(N).fill(-1);
@@ -1679,7 +1739,7 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
     for (let y = y0; y <= y1; y++)
       for (let x = x0; x <= x1; x++) {
         const i = idx(x, y);
-        if (!mine(i) || (kind[i] !== K.land && kind[i] !== K.hill)) continue;
+        if (field || !mine(i) || (kind[i] !== K.land && kind[i] !== K.hill)) continue;
         const s = shore[i] < 0 ? 9 : shore[i];
         const pn = palmN(x / 7, y / 7);
         if ((s <= 1 && pn > -0.15) || (s === 2 && pn > 0.1) || (kind[i] === K.hill && pn > 0.15) || pn > 0.5) kind[i] = K.forest;
@@ -1689,6 +1749,7 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
     // 4. water plots of the old sea give up the tiles the land rose from, but keep at least
     //    four tiles of water: where an island covers a whole square, its lowest tiles become a lake
     const SEA = new Set<number>([K.deep, K.ocean, K.shallow]);
+    const PAVED = new Set<number>([K.runway, K.apron, K.terminal, K.road, K.street, K.plaza, K.bridge]);
     const touched = new Map<number, number[]>();
     for (let y = y0; y <= y1; y++)
       for (let x = x0; x <= x1; x++) {
@@ -1703,8 +1764,10 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
       let keep = plot.tiles.filter((t) => SEA.has(kind[t]));
       if (keep.length < 4) {
         // the lowest tile of the square and its lowest neighbours in the square
+        // (never on a runway, apron, terminal, road or square)
         const inPlot = new Set(plot.tiles);
-        const pond = new Set<number>([gone.reduce((a, t) => (height[t] < height[a] ? t : a))]);
+        const ground = gone.filter((t) => !PAVED.has(kind[t]));
+        const pond = new Set<number>(ground.length ? [ground.reduce((a, t) => (height[t] < height[a] ? t : a))] : []);
         while (pond.size + keep.length < 4) {
           let pick = -1;
           for (const t of pond) {
@@ -1712,7 +1775,7 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
             const y = (t - x) / size;
             for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
               const n2 = idx(x + dx, y + dy);
-              if (inb(x + dx, y + dy) && inPlot.has(n2) && !pond.has(n2) && !SEA.has(kind[n2]) && (pick < 0 || height[n2] < height[pick])) pick = n2;
+              if (inb(x + dx, y + dy) && inPlot.has(n2) && !pond.has(n2) && !SEA.has(kind[n2]) && !PAVED.has(kind[n2]) && (pick < 0 || height[n2] < height[pick])) pick = n2;
             }
           }
           if (pick < 0) break;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { EXPANSIONS, LATE_FROM } from "./expansions";
 import { DEFAULT_WORLD, KINDS, WATER_CELL, findPlotByAddress, generateWorld, type Kind } from "./generator";
-import { LATE_FROM } from "./expansions";
 import { buildingsFor } from "./buildings";
 import { region } from "./regions";
 
@@ -55,11 +55,14 @@ describe("world generator", () => {
         queue.push(j);
       }
     }
-    for (const d of world.districts) if (!region(d.biome).wild) expect(seen[d.y * n + d.x], d.name).toBe(1);
+    // an island airport is reached by air and by sea, not by road
+    const offRoad = new Set(world.expansions.filter((e) => EXPANSIONS.find((x) => x.name === e.name)?.shape === "airport").flatMap((e) => e.districts));
+    for (const d of world.districts) if (!region(d.biome).wild && !offRoad.has(d.id)) expect(seen[d.y * n + d.x], d.name).toBe(1);
   });
 
   it("builds airports and railway stations", () => {
-    expect(world.airports.length).toBe(DEFAULT_WORLD.airports);
+    // the map's own airports, then the island airport of expansions.ts
+    expect(world.airports.length).toBe(DEFAULT_WORLD.airports + 1);
     expect(world.stations.length).toBeGreaterThanOrEqual(4);
   });
 
@@ -210,9 +213,28 @@ describe("world generator", () => {
     expect(lots.every((p) => houses[p.id] === null)).toBe(true);
   });
 
+  it("raises Aeroheights Isles: an island airport on reclaimed land, Hong Kong style", () => {
+    const land = world.expansions.find((e) => e.name === "Aeroheights Isles")!;
+    expect(land.districts).toHaveLength(1);
+    const aero = world.airports.find((a) => a.district === land.districts[0])!;
+    expect(aero.name).toBe("Aeroheights International Airport");
+    let runway = 0;
+    const kinds = new Set<string>();
+    for (let i = 0; i < n * n; i++)
+      if (world.zone[i] === land.zone) {
+        kinds.add(kindAt(i));
+        if (kindAt(i) === "runway") runway++;
+      }
+    expect(runway).toBe(2 * 2 * 46);
+    for (const k of ["apron", "terminal", "plaza", "street", "hill"]) expect(kinds.has(k), k).toBe(true);
+    expect(kinds.has("bridge")).toBe(false);
+    // no plot on the airfield
+    for (let i = 0; i < n * n; i++) if (["runway", "apron", "terminal"].includes(kindAt(i))) expect(world.plotOf[i]).toBe(-1);
+  });
+
   it("adds Greenhaven meadows, Mistmarsh wetlands and a northern archipelago", () => {
     const names = world.districts.map((d) => d.name);
     for (const name of ["Greenhaven", "Mistmarsh", "Stormcrest Isles"]) expect(names).toContain(name);
-    for (const e of world.expansions) expect(world.plots.filter((p) => e.districts.includes(p.district)).length, e.name).toBeGreaterThan(50);
+    for (const e of world.expansions) expect(world.plots.filter((p) => e.districts.includes(p.district)).length, e.name).toBeGreaterThan(e.name === "Aeroheights Isles" ? 30 : 50);
   });
 });
