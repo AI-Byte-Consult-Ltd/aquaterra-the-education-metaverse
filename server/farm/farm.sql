@@ -152,6 +152,13 @@ BEGIN
   RETURN EXISTS (SELECT 1 FROM aquaterra_works w WHERE w.plot_id = pid);
 END $fn$;
 
+-- Share of full output (0..1) the workers of this resident give: server/city/city.sql (1 while it is not installed).
+CREATE OR REPLACE FUNCTION aquaterra_farm_staff(who text) RETURNS numeric LANGUAGE plpgsql STABLE AS $fn$
+BEGIN
+  IF to_regprocedure('aquaterra_city_staff(text)') IS NULL THEN RETURN 1; END IF;
+  RETURN aquaterra_city_staff(who);
+END $fn$;
+
 -- Why a plot cannot be farmed now: null (it can), land (water or not buildable), building (something stands).
 CREATE OR REPLACE FUNCTION aquaterra_farm_block(pid int) RETURNS text LANGUAGE plpgsql STABLE AS $fn$
 DECLARE site record; b record;
@@ -256,6 +263,8 @@ BEGIN
   END IF;
   -- Companies on plots, materials and Orbit shipments: server/industry/industry.sql, same webhook.
   IF act IN ('works', 'setup', 'produce', 'dismantle', 'ship') THEN RETURN aquaterra_industry(req); END IF;
+  -- City orders and workforce: server/city/city.sql, same webhook.
+  IF act IN ('city', 'deliver') THEN RETURN aquaterra_city(req); END IF;
   IF act NOT IN ('market', 'book', 'fields') AND me IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'error', 'session', 'status', 401);
   END IF;
@@ -308,6 +317,7 @@ BEGIN
       -- One plot, or every ripe field of mine.
       pid := CASE WHEN coalesce(req->>'plotId', '') ~ '^[0-9]' AND length(req->>'plotId') <= 9 AND (req->>'plotId') !~ '[^0-9]' THEN (req->>'plotId')::int END;
       v_n := 0; v_units := 0; v_left := 0;
+      v_price := aquaterra_farm_staff(me);   -- workers: full harvest only with enough people in my homes
       FOR f IN SELECT ff.* FROM aquaterra_farm_fields ff JOIN aquaterra_plot_owners o ON o.plot_id = ff.plot_id AND o.owner = me
           WHERE ff.ready_at <= now() AND (pid IS NULL OR ff.plot_id = pid) ORDER BY ff.plot_id FOR UPDATE OF ff LOOP
         DELETE FROM aquaterra_farm_fields WHERE plot_id = f.plot_id;
@@ -315,6 +325,7 @@ BEGIN
         IF aquaterra_farm_block(f.plot_id) IS NOT NULL THEN v_left := v_left + 1; CONTINUE; END IF;
         v_qty := CASE WHEN now() > f.ready_at + make_interval(hours => aquaterra_farm_law('farm_wilt_hours')::int)
           THEN greatest(1, f.units / 2) ELSE f.units END;
+        v_qty := greatest(1, floor(v_qty * v_price))::bigint;
         PERFORM aquaterra_farm_put(me, f.crop, v_qty);
         INSERT INTO aquaterra_farm_log (email, kind, crop, plot_id, units) VALUES (me, 'harvest', f.crop, f.plot_id, v_qty);
         v_n := v_n + 1; v_units := v_units + v_qty;

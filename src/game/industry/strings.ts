@@ -31,6 +31,8 @@ const en = {
   needs: (q: number, good: string) => `takes ${q} ${good} each`,
   rich: (f: number) => (f >= 1.3 ? "rich deposit" : f >= 1 ? "good deposit" : f >= 0.7 ? "fair deposit" : "poor deposit"),
   capNote: (h: number) => `A company keeps up to ${h} hours of output, then waits for you to collect.`,
+  workersNote: "Companies need workers: the people in your homes. Short of workers, every company runs slower (rates here already count it).",
+  workersLink: "Workforce and city orders",
   choose: "Choose a company",
   setupFor: (cost: number, permit: number) => `Set up for ${tide(cost + permit)} (incl. ${tide(permit)} permit)`,
   blockPlanted: "A crop grows here. Harvest or dig it up on the farm first.",
