@@ -56,6 +56,8 @@ export interface RegionSpec {
   sea?: boolean;
   /** The capital around the tower. */
   capital?: boolean;
+  /** Wild land: no starter homes stand on it, residents build everything themselves. */
+  wild?: boolean;
 }
 
 const g = (land: RGB, forest: RGB, hill: RGB, mountain: RGB, peak: RGB, beach: RGB, tree: RGB): Ground => ({ land, forest, hill, mountain, peak, beach, tree });
@@ -230,6 +232,18 @@ export const REGIONS = {
     coastHouse: "resort",
     // a land added later (see expansions.ts): rugged green islands with mountains
     sea: true,
+  },
+  palms: {
+    names: ["Palmcrest Isles", "Sunhaven Isles", "Coralpeak Isles", "Jadewater Isles", "Mangrove Keys", "Driftpalm Isles"],
+    ground: g([122, 198, 98], [64, 164, 82], [134, 172, 98], [118, 122, 100], [170, 160, 146], [248, 236, 196], [30, 150, 72]),
+    forest: 0.1,
+    lakes: 0,
+    area: 1,
+    houses: ["cottage"],
+    coastHouse: "resort",
+    // Halcyon Archipelago (expansions.ts): wild palm islands, mountains, lakes and fields, no towns
+    sea: true,
+    wild: true,
   },
 } satisfies Record<string, RegionSpec>;
 

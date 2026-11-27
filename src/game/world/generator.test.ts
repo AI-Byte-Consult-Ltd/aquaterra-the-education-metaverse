@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_WORLD, KINDS, WATER_CELL, findPlotByAddress, generateWorld, type Kind } from "./generator";
+import { LATE_FROM } from "./expansions";
+import { buildingsFor } from "./buildings";
+import { region } from "./regions";
 
 const world = generateWorld(DEFAULT_WORLD);
 const n = world.size;
@@ -35,7 +38,7 @@ describe("world generator", () => {
     expect(new Set(world.districts.map((d) => d.name)).size).toBe(world.districts.length);
   });
 
-  it("connects every town to the tower by road", () => {
+  it("connects every town to the tower by road (wild lands have no towns: boats reach them)", () => {
     const passable = new Set<Kind>(["road", "street", "bridge", "plaza", "tower", "station", "rail"]);
     const seen = new Uint8Array(n * n);
     const start = world.center * n + world.center;
@@ -52,7 +55,7 @@ describe("world generator", () => {
         queue.push(j);
       }
     }
-    for (const d of world.districts) expect(seen[d.y * n + d.x], d.name).toBe(1);
+    for (const d of world.districts) if (!region(d.biome).wild) expect(seen[d.y * n + d.x], d.name).toBe(1);
   });
 
   it("builds airports and railway stations", () => {
@@ -115,7 +118,7 @@ describe("world generator", () => {
   });
 
   it("only grows: new lands leave every existing tile, district, road and address as it was", () => {
-    const steps = [0, 1, 2].map((lands) => generateWorld({ ...DEFAULT_WORLD, lands }));
+    const steps = [0, 1, 2, 3].map((lands) => generateWorld({ ...DEFAULT_WORLD, lands }));
     for (let s = 1; s < steps.length; s++) {
       const before = steps[s - 1];
       const after = steps[s];
@@ -182,6 +185,29 @@ describe("world generator", () => {
     expect(new Set(world.plots.map((p) => p.address)).size).toBe(world.plots.length);
     const p = water[200];
     expect(findPlotByAddress(world, p.address.toLowerCase())?.id).toBe(p.id);
+  });
+
+  it("keeps every plot id when a late land rises (the server's registry is keyed by id)", () => {
+    const before = generateWorld({ ...DEFAULT_WORLD, lands: LATE_FROM });
+    for (const p of before.plots) expect(world.plots[p.id].address, String(p.id)).toBe(p.address);
+    // water plots under the new islands keep at least four tiles of water
+    for (const p of world.plots) if (p.water) expect(p.tiles.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("raises the Halcyon Archipelago: wild palm isles with mountains, lakes, fields and harbours, no houses", () => {
+    const land = world.expansions.find((e) => e.name === "Halcyon Archipelago")!;
+    expect(land).toBeTruthy();
+    expect(land.districts.length).toBe(4);
+    const own = new Set(land.districts);
+    const kinds = new Set<string>();
+    for (let i = 0; i < n * n; i++) if (world.zone[i] === land.zone) kinds.add(kindAt(i));
+    for (const k of ["beach", "land", "forest", "hill", "mountain", "lake", "shallow"]) expect(kinds.has(k), k).toBe(true);
+    for (const k of ["road", "street", "bridge", "plaza"]) expect(kinds.has(k), k).toBe(false);
+    const lots = world.plots.filter((p) => !p.water && own.has(p.district));
+    expect(lots.length).toBeGreaterThan(150);
+    expect(lots.every((p) => p.address.startsWith("Lot "))).toBe(true);
+    const houses = buildingsFor(world);
+    expect(lots.every((p) => houses[p.id] === null)).toBe(true);
   });
 
   it("adds Greenhaven meadows, Mistmarsh wetlands and a northern archipelago", () => {

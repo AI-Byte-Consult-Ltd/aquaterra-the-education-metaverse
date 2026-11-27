@@ -239,7 +239,7 @@ export function buildingsFor(world: World): (Building | null)[] {
   const hit = cache.get(world);
   if (hit) return hit;
   const biomeOf = (p: Plot) => (p.district >= 0 ? world.districts[p.district].biome : "temperate");
-  const out: (Building | null)[] = world.plots.map((p) => (hasHouse(p) && biomeOf(p) !== "metropolis" ? houseFor(world, p) : null));
+  const out: (Building | null)[] = world.plots.map((p) => (hasHouse(p) && biomeOf(p) !== "metropolis" && !region(biomeOf(p)).wild ? houseFor(world, p) : null));
   // every cottage gets its own design; neighbours never look alike
   const cottages = designCottages(world.plots.filter((p) => out[p.id]?.style.id === "cottage"), biomeOf);
   for (const [id, c] of cottages) out[id] = { ...out[id]!, floors: c.floors, wall: c.wall, roofColor: c.roofColor, cottage: c };

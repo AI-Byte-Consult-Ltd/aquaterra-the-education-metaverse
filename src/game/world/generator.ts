@@ -13,7 +13,7 @@
  */
 import { streetNamer } from "./names";
 import { BIOMES, REGIONS, region, type Biome, type RegionSpec } from "./regions";
-import { EXPANSIONS, MARGIN } from "./expansions";
+import { EXPANSIONS, LATE_FROM, MARGIN } from "./expansions";
 import { MinHeap, fbm, ridged, rng, valueNoise } from "./noise";
 
 export const KINDS = [
@@ -1053,7 +1053,7 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
   // existed changes: same tiles, districts, roads and plot addresses.
   function growLands(): World["expansions"] {
     const out: World["expansions"] = [];
-    EXPANSIONS.slice(0, params.lands ?? EXPANSIONS.length).forEach((ex, k) => {
+    EXPANSIONS.slice(0, Math.min(LATE_FROM, params.lands ?? EXPANSIONS.length)).forEach((ex, k) => {
       const z = 2 + k;
       const er = rng((seed ^ (ex.seed * 2654435761)) >>> 0);
       const [x0, y0, x1, y1] = ex.area.map((v) => Math.max(0, Math.min(size - 1, v)));
@@ -1481,6 +1481,326 @@ export function generateWorld(params: WorldParams = DEFAULT_WORLD): World {
       });
     }
   }
+
+  // --- 16. late lands: raised after the water plots ------------------------------------------
+  // Lands from LATE_FROM on (expansions.ts) rise out of open sea after every plot above exists.
+  // They take tiles only from open sea, cut away from the water plots of their squares (each
+  // water plot keeps its id, address and at least four tiles of water), and all their own plots
+  // come after the last plot that existed before, so no id the server knows ever moves.
+  EXPANSIONS.slice(LATE_FROM, Math.max(LATE_FROM, params.lands ?? EXPANSIONS.length)).forEach((ex, j) => {
+    const z = 2 + LATE_FROM + j;
+    const er = rng((seed ^ (ex.seed * 2654435761)) >>> 0);
+    const [x0, y0, x1, y1] = ex.area.map((v) => Math.max(0, Math.min(size - 1, v)));
+    if (x1 - x0 < 24 || y1 - y0 < 24) return;
+    // open sea kept around everything that already exists (water plots of open sea do not count)
+    const isOld = (i: number) => zone[i] !== 0 || (kind[i] !== K.deep && kind[i] !== K.ocean);
+    const near = new Int16Array(N).fill(-1);
+    const q: number[] = [];
+    for (let y = Math.max(0, y0 - MARGIN); y <= Math.min(size - 1, y1 + MARGIN); y++)
+      for (let x = Math.max(0, x0 - MARGIN); x <= Math.min(size - 1, x1 + MARGIN); x++)
+        if (isOld(idx(x, y))) {
+          near[idx(x, y)] = 0;
+          q.push(idx(x, y));
+        }
+    for (let h = 0; h < q.length; h++) {
+      const cur = q[h];
+      if (near[cur] >= MARGIN) continue;
+      const x = cur % size;
+      const y = (cur - x) / size;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+        if (!inb(x + dx, y + dy)) continue;
+        const t = idx(x + dx, y + dy);
+        if (near[t] >= 0) continue;
+        near[t] = near[cur] + 1;
+        q.push(t);
+      }
+    }
+    const free = (i: number) => near[i] < 0;
+    const mine = (i: number) => zone[i] === z;
+
+    // 1. shape: a chain of large islands with ragged coasts, deep harbour bays and mountains,
+    //    reefs of islets between them
+    const S = ex.seed * 17;
+    const warpA = fbm(S + 2, 3);
+    const warpB = fbm(S + 3, 3);
+    const coast = fbm(S + 4, 4);
+    const crest = ridged(S + 5, 4);
+    const fine = valueNoise(S + 6);
+    const fine2 = valueNoise(S + 7);
+    const cx = (x0 + x1) / 2;
+    const cy = (y0 + y1) / 2;
+    const hw = (x1 - x0) / 2;
+    const hh = (y1 - y0) / 2;
+    const count = Math.max(3, Math.round((x1 - x0) / 30));
+    const bigs = Array.from({ length: count }, (_, b) => {
+      const mountain = b % 3 !== 1;
+      const r = Math.min(hh * 0.8, 9 + er() * 8);
+      return {
+        x: x0 + ((b + 0.5) / count) * (x1 - x0) + (er() * 2 - 1) * 6,
+        y: cy + (er() * 2 - 1) * hh * 0.3,
+        rx: r * (1 + er() * 0.5),
+        ry: r * (0.75 + er() * 0.3),
+        rot: er() * Math.PI,
+        top: mountain ? 0.68 + er() * 0.3 : 0.3 + er() * 0.1,
+        mountain,
+        // harbour bays: deep inlets cut into the coast
+        bays: Array.from({ length: 2 + Math.floor(er() * 2) }, () => ({ ang: er() * Math.PI * 2, w: 0.18 + er() * 0.2, depth: 0.55 + er() * 0.3 })),
+      };
+    });
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const i = idx(x, y);
+        if (!free(i)) continue;
+        const u = (x - cx) / hw;
+        const v = (y - cy) / hh;
+        const m = Math.min(1, Math.max(0, (1 - Math.max(Math.abs(u), Math.abs(v)) - warpA(u * 3, v * 3) * 0.06) / 0.14));
+        if (m <= 0) continue;
+        // islets and reefs
+        const t = fine(x / 3.1, y / 3.1) * 0.6 + fine2(x / 8, y / 8) * 0.4;
+        let h = t > 0.47 ? 0.004 + (t - 0.47) * 0.35 : -0.02 - (0.47 - t) * 0.08;
+        const px = x + warpA(x / 10, y / 10) * 4;
+        const py = y + warpB(x / 10, y / 10) * 4;
+        for (const b of bigs) {
+          const dx = px - b.x;
+          const dy = py - b.y;
+          const ru = (dx * Math.cos(b.rot) + dy * Math.sin(b.rot)) / b.rx;
+          const rv = (-dx * Math.sin(b.rot) + dy * Math.cos(b.rot)) / b.ry;
+          let d = Math.hypot(ru, rv) + coast(x / 8, y / 8) * 0.42 + fine2(x / 2.5, y / 2.5) * 0.07;
+          if (d > 1.6) continue;
+          const ang = Math.atan2(rv, ru);
+          for (const bay of b.bays) {
+            let da = Math.abs(ang - bay.ang) % (Math.PI * 2);
+            if (da > Math.PI) da = Math.PI * 2 - da;
+            d += bay.depth * Math.exp(-((da / bay.w) ** 2)) * Math.min(1, Math.max(0, (d - 0.15) * 2.2));
+          }
+          if (d >= 1) {
+            h = Math.max(h, -0.01 - (d - 1) * 0.12);
+            continue;
+          }
+          const dome = 1 - d * d;
+          let hb = 0.04 + dome * 0.22;
+          if (b.mountain) hb += Math.pow(dome, 1.6) * (b.top - 0.26) * (0.55 + 0.45 * crest(x / 11, y / 11));
+          else hb = Math.min(hb + Math.pow(dome, 2) * (b.top - 0.26) * crest(x / 14, y / 14), b.top);
+          h = Math.max(h, hb + fine(x / 4, y / 4) * 0.02);
+        }
+        if (m < 1) h = Math.min(h, -0.02 - (1 - m) * 0.1);
+        if (ex.lagoon && m > 0.3) zone[i] = z;
+        if (h <= -0.045) continue;
+        height[i] = h;
+        kind[i] = h < 0 ? K.shallow : h < 0.035 ? K.beach : h > 0.72 ? K.peak : h > 0.55 ? K.mountain : h > 0.4 ? K.hill : K.land;
+        zone[i] = z;
+      }
+    // a shallow rim around every new coast
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const i = idx(x, y);
+        if (!free(i) || (kind[i] !== K.ocean && kind[i] !== K.deep)) continue;
+        if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => inb(x + dx, y + dy) && zone[idx(x + dx, y + dy)] === z && height[idx(x + dx, y + dy)] >= 0)) {
+          kind[i] = K.shallow;
+          height[i] = -0.01;
+          zone[i] = z;
+        }
+      }
+
+    // 2. districts (centres only: no towns), names carry on each region's list
+    const first = districts.length;
+    const cands: number[] = [];
+    let land = 0;
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const i = idx(x, y);
+        if (!mine(i) || height[i] < 0) continue;
+        land++;
+        if (height[i] > 0.05 && height[i] < 0.4) cands.push(i);
+      }
+    const minD = Math.max(14, Math.sqrt(land / Math.max(1, ex.districts.length)) * 0.8);
+    for (let tries = 0; tries < 6000 && districts.length - first < ex.districts.length && cands.length; tries++) {
+      const i = cands[Math.floor(er() * cands.length)];
+      const x = i % size;
+      const y = (i - x) / size;
+      if (districts.slice(first).some((d) => Math.hypot(d.x - x, d.y - y) < minD * (1 - tries / 12000))) continue;
+      const b = ex.districts[districts.length - first];
+      const list = REGIONS[b].names;
+      let name = "";
+      for (let n = used[b] ?? 0; ; n++) {
+        name = n < list.length ? list[n] : `${list[n % list.length]} ${["East", "West", "North", "South"][Math.floor(n / list.length) % 4]}`;
+        used[b] = n + 1;
+        if (!districts.some((d) => d.name === name)) break;
+      }
+      districts.push({ id: districts.length, name, biome: b, x, y, capital: false });
+    }
+    const own = districts.slice(first);
+    if (!own.length) return;
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const i = idx(x, y);
+        if (!mine(i) || (height[i] < 0 && kind[i] !== K.shallow)) continue;
+        const px = x + bx((x - off) / 35, (y - off) / 35) * 24;
+        const py = y + by((x - off) / 35, (y - off) / 35) * 24;
+        let best = own[0].id;
+        let bd = Infinity;
+        for (const d of own) {
+          const dd = (d.x - px) ** 2 + (d.y - py) ** 2;
+          if (dd < bd) {
+            bd = dd;
+            best = d.id;
+          }
+        }
+        district[i] = best;
+      }
+
+    // 3. palms along the shores and on the slopes, lakes in the valleys; open lowland stays
+    //    fields and meadows (the renderer draws the fields)
+    const palmN = fbm(S + 8, 3);
+    const lakeM = fbm(S + 9, 3);
+    const shore = new Int16Array(N).fill(-1);
+    const sq: number[] = [];
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const i = idx(x, y);
+        if (mine(i) && height[i] < 0) {
+          shore[i] = 0;
+          sq.push(i);
+        }
+      }
+    for (let h = 0; h < sq.length; h++) {
+      const cur = sq[h];
+      if (shore[cur] >= 6) continue;
+      const x = cur % size;
+      const y = (cur - x) / size;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (!inb(x + dx, y + dy)) continue;
+        const t = idx(x + dx, y + dy);
+        if (shore[t] >= 0 || !mine(t)) continue;
+        shore[t] = shore[cur] + 1;
+        sq.push(t);
+      }
+    }
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const i = idx(x, y);
+        if (!mine(i) || (kind[i] !== K.land && kind[i] !== K.hill)) continue;
+        const s = shore[i] < 0 ? 9 : shore[i];
+        const pn = palmN(x / 7, y / 7);
+        if ((s <= 1 && pn > -0.15) || (s === 2 && pn > 0.1) || (kind[i] === K.hill && pn > 0.15) || pn > 0.5) kind[i] = K.forest;
+        if (s >= 4 && height[i] > 0.07 && height[i] < 0.3 && lakeM(x / 9, y / 9) > 0.36) kind[i] = K.lake;
+      }
+
+    // 4. water plots of the old sea give up the tiles the land rose from, but keep at least
+    //    four tiles of water: where an island covers a whole square, its lowest tiles become a lake
+    const SEA = new Set<number>([K.deep, K.ocean, K.shallow]);
+    const touched = new Map<number, number[]>();
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const i = idx(x, y);
+        const p = plotOf[i];
+        if (p < 0 || !mine(i) || SEA.has(kind[i])) continue;
+        if (!touched.has(p)) touched.set(p, []);
+        touched.get(p)!.push(i);
+      }
+    for (const [p, gone] of touched) {
+      const plot = plots[p];
+      let keep = plot.tiles.filter((t) => SEA.has(kind[t]));
+      if (keep.length < 4) {
+        // the lowest tile of the square and its lowest neighbours in the square
+        const inPlot = new Set(plot.tiles);
+        const pond = new Set<number>([gone.reduce((a, t) => (height[t] < height[a] ? t : a))]);
+        while (pond.size + keep.length < 4) {
+          let pick = -1;
+          for (const t of pond) {
+            const x = t % size;
+            const y = (t - x) / size;
+            for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const n2 = idx(x + dx, y + dy);
+              if (inb(x + dx, y + dy) && inPlot.has(n2) && !pond.has(n2) && !SEA.has(kind[n2]) && (pick < 0 || height[n2] < height[pick])) pick = n2;
+            }
+          }
+          if (pick < 0) break;
+          pond.add(pick);
+        }
+        for (const t of pond) {
+          kind[t] = K.lake;
+          height[t] = Math.min(height[t], 0.05);
+        }
+        keep = plot.tiles.filter((t) => SEA.has(kind[t]) || pond.has(t));
+      }
+      for (const t of plot.tiles) if (!keep.includes(t)) plotOf[t] = -1;
+      let sx = 0;
+      let sy = 0;
+      const counts = new Map<number, number>();
+      let lagoon = 0;
+      for (const t of keep) {
+        sx += t % size;
+        sy += Math.floor(t / size);
+        counts.set(kind[t], (counts.get(kind[t]) ?? 0) + 1);
+        if (mine(t) && kind[t] !== K.deep) lagoon++;
+      }
+      const pcx = sx / keep.length;
+      const pcy = sy / keep.length;
+      const anchorT = keep.reduce((a, t) => ((t % size) - pcx) ** 2 + (Math.floor(t / size) - pcy) ** 2 < ((a % size) - pcx) ** 2 + (Math.floor(a / size) - pcy) ** 2 ? t : a);
+      const top = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
+      plot.tiles = keep;
+      plot.anchor = { x: anchorT % size, y: Math.floor(anchorT / size) };
+      plot.distance = Math.hypot(pcx - center, pcy - center);
+      plot.landscape = top === K.lake ? "lake" : ex.lagoon && lagoon * 2 > keep.length ? "lagoon" : top === K.shallow ? "shallows" : top === K.ocean ? "sea" : "deepSea";
+    }
+    // the rest of the sea in the land's squares turns lagoon-coloured too
+    if (ex.lagoon)
+      for (let i = 0; i < N; i++) {
+        const p = plotOf[i];
+        if (p >= 0 && mine(i) && plots[p].water && plots[p].landscape !== "lake" && !touched.has(p)) {
+          let lagoon = 0;
+          for (const t of plots[p].tiles) if (mine(t) && kind[t] !== K.deep) lagoon++;
+          if (lagoon * 2 > plots[p].tiles.length) plots[p].landscape = "lagoon";
+        }
+      }
+
+    // 5. lots on all the new land, then plots of the new lakes, all after every older plot
+    expansions.push({ name: ex.name, zone: z, lagoon: !!ex.lagoon, districts: own.map((d) => d.id) });
+    makeLots(z);
+    const cols = Math.ceil(size / WATER_CELL);
+    const cells = new Map<number, number[]>();
+    for (let i = 0; i < N; i++) {
+      if (!mine(i) || plotOf[i] >= 0 || kind[i] !== K.lake) continue;
+      const x = i % size;
+      const y = (i - x) / size;
+      const key = Math.floor(y / WATER_CELL) * cols + Math.floor(x / WATER_CELL);
+      if (!cells.has(key)) cells.set(key, []);
+      cells.get(key)!.push(i);
+    }
+    for (const [key, tiles] of [...cells.entries()].sort((a, b) => a[0] - b[0])) {
+      if (tiles.length < 4) continue;
+      const col = (key % cols) + 1;
+      const row = Math.floor(key / cols) + 1;
+      let sx = 0;
+      let sy = 0;
+      const dCount = new Map<number, number>();
+      for (const t of tiles) {
+        sx += t % size;
+        sy += Math.floor(t / size);
+        if (district[t] >= 0) dCount.set(district[t], (dCount.get(district[t]) ?? 0) + 1);
+      }
+      const pcx = sx / tiles.length;
+      const pcy = sy / tiles.length;
+      const anchorT = tiles.reduce((a, t) => ((t % size) - pcx) ** 2 + (Math.floor(t / size) - pcy) ** 2 < ((a % size) - pcx) ** 2 + (Math.floor(a / size) - pcy) ** 2 ? t : a);
+      const dTop = [...dCount.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
+      const id = plots.length;
+      for (const t of tiles) plotOf[t] = id;
+      plots.push({
+        id,
+        address: `Lake Plot ${col}-${row}`,
+        number: col,
+        road: -1,
+        district: dTop ? dTop[0] : own[0].id,
+        tiles,
+        anchor: { x: anchorT % size, y: Math.floor(anchorT / size) },
+        landscape: "lake",
+        waterView: true,
+        water: true,
+        distance: Math.hypot(pcx - center, pcy - center),
+      });
+    }
+  });
 
   // --- stats --------------------------------------------------------------------------------
   let roadTiles = 0;
