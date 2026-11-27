@@ -31,7 +31,7 @@ import { stateStrings } from "@/game/state/strings";
 import { chamberOf } from "@/game/state/ui";
 import { buyHub, fetchNetwork, travel, type HubInfo, type Location, type NetworkInfo } from "@/game/travel/api";
 import { TripPlayer, dropHue } from "@/game/travel/drop";
-import type { Leg } from "@/game/travel/network";
+import type { HubKind, Leg } from "@/game/travel/network";
 import { travelStrings } from "@/game/travel/strings";
 import { HubCard, TravelOptions, boatsFare, locationPoint, tripMoves, tripSegments } from "@/game/travel/ui";
 import PlotArcade from "@/game/arcade/PlotArcade";
@@ -71,8 +71,22 @@ type Selection =
 /** Road tiles: tapping one shows the roads of its district, to buy or repair. */
 const ROAD_TILES = new Set<Kind>(["road", "street", "bridge"] as Kind[]);
 
-/** Tiles of a station, a harbour's shore or an airport that open its card when tapped. */
-const HUB_TILES: Partial<Record<Kind, number>> = { station: 2, rail: 1, terminal: 9, apron: 12, runway: 18, pier: 4, shallow: 2, ocean: 2, beach: 2 };
+/**
+ * Tiles of a station, a harbour's shore or an airport that open its card when tapped: how far
+ * from the hub, and which kind of hub (an airport's runway opens the airport, never the
+ * harbour or station next to it).
+ */
+const HUB_TILES: Partial<Record<Kind, [number, HubKind]>> = {
+  station: [2, "station"],
+  rail: [1, "station"],
+  terminal: [50, "airport"],
+  apron: [50, "airport"],
+  runway: [50, "airport"],
+  pier: [4, "port"],
+  shallow: [2, "port"],
+  ocean: [2, "port"],
+  beach: [2, "port"],
+};
 
 const City = () => {
   const { language } = useLanguage();
@@ -519,10 +533,10 @@ const City = () => {
       else if (pick?.kind === "tower") select({ kind: "tower", id: pick.id });
       else if (pick?.kind === "civic") select({ kind: "civic", id: pick.id });
       else if (pick?.kind === "tile") {
-        const reach = HUB_TILES[pick.tile];
+        const [reach, hubKind] = HUB_TILES[pick.tile] ?? [0, null];
         const hub = reach
           ? netRef.current?.hubs
-              .filter((h) => Math.max(Math.abs(h.x - pick.x), Math.abs(h.y - pick.y)) <= reach)
+              .filter((h) => h.kind === hubKind && Math.max(Math.abs(h.x - pick.x), Math.abs(h.y - pick.y)) <= reach)
               .sort((a, b) => Math.hypot(a.x - pick.x, a.y - pick.y) - Math.hypot(b.x - pick.x, b.y - pick.y))[0]
           : undefined;
         if (hub) select({ kind: "hub", id: hub.id });

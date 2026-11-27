@@ -19,7 +19,7 @@ describe("transport network", () => {
 
   it("keeps the ids of hubs and routes stable (the server stores them)", () => {
     expect(net.hubs.slice(0, 7).map((h) => h.id)).toEqual(["station:0", "station:30", "station:15", "station:16", "station:3", "airport:3", "airport:17"]);
-    expect(net.routes.find((r) => r.mode === "plane")).toMatchObject({ a: 3, b: 17 });
+    expect(net.routes.filter((r) => r.mode === "plane").map((r) => [r.a, r.b])).toEqual(expect.arrayContaining([[3, 17], [3, 46], [17, 46]]));
     for (const r of net.routes) expect(r.a).toBeLessThan(r.b);
   });
 
@@ -28,6 +28,14 @@ describe("transport network", () => {
     const inbound = net.routes.filter((r) => isles.includes(r.a) !== isles.includes(r.b));
     expect(inbound.length).toBeGreaterThan(0);
     expect(inbound.every((r) => r.mode === "ferry")).toBe(true);
+  });
+
+  it("flies to the island airport and back, from Skyport and Icefjord", () => {
+    const aero = world.airports[2].district;
+    for (const from of [3, 17]) {
+      expect(planTrips(net.routes, from, aero).some((p) => p.legs.length === 1 && p.legs[0].mode === "plane")).toBe(true);
+      expect(planTrips(net.routes, aero, from).some((p) => p.legs.length === 1 && p.legs[0].mode === "plane")).toBe(true);
+    }
   });
 
   it("plans the cheapest and the fastest trip", () => {
