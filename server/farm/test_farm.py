@@ -159,10 +159,19 @@ check(s["ok"] and s["sold"] == 5 and s["tide"] == 4, f"reserve {s.get('sold')} {
 check(bal("ann@x") == a0 + 4 and bal("state:treasury") == t0, "4 TIDE: tax rounds to 0")
 psql("UPDATE aquaterra_gov_params SET value = 6 WHERE key = 'farm_reserve_cap'")
 s = farm("ann", action="reserve", crop="rose")
-check(s["ok"] and s["tide"] == 0 + 1 and s["sold"] == 2, f"cap left 2 TIDE: {s.get('sold')} {s.get('tide')}")
+check(s["ok"] and s["tide"] == 0 + 1 and s["sold"] == 2 and float(s["carry"]) == 0.6, f"cap left 2 TIDE: {s.get('sold')} {s.get('tide')} {s.get('carry')}")
+check(float(farm("ann", action="me")["reserveCarry"]) == 0.6, "0.60 TIDE kept on the Reserve credit")
 check(farm("ann", action="reserve", crop="rose")["error"] == "cap", "daily cap reached")
 psql("UPDATE aquaterra_gov_params SET value = 300 WHERE key = 'farm_reserve_cap'")
 check(farm("ann", action="me")["barn"][0]["units"] == 8, "8 roses left")
+# Small lots: 3 wheat x 0.05 = 0.15 TIDE, nothing paid yet, kept as credit (two decimals).
+psql("INSERT INTO aquaterra_farm_barn (email, crop, units) VALUES ('ann@x', 'wheat', 3) ON CONFLICT (email, crop) DO UPDATE SET units = 3")
+a1 = bal("ann@x")
+s = farm("ann", action="reserve", crop="wheat")
+check(s["ok"] and s["sold"] == 3 and s["tide"] == 0 and float(s["carry"]) == 0.75 and bal("ann@x") == a1, f"small lot kept as credit {s}")
+psql("INSERT INTO aquaterra_farm_barn (email, crop, units) VALUES ('ann@x', 'wheat', 5) ON CONFLICT (email, crop) DO UPDATE SET units = 5")
+s = farm("ann", action="reserve", crop="wheat")
+check(s["ok"] and s["tide"] == 1 and float(s["carry"]) == 0.0 and bal("ann@x") == a1 + 1, f"credit makes a whole TIDE {s}")
 
 # Market: Ann sells 8 roses at 2.00, Bob buys 5 at 2.50 -> fills at 2.00 (resting price).
 check(farm("ann", action="order", side="sell", crop="rose", price="2", qty=9)["error"] == "nothing", "cannot sell what you lack")

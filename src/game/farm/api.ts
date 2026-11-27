@@ -75,6 +75,8 @@ export interface MyFarm extends Market {
   orders: Order[];
   log: { kind: "plant" | "harvest" | "clear" | "reserve" | "buy" | "sell" | "barter" | "produce" | "setup" | "dismantle" | "ship" | "build" | "salvage"; crop: string; units: number; tide: number; at: string }[];
   reserveToday: number;
+  /** Cents of a TIDE from small Reserve sales, not paid yet (two decimals). */
+  reserveCarry: number;
   balance: number;
   free: number;
   seed?: number;
@@ -82,6 +84,7 @@ export interface MyFarm extends Market {
   destroyed?: number;
   units?: number;
   sold?: number;
+  carry?: number;
   tide?: number;
   fills?: number;
   status?: "open" | "done" | "cancelled";
