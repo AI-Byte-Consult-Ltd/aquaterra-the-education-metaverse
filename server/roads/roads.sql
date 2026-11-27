@@ -226,7 +226,7 @@ BEGIN
         IF r.owner IS NOT NULL THEN RAISE EXCEPTION 'taken'; END IF;
         here := ((aquaterra_player_where(me))->>'districtId')::int;
         IF here IS DISTINCT FROM r.a AND here IS DISTINCT FROM r.b THEN RAISE EXCEPTION 'not_here'; END IF;
-        IF (SELECT count(*) FROM aquaterra_roads WHERE owner = me) >= aquaterra_road_law('road_max_per_citizen') THEN RAISE EXCEPTION 'road_limit'; END IF;
+        IF (SELECT count(*) FROM aquaterra_roads WHERE owner = me) >= aquaterra_limit_for(me, 'road_max_per_citizen', aquaterra_road_law('road_max_per_citizen')) THEN RAISE EXCEPTION 'road_limit'; END IF;
         -- welcome coins are for land and travel; roads are bought with earned TIDE
         IF aquaterra_balance(me) - aquaterra_locked(me) < r.price THEN RAISE EXCEPTION 'insufficient'; END IF;
         PERFORM aquaterra_fisc_move(me, 'state:transport', r.price, 'road_purchase', NULL, left('Purchase of ' || r.name, 120), me, r.id || ':buy');

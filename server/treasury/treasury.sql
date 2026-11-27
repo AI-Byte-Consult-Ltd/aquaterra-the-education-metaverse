@@ -686,7 +686,7 @@ BEGIN
       IF a.id IS NULL OR a.ends_at < now() THEN RAISE EXCEPTION 'closed'; END IF;
       IF a.seller = me THEN RAISE EXCEPTION 'self'; END IF;
       IF amt IS NULL OR amt < greatest(a.min_bid, COALESCE(a.best_bid + greatest(1, ceil(a.best_bid * 0.01)::bigint), 0)) THEN RAISE EXCEPTION 'low_bid'; END IF;
-      IF (SELECT count(*) FROM aquaterra_plot_owners WHERE owner = me) >= aquaterra_param('max_plots_per_citizen') THEN RAISE EXCEPTION 'plot_limit'; END IF;
+      IF (SELECT count(*) FROM aquaterra_plot_owners WHERE owner = me) >= aquaterra_limit_for(me, 'max_plots_per_citizen', aquaterra_param('max_plots_per_citizen')) THEN RAISE EXCEPTION 'plot_limit'; END IF;
       -- the bid and its duty are held by the state; an outbid citizen gets both back at once
       got := CASE WHEN aquaterra_fisc('deal_duty_pct') > 0 THEN greatest(1, round(amt * aquaterra_fisc('deal_duty_pct') / 100.0))::bigint ELSE 0 END;
       IF greatest(0, aquaterra_balance(me) - aquaterra_locked(me)) < amt + got THEN RAISE EXCEPTION 'insufficient'; END IF;

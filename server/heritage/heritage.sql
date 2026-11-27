@@ -662,7 +662,7 @@ BEGIN
       IF v_choice = 'plot' THEN
         IF NOT EXISTS (SELECT 1 FROM aquaterra_plot_owners WHERE owner = 'heritage:reserve') THEN RAISE EXCEPTION 'reserve_empty'; END IF;
         IF (SELECT count(*) FROM aquaterra_plot_owners WHERE owner = me)
-           + (SELECT count(*) FROM aquaterra_nft_swaps WHERE email = me AND status = 'open' AND choice = 'plot') >= aquaterra_param('max_plots_per_citizen') THEN
+           + (SELECT count(*) FROM aquaterra_nft_swaps WHERE email = me AND status = 'open' AND choice = 'plot') >= aquaterra_limit_for(me, 'max_plots_per_citizen', aquaterra_param('max_plots_per_citizen')) THEN
           RAISE EXCEPTION 'plot_limit';
         END IF;
       END IF;
