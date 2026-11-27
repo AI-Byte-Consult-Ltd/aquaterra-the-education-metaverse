@@ -85,7 +85,7 @@ export class WorldRenderer {
   /** The signed-in resident's drop: where it stands (world tiles), its colour and label. */
   player: { x: number; y: number; hue: number; label: string; style?: AvatarStyle } | null = null;
   /** Other residents (real ones, from the server), already spread around shared spots: world tiles, fractional. */
-  residents: { key: string; fx: number; fy: number; style: AvatarStyle; hue: number; name: string; online: boolean; companion?: string | null }[] = [];
+  residents: { key: string; fx: number; fy: number; style: AvatarStyle; hue: number; name: string; handle?: string | null; online: boolean; companion?: string | null }[] = [];
   /** My AI companion (NICS AI Agent), floating beside me. */
   myCompanion: string | null = null;
   showResidents = true;
@@ -638,7 +638,7 @@ export class WorldRenderer {
         online: r.online,
         dim: !r.online,
         phase: seed(r.key) * 7,
-        label: named && (r.online || s >= 1.6) ? r.name : undefined,
+        label: named && (r.online || s >= 1.6) ? (r.handle ? `${r.name} @${r.handle}` : r.name) : undefined,
       });
       if (r.companion) drawCompanion(ctx, p.px, p.py, s, r.companion, time, { dim: !r.online, phase: seed(r.key) * 5, label: named && s >= 1.6 });
     }

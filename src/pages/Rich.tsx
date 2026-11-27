@@ -53,6 +53,7 @@ const Rich = () => {
                     <p className="flex items-center gap-1.5 truncate font-semibold">
                       {r.founder && <Crown className="h-4 w-4 shrink-0 text-amber-300" aria-label={t.founder} />}
                       <span className="truncate">{r.name || t.unnamed}</span>
+                      {r.handle && <span className="shrink-0 text-xs font-normal text-cyan-300/80">@{r.handle}</span>}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {[

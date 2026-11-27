@@ -9,6 +9,8 @@ import { ECONOMY_ENDPOINT } from "@/game/economy/api";
 export interface RichResident {
   rank: number;
   name: string | null;
+  /** unique @handle, without the @ */
+  handle?: string | null;
   founder: boolean;
   worth: number;
   tide: number;

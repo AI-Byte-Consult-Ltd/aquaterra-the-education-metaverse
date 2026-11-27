@@ -10,6 +10,7 @@ import { claimIncome, dailyIncome, sendTide, transferFee, type EconomyError } fr
 import { economyStrings } from "@/game/economy/strings";
 import { TaxesCard } from "@/game/bank/ui";
 import BuyTide from "@/game/exchange/BuyTide";
+import RecipientInput from "@/game/handles/RecipientInput";
 
 /** Default rules, shown until the server sends its own. */
 const DEFAULT_RULES = { income_bp_per_day: 100, income_cap_days: 7, transfer_fee_bp: 100 };
@@ -153,13 +154,7 @@ const Wallet = () => {
           <form onSubmit={send} className="space-y-3" noValidate>
             <label className="block space-y-1">
               <span className="text-sm font-medium">{t.sendTo}</span>
-              <input
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                maxLength={24}
-                placeholder={t.sendToPlaceholder}
-                className="h-10 w-full rounded-md border border-input bg-background/60 px-3 text-base outline-none focus:border-primary"
-              />
+              <RecipientInput session={session} value={to} onChange={setTo} placeholder={t.sendToPlaceholder} />
             </label>
             <label className="block space-y-1">
               <span className="text-sm font-medium">{t.sendAmount}</span>
