@@ -8,6 +8,7 @@ import CouncilBadge from "@/game/account/CouncilBadge";
 import { stateStrings } from "@/game/state/strings";
 import HomePicker from "@/game/state/HomePicker";
 import AvatarPicker from "@/game/residents/AvatarPicker";
+import HandleField from "@/game/handles/HandleField";
 import { accountLocale, accountStrings } from "@/game/account/strings";
 import { useEconomy } from "@/game/economy/EconomyContext";
 import { economyStrings } from "@/game/economy/strings";
@@ -28,8 +29,8 @@ const Profile = () => {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<AccountError | null>(null);
-  // sign-up: name first, then the avatar, then the home district
-  const [step, setStep] = useState<"name" | "avatar" | "home">("name");
+  // sign-up: name first, then the @handle, the avatar and the home district
+  const [step, setStep] = useState<"name" | "handle" | "avatar" | "home">("name");
 
   useEffect(() => {
     setName(player?.displayName ?? "");
@@ -54,12 +55,24 @@ const Profile = () => {
     }
     updatePlayer(r.data.player);
     setSaved(true);
-    if (welcome) setStep("avatar");
+    if (welcome) setStep("handle");
   };
 
   const since = player.createdAt
     ? new Date(player.createdAt).toLocaleDateString(accountLocale(language), { year: "numeric", month: "long", day: "numeric" })
     : "—";
+
+  if (welcome && step === "handle") {
+    return (
+      <div className="flex min-h-screen flex-col bg-background text-foreground p-safe">
+        <main className="flex flex-1 items-start justify-center px-4 py-8 md:items-center">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card/80 p-6 shadow-2xl backdrop-blur">
+            <HandleField session={session} onDone={() => setStep("avatar")} onSessionEnd={signOut} />
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (welcome && step === "avatar") {
     return (
@@ -132,6 +145,8 @@ const Profile = () => {
             </label>
             {error ? <p role="alert" className="text-sm text-destructive">{t.errors[error]}</p> : <p className="text-xs text-muted-foreground">{t.displayNameHint}</p>}
           </form>
+
+          {!welcome && <HandleField session={session} onSessionEnd={signOut} />}
 
           {!welcome && (
             <div className="border-t border-border/60 pt-5">

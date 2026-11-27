@@ -23,6 +23,8 @@ export interface MyAvatar {
 export interface Resident {
   key: string;
   name: string;
+  /** unique @handle, without the @ */
+  handle?: string | null;
   style: AvatarStyle;
   hue: number | null;
   x: number;
