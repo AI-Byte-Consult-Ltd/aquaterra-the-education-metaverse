@@ -122,6 +122,12 @@ CREATE TABLE IF NOT EXISTS aquaterra_farm_log (
 );
 CREATE INDEX IF NOT EXISTS aquaterra_farm_log_email ON aquaterra_farm_log (email, at DESC);
 
+-- Reserve credit: the part of a TIDE a resident earned from small Reserve sales, paid once it makes a whole TIDE.
+CREATE TABLE IF NOT EXISTS aquaterra_farm_credit (
+  email text PRIMARY KEY REFERENCES aquaterra_players (email),
+  carry numeric(12, 2) NOT NULL DEFAULT 0 CHECK (carry >= 0 AND carry < 1)
+);
+
 INSERT INTO aquaterra_wallets (account, welcomed_at) VALUES ('farm:escrow', now()) ON CONFLICT DO NOTHING;
 
 INSERT INTO aquaterra_gov_params (key, value, min_value, max_value, label) VALUES
@@ -351,19 +357,25 @@ BEGIN
       IF v_units < 1 OR v_units > v_have THEN RAISE EXCEPTION 'units'; END IF;
       v_price := aquaterra_farm_price(v_crop);
       IF v_price <= 0 THEN RAISE EXCEPTION 'too_little'; END IF;
-      v_left := greatest(0, aquaterra_farm_law('farm_reserve_cap')::bigint - COALESCE((SELECT sum(tide) FROM aquaterra_farm_log
-        WHERE email = me AND kind = 'reserve' AND at >= (today::timestamp AT TIME ZONE 'utc')), 0));
-      IF v_left < 1 THEN RAISE EXCEPTION 'cap'; END IF;
+      -- the daily cap counts paid TIDE and the credit not paid yet
+      v_tide := COALESCE((SELECT sum(tide) FROM aquaterra_farm_log
+        WHERE email = me AND kind = 'reserve' AND at >= (today::timestamp AT TIME ZONE 'utc')), 0);
       v_qty := v_units;
-      v_units := least(v_units, floor(v_left / v_price)::bigint);
-      v_tide := floor(v_units * v_price)::bigint;
-      IF v_tide < 1 THEN RAISE EXCEPTION '%', CASE WHEN v_units < v_qty THEN 'cap' ELSE 'too_little' END; END IF;
-      v_units := least(v_units, ceil(v_tide / v_price)::bigint);   -- only whole Tide is paid
+      v_units := least(v_units, floor(greatest(0, aquaterra_farm_law('farm_reserve_cap') - v_tide
+        - COALESCE((SELECT carry FROM aquaterra_farm_credit WHERE email = me), 0)) / v_price)::bigint);
+      IF v_units < 1 THEN RAISE EXCEPTION 'cap'; END IF;
+      -- Fractions of a TIDE (cents, two decimals) are kept on the resident Reserve credit and paid once they make a whole TIDE.
+      SELECT floor((COALESCE((SELECT carry FROM aquaterra_farm_credit WHERE email = me FOR UPDATE), 0) + v_units * v_price) * 100) / 100.0 INTO v_price;
+      v_tide := floor(v_price)::bigint;
+      INSERT INTO aquaterra_farm_credit (email, carry) VALUES (me, v_price - v_tide)
+        ON CONFLICT (email) DO UPDATE SET carry = EXCLUDED.carry;
       UPDATE aquaterra_farm_barn SET units = units - v_units WHERE email = me AND crop = v_crop;
-      PERFORM aquaterra_arc_pay('treasury', me, v_tide, 'income', NULL, 'Farm: sold ' || v_units || ' ' || v_crop || ' to the Reserve', me,
-        'farm:reserve:' || me || ':' || extract(epoch FROM clock_timestamp()));
+      IF v_tide > 0 THEN
+        PERFORM aquaterra_arc_pay('treasury', me, v_tide, 'income', NULL, 'Farm: sold ' || v_units || ' ' || v_crop || ' to the Reserve', me,
+          'farm:reserve:' || me || ':' || extract(epoch FROM clock_timestamp()));
+      END IF;
       INSERT INTO aquaterra_farm_log (email, kind, crop, units, tide) VALUES (me, 'reserve', v_crop, v_units, v_tide);
-      res := jsonb_build_object('sold', v_units, 'crop', v_crop, 'tide', v_tide,
+      res := jsonb_build_object('sold', v_units, 'crop', v_crop, 'tide', v_tide, 'carry', round(v_price - v_tide, 2),
         'taxPct', COALESCE((SELECT value FROM aquaterra_gov_params WHERE key = 'income_tax_pct'), 0));
 
     ELSIF act = 'order' THEN
@@ -433,6 +445,7 @@ BEGIN
             'left', o.qty_left, 'at', o.created_at) ORDER BY o.id DESC) FROM aquaterra_farm_orders o WHERE o.email = me AND o.status = 'open'), '[]'::jsonb),
         'log', COALESCE((SELECT jsonb_agg(jsonb_build_object('kind', l.kind, 'crop', l.crop, 'units', l.units, 'tide', l.tide, 'at', l.at) ORDER BY l.id DESC)
           FROM (SELECT * FROM aquaterra_farm_log WHERE email = me ORDER BY id DESC LIMIT 20) l), '[]'::jsonb),
+        'reserveCarry', COALESCE((SELECT round(carry, 2) FROM aquaterra_farm_credit WHERE email = me), 0),
         'reserveToday', COALESCE((SELECT sum(tide) FROM aquaterra_farm_log WHERE email = me AND kind = 'reserve' AND at >= (today::timestamp AT TIME ZONE 'utc')), 0),
         'balance', aquaterra_balance(me), 'free', aquaterra_arc_free(me));
     END IF;

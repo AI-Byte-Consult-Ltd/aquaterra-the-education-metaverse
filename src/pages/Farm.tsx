@@ -173,6 +173,7 @@ const Farm = () => {
 
               <Panel title={t.barn} icon={Warehouse}>
                 <p className="text-xs text-muted-foreground">{t.reserveNote(me.laws.reserveCap, me.reserveToday, me.laws.incomeTaxPct)}</p>
+                {Number(me.reserveCarry ?? 0) > 0 && <p className="text-xs text-primary">{t.credit(Number(me.reserveCarry))}</p>}
                 {me.barn.length === 0 ? (
                   <p className="text-sm text-muted-foreground">{t.barnEmpty}</p>
                 ) : (
@@ -181,11 +182,9 @@ const Farm = () => {
                       <li key={b.crop} className="flex flex-wrap items-center gap-2 text-sm">
                         <span className="min-w-[9rem] font-semibold">{name(b.crop)}</span>
                         <span>{t.n(b.units)}</span>
-                        <span className="text-muted-foreground">
-                          {b.value >= 1 ? t.worth(b.value) : t.notYet(b.units * b.price, Math.ceil(1 / Math.max(b.price, 0.001)))}
-                        </span>
-                        <button type="button" className={btnSoft} disabled={b.value < 1 || busy !== null}
-                          onClick={() => void act("reserve:" + b.crop, () => sellToReserve(session, b.crop), (d) => t.sold(d.sold ?? 0, name(b.crop), d.tide ?? 0))}>
+                        <span className="text-muted-foreground">{t.worth(b.units * b.price)}</span>
+                        <button type="button" className={btnSoft} disabled={b.units < 1 || busy !== null}
+                          onClick={() => void act("reserve:" + b.crop, () => sellToReserve(session, b.crop), (d) => t.sold(d.sold ?? 0, name(b.crop), d.tide ?? 0, Number(d.carry ?? 0)))}>
                           {busy === "reserve:" + b.crop ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}{t.reserve}
                         </button>
                         <button type="button" className={btnSoft} onClick={() => { setSel(b.crop); setSection(crops.find((c) => c.key === b.crop)?.source ?? "farm"); setSide("sell"); setQty(String(b.units)); document.getElementById("market")?.scrollIntoView({ behavior: "smooth" }); }}>

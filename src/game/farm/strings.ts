@@ -2,6 +2,7 @@ import type { Language } from "@/i18n/translations";
 import type { CropGroup, FarmError } from "./api";
 
 const n = (v: number) => v.toLocaleString("en");
+const cents = (v: number) => (Math.floor(v * 100 + 1e-6) / 100).toFixed(2);
 const tide = (v: number) => `${n(v)} TIDE`;
 const price = (v: number) => `${v.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 3 })} TIDE`;
 
@@ -71,11 +72,11 @@ const en = {
   reserve: "Sell to the Reserve",
   reserveNote: (cap: number, today: number, tax: number) =>
     `The Reserve buys at its base price, up to ${tide(cap)} a day (today ${tide(today)}). ${tax}% income tax goes to the State Treasury.`,
-  sold: (units: number, crop: string, t: number) => `Sold ${n(units)} ${crop} to the Reserve for ${tide(t)}.`,
-  worth: (v: number) => `Reserve pays ${tide(v)}`,
-  /** Too little for one whole TIDE at the Reserve yet: what it is worth and how many units make 1 TIDE. */
-  notYet: (worth: number, need: number) =>
-    `Worth ${Math.round(worth * 100) / 100} TIDE. The Reserve pays whole TIDE: keep ${need}+ to sell here, or sell on the Harvest Market now`,
+  sold: (units: number, crop: string, t: number, carry: number) =>
+    `Sold ${n(units)} ${crop} to the Reserve for ${tide(t)}.` + (carry > 0 ? ` ${cents(carry)} TIDE kept on your Reserve credit.` : ""),
+  worth: (v: number) => `Reserve pays ${cents(v)} TIDE`,
+  /** Cents of a TIDE earned from small sales, paid once they make a whole TIDE. */
+  credit: (c: number) => `Reserve credit: ${cents(c)} TIDE. Small sales add up here and are paid as soon as they make a whole TIDE.`,
   market: "Harvest Market",
   marketNote: (tax: number) => `Residents trade with each other at their own prices. Orders meet at the price of the order that was there first. The seller pays ${tax}% tax to the State Treasury.`,
   crop: "Crop",
