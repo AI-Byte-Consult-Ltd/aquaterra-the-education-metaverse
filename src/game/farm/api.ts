@@ -68,7 +68,7 @@ export interface MyFarm extends Market {
   plots: FarmPlot[];
   barn: { crop: string; units: number; price: number; value: number }[];
   orders: Order[];
-  log: { kind: "plant" | "harvest" | "clear" | "reserve" | "buy" | "sell"; crop: string; units: number; tide: number; at: string }[];
+  log: { kind: "plant" | "harvest" | "clear" | "reserve" | "buy" | "sell" | "barter"; crop: string; units: number; tide: number; at: string }[];
   reserveToday: number;
   balance: number;
   free: number;

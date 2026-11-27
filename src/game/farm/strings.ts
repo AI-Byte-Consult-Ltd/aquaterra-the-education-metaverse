@@ -93,6 +93,7 @@ const en = {
     reserve: (c: string, u: number, t: number) => `Sold ${n(u)} ${c} to the Reserve for ${tide(t)}`,
     buy: (c: string, u: number, t: number) => `Bought ${n(u)} ${c} for ${tide(t)}`,
     sell: (c: string, u: number, t: number) => `Sold ${n(u)} ${c} on the market, got ${tide(t)}`,
+    barter: (c: string, u: number) => `Got ${n(u)} ${c} by barter`,
   },
   close: "Close",
   errors: {
