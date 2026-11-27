@@ -139,9 +139,44 @@ export const isCentre = (world: World, plot: Plot) =>
 /** A skyscraper needs land of 2,000 m² or more. */
 export const towerSite = (plot: Plot) => hasHouse(plot) && plot.tiles.length >= TOWER_MIN_TILES;
 
-/** Shape a tower on its plot: per-tile heights from the profile, and where its top sits. */
-function shapeTower(world: World, plot: Plot, floors: number, profile: Profile) {
+/** Longest side of a skyscraper's footprint, in tiles. */
+export const TOWER_MAX_SIDE = 3;
+
+/**
+ * Where a skyscraper stands on its plot: the largest rectangle (sides up to TOWER_MAX_SIDE, never
+ * longer than twice its width) that lies wholly inside the plot, nearest the plot's middle. The
+ * rest of the plot stays open ground, so a tower always keeps to its plot and its proportions.
+ */
+export function towerFootprint(world: World, plot: Plot): number[] {
   const n = world.size;
+  const set = new Set(plot.tiles);
+  const cx = plot.tiles.reduce((s, t) => s + (t % n), 0) / plot.tiles.length;
+  const cy = plot.tiles.reduce((s, t) => s + Math.floor(t / n), 0) / plot.tiles.length;
+  let best: number[] = [plot.tiles[0]];
+  let score = -Infinity;
+  for (const t of plot.tiles) {
+    const x0 = t % n, y0 = Math.floor(t / n);
+    for (let w = 1; w <= TOWER_MAX_SIDE; w++)
+      for (let d = 1; d <= TOWER_MAX_SIDE; d++) {
+        if (Math.max(w, d) > 2 * Math.min(w, d)) continue;
+        const tiles: number[] = [];
+        for (let y = y0; y < y0 + d; y++) for (let x = x0; x < x0 + w; x++) tiles.push(y * n + x);
+        if (x0 + w > n || !tiles.every((j) => set.has(j))) continue;
+        // bigger first, then squarer, then closer to the middle of the plot
+        const s = w * d * 100 - Math.abs(w - d) * 10 - Math.hypot(x0 + (w - 1) / 2 - cx, y0 + (d - 1) / 2 - cy);
+        if (s > score) {
+          score = s;
+          best = tiles;
+        }
+      }
+  }
+  return best;
+}
+
+/** Shape a tower on its footprint: per-tile heights from the profile, and where its top sits. */
+function shapeTower(world: World, tiles: number[], floors: number, profile: Profile) {
+  const n = world.size;
+  const plot = { tiles };
   const set = new Set(plot.tiles);
   // ring = steps from the plot edge, so setbacks follow the plot's own shape
   const ring = new Map<number, number>();
@@ -238,13 +273,14 @@ export function designTower(world: World, plot: Plot, floors: number, design: nu
   const h = hash(plot.id + 101 + design * 7);
   const name = `${NAME_A[h % NAME_A.length]} ${NAME_B[(h >>> 7) % NAME_B.length]}`;
   const f = Math.max(1, floors);
-  const shaped = f >= 10 ? shapeTower(world, plot, f, profile) : { heights: plot.tiles.map(() => f), crown: plot.tiles[0] };
+  const tiles = towerFootprint(world, plot);
+  const shaped = f >= 10 ? shapeTower(world, tiles, f, profile) : { heights: tiles.map(() => f), crown: tiles[0] };
   const style = STYLES[profile === "slab" || profile === "podium" ? "skyline" : "spire"];
   return {
     style,
     floors: f,
     ...looks(style, h, f),
-    tower: { name, glass, frame: FRAMES[(h >>> 11) % FRAMES.length], facade, top: f >= 10 ? top : "roofbox", profile, tiles: plot.tiles, heights: shaped.heights, crown: shaped.crown },
+    tower: { name, glass, frame: FRAMES[(h >>> 11) % FRAMES.length], facade, top: f >= 10 ? top : "roofbox", profile, tiles, heights: shaped.heights, crown: shaped.crown },
   };
 }
 
