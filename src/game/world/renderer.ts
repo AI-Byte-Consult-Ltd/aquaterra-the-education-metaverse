@@ -238,6 +238,20 @@ export class WorldRenderer {
     else this.houseAt[p.anchor.y * this.world.size + p.anchor.x] = id;
   }
 
+  /** View tile (x, y) of plot `pid` that its house or tower stands on, or the yard just in front of a house. */
+  private yard(pid: number, x: number, y: number): boolean {
+    if (!this.showBuildings || !this.buildings[pid]) return false;
+    const n = this.world.size;
+    const i = this.vmap[y * n + x];
+    if (this.towerAt[i] === pid) return true;
+    const a = this.world.plots[pid].anchor;
+    if (this.houseAt[a.y * n + a.x] !== pid) return false;
+    const v = this.wmap[a.y * n + a.x];
+    const ax = v % n;
+    const ay = (v - ax) / n;
+    return x - ax >= 0 && x - ax <= 1 && y - ay >= 0 && y - ay <= 1;
+  }
+
   /** What residents built, from the server. Plots not listed show their starter building again. */
   setBuilt(built: Map<number, Built>, now = Date.now() / 1000) {
     const start = buildingsFor(this.world);
@@ -856,8 +870,8 @@ export class WorldRenderer {
           ctx.fillStyle = night ? "rgba(255,230,160,0.9)" : "rgba(255,255,255,0.7)";
           ctx.fillRect(px - 5, py + hh - 1, 10, 2);
         }
-        if (field) {
-          // a farm covers the whole plot: no starter house on it
+        if (field && !this.yard(pid, x, y)) {
+          // a farm covers the plot's free tiles; a house keeps its own tile and a small yard
           drawFieldTile(ctx, px, py, TW, TH, i, field.f, field.s, w.plots[pid].water, night, performance.now());
           continue;
         }
