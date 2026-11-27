@@ -115,6 +115,7 @@ $fn$ SELECT jsonb_build_object('districtId', l.district_id, 'district', (SELECT 
   'spot', l.spot, 'plotId', l.plot_id, 'x', l.x, 'y', l.y, 'trips', l.trips, 'since', l.updated_at) $fn$;
 
 -- Where a resident stands. A newcomer is placed in their home district, or in First Light City.
+-- Replaced 2026-11-27 by server/residents/spawn.sql: a newcomer appears on a random land plot of that district.
 -- For other workflows too (mini-games on plots): aquaterra_player_where(email) -> {districtId, district, spot, plotId, x, y}.
 CREATE OR REPLACE FUNCTION aquaterra_player_where(who text) RETURNS jsonb LANGUAGE plpgsql AS $fn$
 DECLARE l aquaterra_locations; home int;
