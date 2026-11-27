@@ -2,7 +2,7 @@
  * Richest residents of AquaTerra World. Public, no sign-in. Backend: the economy
  * webhook (action richlist) -> Postgres function aquaterra_richlist()
  * (server/richlist/richlist.sql). Only display names are returned, never emails.
- * Net worth = TIDE + land at the price paid + money put into buildings + bank deposit - open bank debt.
+ * Net worth = TIDE + land at the price paid + money put into buildings + transport bought + bank deposit - open bank debt.
  */
 import { ECONOMY_ENDPOINT } from "@/game/economy/api";
 
@@ -18,6 +18,9 @@ export interface RichResident {
   plots: number;
   build: number;
   buildings: number;
+  /** stations, harbours, airports and roads bought from the state, at their price */
+  transport?: number;
+  lines?: number;
   deposit: number;
   debt: number;
 }
