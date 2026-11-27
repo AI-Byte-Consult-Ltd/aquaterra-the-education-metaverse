@@ -287,7 +287,7 @@ BEGIN
   IF act <> 'works' AND me IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'error', 'session', 'status', 401);
   END IF;
-  pid := CASE WHEN coalesce(req->>'plotId', '') ~ '^[0-9]{1,9}$' THEN (req->>'plotId')::int END;
+  pid := CASE WHEN coalesce(req->>'plotId', '') ~ '^[0-9]' AND length(req->>'plotId') <= 9 AND (req->>'plotId') !~ '[^0-9]' THEN (req->>'plotId')::int END;
   v_kind := left(coalesce(req->>'works', ''), 20);
 
   BEGIN
@@ -336,7 +336,7 @@ BEGIN
       -- Bring mined Orbit goods down to the storehouse (all units of one resource, or a number).
       v_txt := left(coalesce(req->>'resource', ''), 30);
       SELECT units INTO v_have FROM aquaterra_orbit_holds WHERE email = me AND resource = v_txt FOR UPDATE;
-      v_n := CASE WHEN coalesce(req->>'units', '') ~ '^[0-9]{1,12}$' THEN (req->>'units')::bigint ELSE v_have END;
+      v_n := CASE WHEN coalesce(req->>'units', '') ~ '^[0-9]' AND length(req->>'units') <= 12 AND (req->>'units') !~ '[^0-9]' THEN (req->>'units')::bigint ELSE v_have END;
       IF v_have IS NULL OR v_n IS NULL OR v_n < 1 OR v_n > v_have THEN RAISE EXCEPTION 'nothing'; END IF;
       v_key := aquaterra_ind_sky_good(v_txt);
       UPDATE aquaterra_orbit_holds SET units = units - v_n WHERE email = me AND resource = v_txt;
