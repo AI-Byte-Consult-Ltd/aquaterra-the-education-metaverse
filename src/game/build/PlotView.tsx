@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Building2, Car, Coins, Factory, Hammer, Home, Loader2, RotateCcw, RotateCw, Scale, Sprout, Trash2, Users, X } from "lucide-react";
+import { Anchor, Box, Building2, Car, Coins, Factory, Hammer, Home, Loader2, RotateCcw, RotateCw, Scale, Sprout, Trash2, Users, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import type { Plot, World } from "@/game/world/generator";
@@ -28,6 +28,8 @@ import type { BuildStrings } from "./strings";
 import { fetchCatalog, materialsSaving, recipeFor, type MyIndustry } from "@/game/industry/api";
 import { farmStrings, goodName } from "@/game/farm/strings";
 import { loadStaff, staffPlan, type PlotStaff } from "@/game/orders/workers";
+import PierPanel from "./PierPanel";
+import { isCoastal, pierDraw, type Pier, type PierRules } from "./piers";
 
 const tfarm = farmStrings("en");
 
@@ -54,6 +56,8 @@ interface Props {
   session: string | null;
   t: BuildStrings;
   tw: WorldStrings;
+  piers: Map<number, Pier>;
+  pierRules: PierRules;
   onChanged: () => Promise<void>;
   onClose: () => void;
 }
@@ -87,7 +91,10 @@ function PlotWorkers({ world, plot }: { world: World; plot: Plot }) {
 }
 
 /** The plot opened on (almost) the whole screen: the main place where residents build. */
-export default function PlotView({ world, plot, built, rules, mine, owner, session, t, tw, onChanged, onClose }: Props) {
+export default function PlotView({ world, plot, built, rules, mine, owner, session, t, tw, piers, pierRules, onChanged, onClose }: Props) {
+  const [pierPreview, setPierPreview] = useState<number | null>(null);
+  const pier = piers.get(plot.id) ?? null;
+  const coastal = isCoastal(world, plot);
   const [view, setView] = useState<"side" | "top">("side");
   const [choice, setChoice] = useState<Choice>(null);
   const [busy, setBusy] = useState(false);
@@ -149,7 +156,7 @@ export default function PlotView({ world, plot, built, rules, mine, owner, sessi
         {/* the plot itself */}
         <div className="relative min-h-[45dvh] flex-1 bg-[#0b1622] md:min-h-0">
           {view === "side" ? (
-            <SideView world={world} plot={plot} built={built} preview={previewBuilt} />
+            <SideView world={world} plot={plot} built={built} preview={previewBuilt} piers={piers} pierPreview={pierPreview} />
           ) : (
             <TopView world={world} plot={plot} building={shown} t={t} />
           )}
@@ -184,6 +191,31 @@ export default function PlotView({ world, plot, built, rules, mine, owner, sessi
               {plot.district >= 0 ? world.districts[plot.district].name : tw.openSea} · {(plot.tiles.length * 400).toLocaleString("en")} {tw.m2}
             </p>
           </div>
+          {/* everything this plot can do, one tap away */}
+          {yours && (
+            <div className="grid grid-cols-2 gap-1.5 text-sm">
+              {canBuild && (
+                <button onClick={() => document.getElementById("plot-build")?.scrollIntoView({ behavior: "smooth" })} className="flex h-9 items-center justify-center gap-1.5 rounded-md border border-primary/50 text-primary hover:bg-primary/10">
+                  <Hammer className="h-4 w-4" />
+                  {t.build}
+                </button>
+              )}
+              <Link to={`/farm?plot=${plot.id}`} className="flex h-9 items-center justify-center gap-1.5 rounded-md border border-emerald-400/50 text-emerald-200 hover:bg-emerald-400/10">
+                <Sprout className="h-4 w-4" />
+                {t.farm}
+              </Link>
+              <Link to={`/industry?plot=${plot.id}`} className="flex h-9 items-center justify-center gap-1.5 rounded-md border border-orange-400/50 text-orange-200 hover:bg-orange-400/10">
+                <Factory className="h-4 w-4" />
+                Company
+              </Link>
+              {coastal && (
+                <button onClick={() => document.getElementById("plot-pier")?.scrollIntoView({ behavior: "smooth" })} className="flex h-9 items-center justify-center gap-1.5 rounded-md border border-sky-400/50 text-sky-200 hover:bg-sky-400/10">
+                  <Anchor className="h-4 w-4" />
+                  {pier ? "Pier" : "Build a pier"}
+                </button>
+              )}
+            </div>
+          )}
           {/* what the map card leaves out to stay small */}
           <dl className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg border border-border p-3 text-sm">
             {plot.district >= 0 && (
@@ -270,7 +302,7 @@ export default function PlotView({ world, plot, built, rules, mine, owner, sessi
           ) : !rules || !p ? (
             <p className="text-sm text-muted-foreground">{t.serverDown}</p>
           ) : (
-            <section className="space-y-3">
+            <section id="plot-build" className="space-y-3">
               <h3 className="flex items-center gap-1.5 text-sm font-semibold">
                 <Hammer className="h-4 w-4 text-primary" />
                 {t.build}
@@ -389,19 +421,18 @@ export default function PlotView({ world, plot, built, rules, mine, owner, sessi
               )}
             </section>
           )}
+          <PierPanel
+            key={`${pier?.level ?? 0}:${pier?.readyAt ?? 0}:${pier?.access ?? ""}:${pier?.fee ?? 0}`}
+            world={world}
+            plot={plot}
+            pier={pier}
+            rules={pierRules}
+            yours={yours && !!session}
+            session={session}
+            onPreview={setPierPreview}
+            onChanged={onChanged}
+          />
           <PlotWorkers world={world} plot={plot} />
-          {yours && (
-            <Link to={`/farm?plot=${plot.id}`} className="flex h-9 items-center justify-center gap-2 rounded-md border border-emerald-400/50 text-sm text-emerald-200 hover:bg-emerald-400/10">
-              <Sprout className="h-4 w-4" />
-              {t.farm}
-            </Link>
-          )}
-          {yours && (
-            <Link to={`/industry?plot=${plot.id}`} className="flex h-9 items-center justify-center gap-2 rounded-md border border-orange-400/50 text-sm text-orange-200 hover:bg-orange-400/10">
-              <Factory className="h-4 w-4" />
-              Set up a company
-            </Link>
-          )}
         </aside>
       </div>
     </div>
@@ -439,7 +470,7 @@ function Ladder({ rules, t, level }: { rules: BuildRules; t: BuildStrings; level
 }
 
 /** A close look at the plot and its neighbours, from the side, in the map's own renderer. */
-function SideView({ world, plot, built, preview }: { world: World; plot: Plot; built: Map<number, Built>; preview: Built | null }) {
+function SideView({ world, plot, built, preview, piers, pierPreview }: { world: World; plot: Plot; built: Map<number, Built>; preview: Built | null; piers: Map<number, Pier>; pierPreview: number | null }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const rRef = useRef<WorldRenderer | null>(null);
@@ -505,6 +536,13 @@ function SideView({ world, plot, built, preview }: { world: World; plot: Plot; b
     if (preview) m.set(plot.id, preview);
     rRef.current?.setBuilt(m);
   }, [built, preview, plot.id]);
+
+  useEffect(() => {
+    const m = new Map(piers);
+    const cur = m.get(plot.id);
+    if (pierPreview) m.set(plot.id, { plotId: plot.id, level: pierPreview as 1 | 2 | 3, access: cur?.access ?? "private", fee: cur?.fee ?? 0, readyAt: 0 });
+    rRef.current?.setPiers(pierDraw(world, m.values()));
+  }, [piers, pierPreview, plot.id, world]);
 
   return (
     <div ref={wrapRef} className="absolute inset-0">

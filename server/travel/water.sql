@@ -35,7 +35,7 @@ $fn$;
 CREATE OR REPLACE FUNCTION aquaterra_travel_boat(me text, m text, a int, b int, x1 int, y1 int, x2 int, y2 int)
 RETURNS bigint LANGUAGE plpgsql AS $fn$
 DECLARE wet boolean := a IS NOT NULL AND b IS NOT NULL AND (a <> b OR a < 0);
-  f bigint; tx bigint; rest bigint; k int; part bigint; own bigint := 0; paid_owners bigint := 0; lid bigint; w record;
+  f bigint; pf bigint := 0; tx bigint; rest bigint; k int; part bigint; own bigint := 0; paid_owners bigint := 0; lid bigint; w record;
 BEGIN
   IF m = 'walk' THEN
     IF wet THEN RAISE EXCEPTION 'boat'; END IF;
@@ -43,6 +43,10 @@ BEGIN
   END IF;
   IF m = 'auto' AND NOT wet THEN RETURN 0; END IF;
   f := aquaterra_travel_fare('boat', greatest(1, round(sqrt(((x1 - x2)::float8) ^ 2 + ((y1 - y2)::float8) ^ 2)))::int);
+  -- piers (server/build/piers.sql): your own pier makes the boat cheaper, a public pier takes its mooring fee
+  IF to_regprocedure('aquaterra_pier_boat(text,integer,integer,integer,integer,bigint)') IS NOT NULL THEN
+    SELECT pb.fare, pb.fees INTO f, pf FROM aquaterra_pier_boat(me, x1, y1, x2, y2, f) pb;
+  END IF;
   tx := aquaterra_travel_tax(f);
   rest := f - tx;
   SELECT count(*) INTO k FROM aquaterra_boat_waters(x1, y1, x2, y2);
@@ -68,5 +72,5 @@ BEGIN
     lid := aquaterra_move(me, 'state:treasury', tx, 'tax', NULL, 'Travel tax', me);
     UPDATE aquaterra_ledger SET ref = 'tax:travel' WHERE id = lid;
   END IF;
-  RETURN f - own;
+  RETURN f - own + pf;
 END $fn$;

@@ -117,7 +117,7 @@ const Wallet = () => {
             <ul className="max-h-64 space-y-1.5 overflow-auto">
               {wallet?.plots.map((p) => (
                 <li key={p.id} className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2.5 py-2 text-sm">
-                  <Link to={`/world?plot=${p.id}`} className="flex min-w-0 items-center gap-1.5 hover:text-primary">
+                  <Link to={`/world?at=${encodeURIComponent(p.address)}&open=1`} className="flex min-w-0 items-center gap-1.5 hover:text-primary">
                     <MapPin className="h-3.5 w-3.5 shrink-0 text-amber-300" />
                     <span className="truncate font-medium">{p.address}</span>
                     <span className="hidden truncate text-xs text-muted-foreground sm:inline">· {p.district}</span>
@@ -142,10 +142,16 @@ const Wallet = () => {
             </button>
           </div>
           <p className="text-xs text-muted-foreground">{t.incomeRule(pct, rules.income_cap_days)}</p>
-          <Link to="/world" className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
-            <Globe2 className="h-4 w-4" />
-            {ta.openWorld}
-          </Link>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            <Link to="/plots" className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
+              <MapPin className="h-4 w-4" />
+              My plots
+            </Link>
+            <Link to="/world" className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
+              <Globe2 className="h-4 w-4" />
+              {ta.openWorld}
+            </Link>
+          </div>
         </section>
 
         {/* send */}

@@ -65,6 +65,9 @@ CREATE TABLE IF NOT EXISTS aquaterra_build_sites (
   starter text NOT NULL DEFAULT 'none',   -- none | cottage | works
   synced_at timestamptz NOT NULL DEFAULT now()
 );
+-- 2026-11-27 (piers.sql): flag 8 = the plot touches the water; waters = water plots a harbour there would cover.
+ALTER TABLE aquaterra_build_sites ADD COLUMN IF NOT EXISTS coastal boolean NOT NULL DEFAULT false;
+ALTER TABLE aquaterra_build_sites ADD COLUMN IF NOT EXISTS waters int[] NOT NULL DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS aquaterra_buildings (
   plot_id int PRIMARY KEY REFERENCES aquaterra_plots (id),
@@ -154,7 +157,7 @@ CREATE OR REPLACE FUNCTION aquaterra_build_rules() RETURNS jsonb LANGUAGE sql ST
 $fn$;
 
 -- world/build-sites.json from the live site: {version, sites: [[plotId, flags, starter]]}.
--- flags: 1 buildable, 2 skyscraper allowed, 4 city centre. Run by the hourly sync only.
+-- flags: 1 buildable, 2 skyscraper allowed, 4 city centre, 8 by the water. Run by the hourly sync only.
 CREATE OR REPLACE FUNCTION aquaterra_build_sync(j jsonb) RETURNS jsonb LANGUAGE plpgsql AS $fn$
 DECLARE n int;
 BEGIN
@@ -162,14 +165,17 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'file');
   END IF;
   WITH src AS (
-    SELECT (e->>0)::int AS id, (e->>1)::int AS f, COALESCE(NULLIF(e->>2, ''), 'none') AS st FROM jsonb_array_elements(j->'sites') e
+    SELECT (e->>0)::int AS id, (e->>1)::int AS f, COALESCE(NULLIF(e->>2, ''), 'none') AS st,
+      COALESCE((SELECT array_agg(w::int ORDER BY w::int) FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(e->3) = 'array' THEN e->3 ELSE '[]'::jsonb END) w), '{}'::int[]) AS ws
+    FROM jsonb_array_elements(j->'sites') e
   ), up AS (
-    INSERT INTO aquaterra_build_sites (plot_id, buildable, tower_ok, centre, starter)
-    SELECT id, f & 1 = 1, f & 2 = 2, f & 4 = 4, CASE WHEN st IN ('cottage', 'works') THEN st ELSE 'none' END FROM src
+    INSERT INTO aquaterra_build_sites (plot_id, buildable, tower_ok, centre, starter, coastal, waters)
+    SELECT id, f & 1 = 1, f & 2 = 2, f & 4 = 4, CASE WHEN st IN ('cottage', 'works') THEN st ELSE 'none' END, f & 8 = 8, ws FROM src
     ON CONFLICT (plot_id) DO UPDATE SET buildable = EXCLUDED.buildable, tower_ok = EXCLUDED.tower_ok, centre = EXCLUDED.centre,
-      starter = EXCLUDED.starter, synced_at = now()
-    WHERE (aquaterra_build_sites.buildable, aquaterra_build_sites.tower_ok, aquaterra_build_sites.centre, aquaterra_build_sites.starter)
-      IS DISTINCT FROM (EXCLUDED.buildable, EXCLUDED.tower_ok, EXCLUDED.centre, EXCLUDED.starter)
+      starter = EXCLUDED.starter, coastal = EXCLUDED.coastal, waters = EXCLUDED.waters, synced_at = now()
+    WHERE (aquaterra_build_sites.buildable, aquaterra_build_sites.tower_ok, aquaterra_build_sites.centre, aquaterra_build_sites.starter,
+           aquaterra_build_sites.coastal, aquaterra_build_sites.waters)
+      IS DISTINCT FROM (EXCLUDED.buildable, EXCLUDED.tower_ok, EXCLUDED.centre, EXCLUDED.starter, EXCLUDED.coastal, EXCLUDED.waters)
     RETURNING 1
   ) SELECT count(*) INTO n FROM up;
   RETURN jsonb_build_object('ok', true, 'changed', n, 'total', (SELECT count(*) FROM aquaterra_build_sites));

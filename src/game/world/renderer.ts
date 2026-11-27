@@ -107,6 +107,11 @@ export class WorldRenderer {
   /** Farms: what grows on each plot and how far it has grown. */
   private fields = new Map<number, { f: MapField; s: { grow: number; stage: FieldStage } }>();
   private fieldsKey = "";
+  /** Piers on the water: deck tile -> what to draw (from server/build/piers.sql via setPiers). */
+  private pierAt = new Map<number, { level: number; head: boolean; pub: boolean; building: boolean; boat: boolean }>();
+  private piersKey = "";
+  /** With a plot selected, show only it: other plots' ownership tints are hidden (many plots crowd the view). */
+  focusSelected = true;
   /** Plot whose house stands on this tile, or -1. */
   private houseAt: Int32Array;
   /** Skyscraper column on this tile: building index and its height in floors. */
@@ -288,6 +293,24 @@ export class WorldRenderer {
     const k = key.join(",");
     if (k !== this.fieldsKey) {
       this.fieldsKey = k;
+      this.groundKey = "";
+    }
+  }
+
+  /** Piers from the server, with the deck tiles each one covers (src/game/build/piers.ts pierTiles). */
+  setPiers(piers: { tiles: { tile: number; head: boolean }[]; level: number; pub: boolean; building: boolean }[]) {
+    const next = new Map<number, { level: number; head: boolean; pub: boolean; building: boolean; boat: boolean }>();
+    for (const p of piers) {
+      let first = true;
+      for (const t of p.tiles) {
+        next.set(t.tile, { level: p.level, head: t.head, pub: p.pub, building: p.building, boat: t.head && first && !p.building });
+        if (t.head) first = false;
+      }
+    }
+    const key = [...next].map(([t, v]) => `${t}:${v.level}${v.pub ? "p" : ""}${v.building ? "b" : ""}`).join(",");
+    this.pierAt = next;
+    if (key !== this.piersKey) {
+      this.piersKey = key;
       this.groundKey = "";
     }
   }
@@ -508,7 +531,10 @@ export class WorldRenderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(this.ground, 0, 0);
     ctx.setTransform(...world);
-    for (const [id, mine] of this.owned) this.highlight(id, mine ? "rgba(255,196,60,0.42)" : "rgba(255,110,90,0.24)", null);
+    if (s > 0.55 && this.pierAt.size) this.drawMoored();
+    // a plot is open: only that one is marked, not every plot of its owner
+    if (!(this.focusSelected && this.selectedPlot !== null))
+      for (const [id, mine] of this.owned) this.highlight(id, mine ? "rgba(255,196,60,0.42)" : "rgba(255,110,90,0.24)", null);
     this.highlight(this.hoverPlot, "rgba(255,255,255,0.28)", null);
     if (this.liftSelected && this.selectedPlot !== null && s > 0.3) this.drawLifted(time);
     else this.highlight(this.selectedPlot, "rgba(120,240,255,0.5)", "rgba(160,250,255,0.95)");
@@ -920,6 +946,8 @@ export class WorldRenderer {
           ctx.fillStyle = night ? "rgba(255,230,160,0.9)" : "rgba(255,255,255,0.7)";
           ctx.fillRect(px - 5, py + hh - 1, 10, 2);
         }
+        const pier = this.pierAt.get(i);
+        if (pier) this.drawPier(ctx, px, py, pier, night);
         if (field && !this.yard(pid, x, y)) {
           // a farm covers the plot's free tiles; a house keeps its own tile and a small yard
           drawFieldTile(ctx, px, py, TW, TH, i, field.f, field.s, w.plots[pid].water, night, performance.now());
@@ -928,6 +956,86 @@ export class WorldRenderer {
         if (this.showBuildings && this.houseAt[i] >= 0) this.drawBuilding(ctx, px, py + hh, this.houseAt[i]);
         else if (this.showBuildings && this.towerAt[i] >= 0) this.drawTowerColumn(ctx, px, py, x, y, this.buildings[this.towerAt[i]]!.tower!);
       }
+    }
+  }
+
+  /** A wooden deck on posts over one water tile; a harbour's head is wider, with a boat moored at the first one. */
+  private drawPier(ctx: CanvasRenderingContext2D, px: number, py: number, p: { level: number; head: boolean; pub: boolean; building: boolean }, night: boolean) {
+    const hw = TW / 2;
+    const hh = TH / 2;
+    const k = p.level >= 3 && p.head ? 0.92 : p.level >= 2 ? 0.7 : 0.55;
+    const lift = 3;
+    const cy = py + hh - lift;
+    const dx = hw * k;
+    const dy = hh * k;
+    // posts
+    ctx.fillStyle = "rgba(60,40,24,0.9)";
+    for (const [ox, oy] of [[-dx, 0], [dx, 0], [0, dy], [0, -dy]] as const) ctx.fillRect(px + ox * 0.8 - 0.7, cy + oy * 0.8, 1.4, lift + 2);
+    // deck
+    ctx.fillStyle = p.building ? "rgba(190,160,110,0.55)" : p.level >= 3 ? "#9c7a55" : "#a8845a";
+    ctx.beginPath();
+    ctx.moveTo(px, cy - dy);
+    ctx.lineTo(px + dx, cy);
+    ctx.lineTo(px, cy + dy);
+    ctx.lineTo(px - dx, cy);
+    ctx.closePath();
+    ctx.fill();
+    // planks
+    ctx.strokeStyle = "rgba(70,48,28,0.55)";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    for (let j = -2; j <= 2; j++) {
+      const f = j / 3;
+      ctx.moveTo(px - dx / 2 + (dx / 2) * f, cy - dy / 2 - (dy / 2) * f);
+      ctx.lineTo(px + dx / 2 + (dx / 2) * f, cy + dy / 2 - (dy / 2) * f);
+    }
+    ctx.stroke();
+    if (p.head) {
+      // a lamp on the end: amber for a public pier, white for a private one
+      ctx.fillStyle = p.pub ? (night ? "rgba(255,200,90,1)" : "rgba(255,190,70,0.95)") : night ? "rgba(230,240,255,0.95)" : "rgba(240,240,240,0.9)";
+      ctx.fillRect(px - 0.8, cy - 6, 1.6, 6);
+      ctx.beginPath();
+      ctx.arc(px, cy - 6.5, night ? 2 : 1.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /** Boats moored at the piers, over the ground (they stick out of their tile). */
+  private drawMoored() {
+    const { ctx } = this;
+    const n = this.world.size;
+    for (const [tile, p] of this.pierAt) {
+      if (!p.boat) continue;
+      const v = this.wmap[tile];
+      const x = v % n;
+      const y = (v - x) / n;
+      const px = ((x - y) * TW) / 2;
+      const py = ((x + y) * TH) / 2;
+      const bx = px + (TW / 2) * 0.95;
+      const by = py + TH / 2 + 2;
+      ctx.fillStyle = "#f4f1ea";
+      ctx.beginPath();
+      ctx.moveTo(bx - 6, by - 1.5);
+      ctx.lineTo(bx + 5, by - 4);
+      ctx.lineTo(bx + 7, by - 2);
+      ctx.lineTo(bx - 4, by + 1.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#2a6f9e";
+      ctx.fillRect(bx - 1, by - 4.5, 3, 1.8);
+      ctx.strokeStyle = "rgba(240,240,240,0.9)";
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(bx + 0.5, by - 3);
+      ctx.lineTo(bx + 0.5, by - 13);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.beginPath();
+      ctx.moveTo(bx + 0.8, by - 12.5);
+      ctx.lineTo(bx + 5, by - 4.5);
+      ctx.lineTo(bx + 0.8, by - 4.5);
+      ctx.closePath();
+      ctx.fill();
     }
   }
 
