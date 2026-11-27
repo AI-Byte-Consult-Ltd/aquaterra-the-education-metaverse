@@ -80,8 +80,9 @@ def farm(who=None, **kw):
     return J(f"SELECT aquaterra_farm({lit(json.dumps(req))}::jsonb)")
 
 
-def plot(pid, owner, tiles=10, buildable=True, starter="none"):
-    psql(f"INSERT INTO aquaterra_plots (id, address, district, tiles, price) VALUES ({pid}, '{pid} Field Road', 'Greenhaven', {tiles}, {tiles * 60})")
+def plot(pid, owner, tiles=10, buildable=True, starter="none", water=False):
+    addr = f"Water Plot {pid}-1" if water else f"{pid} Field Road"
+    psql(f"INSERT INTO aquaterra_plots (id, address, district, tiles, price) VALUES ({pid}, '{addr}', 'Greenhaven', {tiles}, {tiles * 60})")
     psql(f"INSERT INTO aquaterra_build_sites (plot_id, buildable, tower_ok, centre, starter) VALUES ({pid}, {buildable}, false, false, '{starter}')")
     if owner:
         psql(f"INSERT INTO aquaterra_plot_owners (plot_id, owner, price_paid) VALUES ({pid}, {lit(owner)}, {tiles * 60})")
@@ -95,18 +96,26 @@ plot(2, "ann@x", 10, buildable=False)
 plot(3, "ann@x", 10, starter="cottage")
 plot(4, "bob@x", 12)
 plot(5, "cat@x", 4)
+plot(6, "ann@x", 40, buildable=False, water=True)
 
 m = farm(action="market")
-check(m["ok"] and len(m["crops"]) == 15 and m["laws"]["marketTaxPct"] == 10, f"market {m.get('laws')}")
+check(m["ok"] and len(m["crops"]) == 18 and m["laws"]["marketTaxPct"] == 10, f"market {m.get('laws')}")
 check(farm(action="me")["error"] == "session", "me needs a session")
 me = farm("ann", action="me")
 blocks = {p["plotId"]: p["block"] for p in me["plots"]}
-check(blocks == {1: None, 2: "land", 3: None}, f"starter house is the farmhouse {blocks}")
+check(blocks == {1: None, 2: "land", 3: None, 6: None}, f"starter house is the farmhouse {blocks}")
 psql("INSERT INTO aquaterra_buildings (plot_id, kind, level) VALUES (3, 'cottage', 1)")
-check(farm("ann", action="me")["plots"][2]["block"] == "building", "a resident building blocks")
+check(next(x for x in farm("ann", action="me")["plots"] if x["plotId"] == 3)["block"] == "building", "a resident building blocks")
 
 # Plant: rose 16 h, seed 0.4 x 10 = 4 TIDE to the Reserve, yield 10.
-check(farm("ann", action="plant", plotId=2, crop="rose")["error"] == "land", "no farm on water")
+check(farm("ann", action="plant", plotId=2, crop="rose")["error"] == "land", "no farm on works")
+check(farm("ann", action="plant", plotId=6, crop="rose")["error"] == "place", "roses do not grow in the sea")
+check(farm("ann", action="plant", plotId=1, crop="fish")["error"] == "place", "fish do not grow on land")
+p6 = farm("ann", action="plant", plotId=6, crop="fish")
+check(p6["ok"] and p6["seed"] == 10 and next(x for x in p6["plots"] if x["plotId"] == 6)["water"] is True, f"fish farm {p6.get('seed')}")
+psql("UPDATE aquaterra_farm_fields SET ready_at = now() - interval '1 minute' WHERE plot_id = 6")
+check(farm("ann", action="harvest", plotId=6)["units"] == 40, "40 fish")
+psql("DELETE FROM aquaterra_farm_barn WHERE crop = 'fish'")
 check(farm("ann", action="plant", plotId=3, crop="rose")["error"] == "building", "no farm under a house")
 check(farm("ann", action="plant", plotId=4, crop="rose")["error"] == "not_owner", "only the owner plants")
 check(farm("ann", action="plant", plotId=1, crop="cactus")["error"] == "crop", "unknown crop")

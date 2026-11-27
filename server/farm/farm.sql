@@ -4,7 +4,7 @@
 -- n8n quirks: no double-dollar quotes (use $fn$), no positional parameters in the text,
 -- no dollar sign right before a quote, no apostrophes in comments.
 --
---  * An owner plants one crop on a whole land plot (water and works cannot be farmed). The starter
+--  * An owner plants one crop on a whole plot (works cannot be farmed; water plots take sea farms). The starter
 --    house of the map stays as the farmhouse; a building put up by a resident blocks the field.
 --  * Seeds are bought from the AquaTerra Reserve (a sink), with free Tide only (welcome Tide is for land).
 --  * After the growing time the owner harvests: units go to the barn. A crop left more than
@@ -45,6 +45,19 @@ INSERT INTO aquaterra_crops (key, grp, hours, seed_per_tile, yield_per_tile, pri
   ('tea', 'plantation', 24, 0.60, 2, 0.60, 50),
   ('coffee', 'plantation', 36, 0.90, 1, 1.80, 51)
 ON CONFLICT (key) DO NOTHING;
+
+-- Sea farms (2026-11-27): shrimp, mussels and fish grow only on water plots, land crops only on land.
+-- Water plots cost 0.4 of land, so a sea farm earns about 0.25 Tide per tile a day (seed = hours / 96).
+ALTER TABLE aquaterra_crops ADD COLUMN IF NOT EXISTS water boolean NOT NULL DEFAULT false;
+INSERT INTO aquaterra_crops (key, grp, hours, seed_per_tile, yield_per_tile, price, sort, water) VALUES
+  ('mussel', 'sea', 12, 0.125, 1, 0.25, 60, true),
+  ('shrimp', 'sea', 16, 0.17, 2, 0.17, 61, true),
+  ('fish', 'sea', 24, 0.25, 1, 0.50, 62, true)
+ON CONFLICT (key) DO NOTHING;
+
+-- A water plot: its address is Water Plot x-y (the world generator names them so).
+CREATE OR REPLACE FUNCTION aquaterra_farm_water(pid int) RETURNS boolean LANGUAGE sql STABLE AS
+$fn$ SELECT COALESCE((SELECT address LIKE 'Water Plot %' FROM aquaterra_plots WHERE id = pid), false) $fn$;
 
 CREATE TABLE IF NOT EXISTS aquaterra_farm_fields (
   plot_id int PRIMARY KEY REFERENCES aquaterra_plots (id),
@@ -132,6 +145,7 @@ $fn$ SELECT greatest(1, floor(yield_per_tile * tiles))::bigint FROM aquaterra_cr
 CREATE OR REPLACE FUNCTION aquaterra_farm_block(pid int) RETURNS text LANGUAGE plpgsql STABLE AS $fn$
 DECLARE site record; b record;
 BEGIN
+  IF aquaterra_farm_water(pid) THEN RETURN NULL; END IF;   -- sea farm
   SELECT * INTO site FROM aquaterra_build_sites WHERE plot_id = pid;
   IF site.plot_id IS NULL OR NOT site.buildable THEN RETURN 'land'; END IF;
   SELECT * INTO b FROM aquaterra_buildings WHERE plot_id = pid;
@@ -248,6 +262,7 @@ BEGIN
       IF NOT EXISTS (SELECT 1 FROM aquaterra_crops WHERE key = v_crop) THEN RAISE EXCEPTION 'crop'; END IF;
       v_txt := aquaterra_farm_block(pid);
       IF v_txt IS NOT NULL THEN RAISE EXCEPTION '%', v_txt; END IF;
+      IF (SELECT water FROM aquaterra_crops WHERE key = v_crop) IS DISTINCT FROM aquaterra_farm_water(pid) THEN RAISE EXCEPTION 'place'; END IF;
       SELECT * INTO f FROM aquaterra_farm_fields WHERE plot_id = pid FOR UPDATE;
       IF f.plot_id IS NOT NULL THEN
         IF f.owner = me THEN RAISE EXCEPTION 'planted'; END IF;
@@ -353,7 +368,7 @@ BEGIN
 
     IF act IN ('market', 'me', 'plant', 'harvest', 'clear', 'reserve', 'order', 'cancel') THEN
       res := res || jsonb_build_object(
-        'crops', (SELECT jsonb_agg(jsonb_build_object('key', c.key, 'group', c.grp, 'hours', c.hours,
+        'crops', (SELECT jsonb_agg(jsonb_build_object('key', c.key, 'group', c.grp, 'water', c.water, 'hours', c.hours,
             'seedPerTile', round(c.seed_per_tile * aquaterra_farm_law('farm_seed_pct') / 100.0, 4), 'yieldPerTile', c.yield_per_tile,
             'price', aquaterra_farm_price(c.key),
             'bid', (SELECT max(price) FROM aquaterra_farm_orders WHERE crop = c.key AND side = 'buy' AND status = 'open'),
@@ -369,7 +384,7 @@ BEGIN
     IF me IS NOT NULL AND act <> 'book' THEN
       res := res || jsonb_build_object(
         'plots', COALESCE((SELECT jsonb_agg(jsonb_build_object('plotId', p.id, 'address', p.address, 'district', p.district, 'tiles', p.tiles,
-            'block', aquaterra_farm_block(p.id),
+            'water', aquaterra_farm_water(p.id), 'block', aquaterra_farm_block(p.id),
             'field', CASE WHEN ff.plot_id IS NOT NULL AND ff.owner = me THEN jsonb_build_object('crop', ff.crop, 'units', ff.units, 'plantedAt', ff.planted_at,
               'readyAt', ff.ready_at, 'wiltsAt', ff.ready_at + make_interval(hours => aquaterra_farm_law('farm_wilt_hours')::int)) END)
             ORDER BY (ff.plot_id IS NULL), (aquaterra_farm_block(p.id) IS NOT NULL), ff.ready_at, p.id)

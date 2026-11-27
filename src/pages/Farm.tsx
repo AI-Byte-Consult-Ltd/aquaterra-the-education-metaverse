@@ -20,9 +20,10 @@ function FieldCard({ p, crops, t, busy, highlight, onPlant, onHarvest, onClear }
   p: FarmPlot; crops: Crop[]; t: FarmStrings; busy: string | null; highlight: boolean;
   onPlant: (plotId: number, crop: string) => void; onHarvest: (plotId: number) => void; onClear: (plotId: number) => void;
 }) {
-  const [pick, setPick] = useState(crops[0]?.key ?? "wheat");
+  const fits = crops.filter((x) => !!x.water === !!p.water);
+  const [pick, setPick] = useState(fits[0]?.key ?? "wheat");
   const [arm, setArm] = useState(false);
-  const c = crops.find((x) => x.key === pick);
+  const c = fits.find((x) => x.key === pick) ?? fits[0];
   const f = p.field;
   const name = (k: string) => `${t.icons[k] ?? ""} ${t.crops[k] ?? k}`;
   const now = Date.now();
@@ -59,16 +60,16 @@ function FieldCard({ p, crops, t, busy, highlight, onPlant, onHarvest, onClear }
       {!f && !p.block && c && (
         <div className="mt-2 space-y-2">
           <p className="text-xs text-emerald-300">{t.empty}</p>
-          <select aria-label={t.choose} className={`${inputBase} w-full`} value={pick} onChange={(e) => setPick(e.target.value)}>
-            {Object.entries(t.groups).map(([g, label]) => (
+          <select aria-label={t.choose} className={`${inputBase} w-full`} value={c.key} onChange={(e) => setPick(e.target.value)}>
+            {Object.entries(t.groups).filter(([g]) => fits.some((x) => x.group === g)).map(([g, label]) => (
               <optgroup key={g} label={label}>
-                {crops.filter((x) => x.group === g).map((x) => (
+                {fits.filter((x) => x.group === g).map((x) => (
                   <option key={x.key} value={x.key}>{name(x.key)} · {t.hours(x.hours)} · {t.tide(seedCost(x, p.tiles))} → {t.n(cropYield(x, p.tiles))}</option>
                 ))}
               </optgroup>
             ))}
           </select>
-          <button type="button" className={`${btnMain} w-full`} disabled={busy !== null} onClick={() => onPlant(p.plotId, pick)}>
+          <button type="button" className={`${btnMain} w-full`} disabled={busy !== null} onClick={() => onPlant(p.plotId, c.key)}>
             {busy === "plant:" + p.plotId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sprout className="h-4 w-4" />}
             {t.plantFor(seedCost(c, p.tiles), cropYield(c, p.tiles), t.crops[c.key] ?? c.key, t.hours(c.hours))}
           </button>

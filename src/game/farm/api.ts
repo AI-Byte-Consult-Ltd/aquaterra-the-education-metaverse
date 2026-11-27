@@ -7,17 +7,19 @@ export const FARM_ENDPOINT = (import.meta.env.VITE_FARM_ENDPOINT as string | und
 
 export const FARM_ERRORS = [
   "session", "not_found", "not_owner", "crop", "land", "building", "planted", "not_ripe", "insufficient",
-  "nothing", "units", "too_little", "cap", "side", "price", "too_many", "action",
+  "nothing", "units", "too_little", "cap", "side", "price", "too_many", "place", "action",
 ] as const;
 export type FarmError = (typeof FARM_ERRORS)[number] | "network";
 const KNOWN = new Set<string>(FARM_ERRORS);
 
 export type Result<T> = { ok: true; data: T; error?: undefined } | { ok: false; data?: undefined; error: FarmError };
 
-export type CropGroup = "flowers" | "fruit" | "vegetables" | "grain" | "plantation";
+export type CropGroup = "flowers" | "fruit" | "vegetables" | "grain" | "plantation" | "sea";
 export interface Crop {
   key: string;
   group: CropGroup;
+  /** grows on water plots (sea farm) instead of land */
+  water: boolean;
   hours: number;
   seedPerTile: number;
   yieldPerTile: number;
@@ -52,6 +54,7 @@ export interface FarmPlot {
   address: string;
   district: string;
   tiles: number;
+  water: boolean;
   block: "land" | "building" | null;
   field: Field | null;
 }
