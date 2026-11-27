@@ -12,6 +12,7 @@ import {
   type Book, type Crop, type FarmError, type FarmPlot, type Market, type MyFarm, type Result,
 } from "@/game/farm/api";
 import { farmStrings, type FarmStrings } from "@/game/farm/strings";
+import Barter from "@/game/agency/Barter";
 
 const fmt = (v: number | null) => (v === null || v === undefined ? "–" : v.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 3 }));
 
@@ -285,6 +286,10 @@ const Farm = () => {
               )}
             </Panel>
           </div>
+
+          <Barter session={session} crops={view.crops} names={Object.fromEntries(view.crops.map((c) => [c.key, name(c.key)]))}
+            barn={me?.barn ?? []} onSession={signOut}
+            onChange={() => session && void fetchMyFarm(session).then((r) => r.ok && setMe(r.data))} />
 
           {me && me.log.length > 0 && (
             <Panel title={t.history} icon={History}>

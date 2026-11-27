@@ -40,6 +40,7 @@ import { roadsStrings } from "@/game/roads/strings";
 import { questsStrings } from "@/game/quests/strings";
 import { orbitStrings } from "@/game/orbit/strings";
 import { farmStrings } from "@/game/farm/strings";
+import { agencyStrings } from "@/game/agency/strings";
 import { RoadsHere } from "@/game/roads/RoadsHere";
 import { useBankT } from "@/game/bank/ui";
 import { avatarOf, fetchResidents, type ResidentsMap } from "@/game/residents/api";
@@ -82,6 +83,7 @@ const City = () => {
   const tq = questsStrings(language);
   const to = orbitStrings(language);
   const tfarm = farmStrings(language);
+  const tagency = agencyStrings(language);
   const tt = travelStrings(language);
   // open votes, for the lights on the plaza buildings and their cards
   const [openVotes, setOpenVotes] = useState<Proposal[]>([]);
@@ -670,6 +672,15 @@ const City = () => {
         >
           <Sprout className="h-4 w-4 text-emerald-300" />
           <span className="hidden sm:inline">{tfarm.short}</span>
+        </Link>
+        <Link
+          to="/agency"
+          title={tagency.title}
+          aria-label={tagency.title}
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-amber-400/50 bg-amber-400/10 px-2.5 text-sm font-semibold text-amber-200 hover:border-amber-300"
+        >
+          <Building2 className="h-4 w-4 text-amber-300" />
+          <span className="hidden sm:inline">{tagency.short}</span>
         </Link>
         <Link
           to="/arcade"
