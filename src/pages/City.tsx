@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Brain, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Sailboat, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, Sparkles, UserRound, Users, Waves, X, ZoomIn, ZoomOut, Trophy, Rainbow, Orbit as OrbitIcon } from "lucide-react";
+import { ArrowLeft, Brain, Building2, Coins, Cpu, Crown, Droplet, Gamepad2, Footprints, HelpCircle, Sailboat, Home, Landmark, Link2, Loader2, Maximize2, MapPin, RotateCcw, RotateCw, Route as RoadIcon, Search, Sparkles, UserRound, Users, Waves, X, ZoomIn, ZoomOut, Trophy, Rainbow, Orbit as OrbitIcon, Sprout } from "lucide-react";
 import { NicsChatButton } from "@/game/nics/NicsChat";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -39,6 +39,7 @@ import { bankStrings } from "@/game/bank/strings";
 import { roadsStrings } from "@/game/roads/strings";
 import { questsStrings } from "@/game/quests/strings";
 import { orbitStrings } from "@/game/orbit/strings";
+import { farmStrings } from "@/game/farm/strings";
 import { RoadsHere } from "@/game/roads/RoadsHere";
 import { useBankT } from "@/game/bank/ui";
 import { avatarOf, fetchResidents, type ResidentsMap } from "@/game/residents/api";
@@ -80,6 +81,7 @@ const City = () => {
   const tr = roadsStrings(language);
   const tq = questsStrings(language);
   const to = orbitStrings(language);
+  const tfarm = farmStrings(language);
   const tt = travelStrings(language);
   // open votes, for the lights on the plaza buildings and their cards
   const [openVotes, setOpenVotes] = useState<Proposal[]>([]);
@@ -659,6 +661,15 @@ const City = () => {
         >
           <OrbitIcon className="h-4 w-4 text-indigo-300" />
           <span className="hidden sm:inline">{to.short}</span>
+        </Link>
+        <Link
+          to="/farm"
+          title={tfarm.title}
+          aria-label={tfarm.title}
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-emerald-400/50 bg-emerald-400/10 px-2.5 text-sm font-semibold text-emerald-200 hover:border-emerald-300"
+        >
+          <Sprout className="h-4 w-4 text-emerald-300" />
+          <span className="hidden sm:inline">{tfarm.short}</span>
         </Link>
         <Link
           to="/arcade"

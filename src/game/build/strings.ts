@@ -40,6 +40,7 @@ const en = {
   pay: (n: number) => `Pay ${tide(n)}`,
   replaceNote: "This replaces what stands on the plot now.",
   demolish: (fee: number) => `Demolish (${tide(fee)})`,
+  farm: "Farm this plot",
   sell: (refund: number) => `Sell to the Reserve for ${tide(refund)}`,
   confirm: "Tap again to confirm",
   done: "Done",

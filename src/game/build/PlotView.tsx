@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Building2, Car, Coins, Hammer, Home, Loader2, RotateCcw, RotateCw, Scale, Trash2, X } from "lucide-react";
+import { Box, Building2, Car, Coins, Hammer, Home, Loader2, RotateCcw, RotateCw, Scale, Sprout, Trash2, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import type { Plot, World } from "@/game/world/generator";
@@ -337,6 +337,12 @@ export default function PlotView({ world, plot, built, rules, mine, owner, sessi
                 </div>
               )}
             </section>
+          )}
+          {yours && !plot.water && (
+            <Link to={`/farm?plot=${plot.id}`} className="flex h-9 items-center justify-center gap-2 rounded-md border border-emerald-400/50 text-sm text-emerald-200 hover:bg-emerald-400/10">
+              <Sprout className="h-4 w-4" />
+              {t.farm}
+            </Link>
           )}
         </aside>
       </div>
