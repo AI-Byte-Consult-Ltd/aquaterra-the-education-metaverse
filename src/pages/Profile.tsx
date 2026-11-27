@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Anchor, ArrowLeft, Check, Coins, Crown, Globe2, Loader2, LogOut, UserRound, Users, Landmark } from "lucide-react";
+import { Anchor, ArrowLeft, Check, Coins, Crown, Globe2, Loader2, MapPin, LogOut, UserRound, Users, Landmark } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { useAccount } from "@/game/account/AccountContext";
 import { isStaff, safeNext, saveDisplayName, validDisplayName, type AccountError } from "@/game/account/api";
@@ -168,6 +168,14 @@ const Profile = () => {
                 {te.myLand}: {wallet?.plots.length ?? 0} · {te.openWallet} →
               </span>
             </span>
+          </Link>
+
+          <Link
+            to="/plots"
+            className="flex items-center justify-between gap-3 rounded-xl border border-amber-400/40 bg-amber-400/5 px-4 py-3 text-sm hover:border-amber-300"
+          >
+            <span className="flex items-center gap-2"><MapPin className="h-4 w-4 text-amber-300" />My plots</span>
+            <span className="text-xs text-muted-foreground">{wallet?.plots.length ?? 0} →</span>
           </Link>
 
           <Link

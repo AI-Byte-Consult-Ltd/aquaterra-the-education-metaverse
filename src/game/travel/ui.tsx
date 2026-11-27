@@ -3,6 +3,7 @@ import { Car, Coins, Footprints, Loader2, Plane, Sailboat, Ship, TrainFront, typ
 import type { World } from "@/game/world/generator";
 import type { HubInfo, Location, NetworkInfo } from "./api";
 import { toRoutes } from "./api";
+import { pierBoatFare } from "@/game/build/piers";
 import { DEFAULT_FARES, HUB_FOR, boatDist, districtCentre, fare, isWater, isleAt, legSeconds, planTrips, tilePath, travelTax, type Leg, type Mode, type Plan } from "./network";
 import { pathPoints, type Point, type TripSegment } from "./drop";
 import type { TravelStrings } from "./strings";
@@ -48,7 +49,7 @@ export function tripMoves(world: World, net: NetworkInfo, from: Point, legs: { m
   const foot = (to: Point, leg: number, known: boolean) => {
     if (same(pos, to)) return;
     if (!onMap || !known || dry(pos, to)) out.push({ mode: "walk", from: pos, to, leg, fare: 0 });
-    else out.push({ mode: "boat", from: pos, to, leg, fare: fare("boat", boatDist(pos, to), fares) });
+    else out.push({ mode: "boat", from: pos, to, leg, fare: pierBoatFare(pos, to, fare("boat", boatDist(pos, to), fares)) });
     pos = to;
   };
   const ride = (mode: Mode, to: Point, leg: number) => {

@@ -14,6 +14,7 @@ import Login from "./pages/Login";
 import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
 import Wallet from "./pages/Wallet";
+import MyPlots from "./pages/MyPlots";
 import StateHome from "./pages/state/StateHome";
 import ChamberPage from "./pages/state/ChamberPage";
 import ProposalPage from "./pages/state/ProposalPage";
@@ -64,6 +65,7 @@ const App = () => (
             <Route path="/world" element={<RequireAccount><City /></RequireAccount>} />
             <Route path="/profile" element={<RequireAccount><Profile /></RequireAccount>} />
             <Route path="/wallet" element={<RequireAccount><Wallet /></RequireAccount>} />
+            <Route path="/plots" element={<RequireAccount><MyPlots /></RequireAccount>} />
             <Route path="/council" element={<Navigate to="/state/council" replace />} />
             <Route path="/state" element={<StateHome />} />
             <Route path="/state/new" element={<RequireAccount><ProposePage /></RequireAccount>} />

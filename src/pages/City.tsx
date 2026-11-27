@@ -33,6 +33,7 @@ import { buyHub, fetchNetwork, travel, type HubInfo, type Location, type Network
 import { TripPlayer, dropHue } from "@/game/travel/drop";
 import type { HubKind, Leg } from "@/game/travel/network";
 import { travelStrings } from "@/game/travel/strings";
+import { DEFAULT_PIER_RULES, fetchPiers, pierDraw, setPierIndex, type Pier, type PierRules } from "@/game/build/piers";
 import { HubCard, TravelOptions, boatsFare, locationPoint, tripMoves, tripSegments } from "@/game/travel/ui";
 import PlotArcade from "@/game/arcade/PlotArcade";
 import { fetchArcadeMap, type MapAttraction } from "@/game/arcade/api";
@@ -212,6 +213,26 @@ const City = () => {
     if (rendererRef.current) rendererRef.current.owned = ownedRef.current;
   }, [economy.owners]);
   const city = useMemo(() => generateWorld(DEFAULT_WORLD), []);
+  // piers on the shore (server/build/piers.sql): drawn on the map, priced into boats
+  const [piers, setPiers] = useState<Map<number, Pier>>(new Map());
+  const [pierRules, setPierRules] = useState<PierRules>(DEFAULT_PIER_RULES);
+  const piersRef = useRef<Map<number, Pier>>(new Map());
+  const loadPiers = useCallback(async () => {
+    const r = await fetchPiers();
+    if (!r) return;
+    piersRef.current = r.piers;
+    setPiers(r.piers);
+    setPierRules(r.rules);
+  }, []);
+  useEffect(() => {
+    void loadPiers();
+    const id = window.setInterval(() => void loadPiers(), 60_000);
+    return () => window.clearInterval(id);
+  }, [loadPiers]);
+  useEffect(() => {
+    setPierIndex(city, piers, (id) => !!economy.owners.get(id)?.mine, pierRules);
+    rendererRef.current?.setPiers(pierDraw(city, piers.values()));
+  }, [city, piers, pierRules, economy.owners]);
   // workers: NPC residents walking from homes to the companies and fields of their owner
   const workersRef = useRef<Walker[]>([]);
   useEffect(() => {
@@ -333,6 +354,13 @@ const City = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<WorldRenderer | null>(null);
   const [selection, setSelection] = useState<Selection>(null);
+  // the map may be (re)made after a plot was picked (deep links): keep it showing that one plot
+  const selectedPlotRef = useRef<number | null>(null);
+  useEffect(() => {
+    selectedPlotRef.current = selection?.kind === "plot" ? selection.plot.id : null;
+    const r = rendererRef.current;
+    if (r) r.selectedPlot = selectedPlotRef.current;
+  }, [selection]);
   const [query, setQuery] = useState("");
 
   // --- renderer lifecycle ---------------------------------------------------
@@ -349,7 +377,9 @@ const City = () => {
     };
     size();
     if (builtRef.current.size) r.setBuilt(builtRef.current);
+    if (piersRef.current.size) r.setPiers(pierDraw(city, piersRef.current.values()));
     r.owned = ownedRef.current;
+    r.selectedPlot = selectedPlotRef.current;
     r.attractions = attractionsRef.current;
     if (fieldsRef.current.map.size) r.setFields(fieldsRef.current.map, fieldsRef.current.wilt, Date.now() / 1000 + fieldsRef.current.skew);
     r.residents = crowdRef.current;
@@ -407,6 +437,7 @@ const City = () => {
       const next = new URLSearchParams(params);
       // links name the address, which never changes; ids may shift as the world grows
       next.delete("plot");
+      next.delete("open");
       if (s?.kind === "plot") next.set("at", s.plot.address);
       else next.delete("at");
       setParams(next, { replace: true });
@@ -421,6 +452,8 @@ const City = () => {
     const id = Number(params.get("plot"));
     const plot = at ? findPlotByAddress(city, at) : params.get("plot") && Number.isInteger(id) ? city.plots[id] : undefined;
     if (plot) select({ kind: "plot", plot }, true);
+    // from My plots: straight into the plot window
+    if (plot && params.get("open") === "1") setPlotOpen(plot);
     // run once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -723,6 +756,17 @@ const City = () => {
           <OrbitIcon className="h-4 w-4 text-indigo-300" />
           <span className="hidden sm:inline">{to.short}</span>
         </Link>
+        {player && (
+          <Link
+            to="/plots"
+            title="My plots"
+            aria-label="My plots"
+            className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-amber-400/50 bg-amber-400/10 px-2.5 text-sm font-semibold text-amber-200 hover:border-amber-300"
+          >
+            <MapPin className="h-4 w-4 text-amber-300" />
+            <span className="hidden sm:inline">My plots</span>
+          </Link>
+        )}
         <Link
           to="/farm"
           title={tfarm.title}
@@ -1009,8 +1053,10 @@ const City = () => {
           session={session}
           t={tb}
           tw={t}
+          piers={piers}
+          pierRules={pierRules}
           onChanged={async () => {
-            await Promise.all([loadBuilt(), economy.refresh()]);
+            await Promise.all([loadBuilt(), loadPiers(), economy.refresh()]);
           }}
           onClose={() => setPlotOpen(null)}
         />
