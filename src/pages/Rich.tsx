@@ -60,6 +60,7 @@ const Rich = () => {
                         `${t.tide_} ${r.tide.toLocaleString("en")}`,
                         `${t.land} ${r.land.toLocaleString("en")} · ${t.plots(r.plots)}`,
                         r.build > 0 ? `${t.buildings} ${r.build.toLocaleString("en")} · ${t.houses(r.buildings)}` : null,
+                        (r.transport ?? 0) > 0 ? t.transport(r.transport ?? 0, r.lines ?? 0) : null,
                         r.deposit > 0 ? t.deposit(r.deposit) : null,
                         r.debt > 0 ? t.debt(r.debt) : null,
                       ].filter(Boolean).join("  ·  ")}
