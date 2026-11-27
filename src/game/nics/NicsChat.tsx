@@ -227,6 +227,7 @@ export const NicsChat = ({ open, onOpenChange }: { open: boolean; onOpenChange: 
                 <button onClick={() => choose(true)} className="text-primary hover:underline">{t.turnOn}</button>
               </>
             ) : null}
+            <Link to="/ideas" className="text-cyan-200 hover:underline">{t.shareIdea}</Link>
             <Link to="/terms#nics-ai" className="ml-auto hover:text-foreground hover:underline">{t.terms}</Link>
           </div>
           {note && <p className="mt-1 text-[11px] text-cyan-200">{note}</p>}

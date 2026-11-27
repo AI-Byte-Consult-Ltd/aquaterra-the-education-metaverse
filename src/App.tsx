@@ -32,6 +32,7 @@ import Orbit from "./pages/Orbit";
 import Farm from "./pages/Farm";
 import Industry from "./pages/Industry";
 import Orders from "./pages/Orders";
+import Ideas from "./pages/Ideas";
 import Agency from "./pages/Agency";
 import Mind from "./pages/Mind";
 import Rich from "./pages/Rich";
@@ -78,6 +79,7 @@ const App = () => (
             <Route path="/farm" element={<Farm />} />
             <Route path="/industry" element={<Industry />} />
             <Route path="/orders" element={<Orders />} />
+            <Route path="/ideas" element={<Ideas />} />
             <Route path="/agency" element={<Agency />} />
             <Route path="/mind" element={<Mind />} />
             <Route path="/rich" element={<Rich />} />

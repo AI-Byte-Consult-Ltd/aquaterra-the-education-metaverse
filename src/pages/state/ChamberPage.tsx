@@ -1,6 +1,6 @@
 import { Link, Navigate, useParams } from "react-router-dom";
 import { NicsChatButton } from "@/game/nics/NicsChat";
-import { Cpu, Plus, UserRound } from "lucide-react";
+import { Cpu, Lightbulb, Plus, UserRound } from "lucide-react";
 import { useAccount } from "@/game/account/AccountContext";
 import { CHAMBERS, fetchProposals, fetchState, isChamber, type Proposal, type StateInfo } from "@/game/state/api";
 import { ErrorLine, Loading, ProposalCard, Shell, chamberIcon, useLoad, useStateT } from "@/game/state/ui";
@@ -30,6 +30,12 @@ const ChamberPage = () => {
     <Shell title={title} icon={chamberIcon[key]} back={{ to: "/state", label: t.backToState }} accent={chamber === "council" ? "text-amber-300" : "text-primary"}>
       {!petitions && <p className="mb-5 max-w-2xl text-sm text-muted-foreground">{t.chamberAbout[chamber as keyof typeof t.chamberAbout]}</p>}
       {state.data && !petitions && <Members chamber={chamber!} s={state.data} />}
+      {chamber === "council" && (
+        <Link to="/ideas" className="mt-4 flex items-start gap-2 rounded-xl border border-cyan-400/50 bg-cyan-400/10 p-3 text-sm hover:border-cyan-300">
+          <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" />
+          <span><b>Ideas from residents.</b> NICS AI collects the residents' ideas for the world and passes them to the Council. Council members take them into development or decline them.</span>
+        </Link>
+      )}
 
       <div className="mb-3 mt-6 flex items-center justify-between">
         <h2 className="font-display text-lg font-bold">{t.openItems(openNow.length)}</h2>
