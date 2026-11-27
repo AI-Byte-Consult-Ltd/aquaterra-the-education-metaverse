@@ -196,7 +196,8 @@ export class WorldRenderer {
       const biome = d >= 0 ? w.districts[d].biome : "temperate";
       // every district has its own slight tint so neighbours of one climate stay distinct
       const tint = d >= 0 && !WATER.includes(k) ? 0.92 + ((d * 37) % 13) / 100 : 1;
-      const c = lagoon.has(w.zone[i]) && (k === "shallow" || k === "ocean") ? (k === "shallow" ? LAGOON : ([40, 150, 190] as RGB)) : baseColor(k, biome);
+      let c = lagoon.has(w.zone[i]) && (k === "shallow" || k === "ocean") ? (k === "shallow" ? LAGOON : ([40, 150, 190] as RGB)) : baseColor(k, biome);
+      if (k === "land" && biome === "palms") c = fieldColor(i, w.size, w.height[i]) ?? c;
       this.top[i] = shade(c, this.day, tint);
       this.left[i] = shade(c, this.day, tint * 0.74);
       this.right[i] = shade(c, this.day, tint * 0.6);
@@ -1481,7 +1482,7 @@ export class WorldRenderer {
       ctx.lineTo(x - 5, py + 1);
       ctx.closePath();
       ctx.fill();
-    } else if (biome === "oceania") {
+    } else if (biome === "oceania" || biome === "palms") {
       // palm: a leaning trunk and a crown of fronds
       ctx.strokeStyle = "rgba(120,90,60,0.95)";
       ctx.lineWidth = 1.4;
@@ -1885,4 +1886,23 @@ function drawHull(ctx: CanvasRenderingContext2D, px: number, py: number, s: numb
   ctx.fill();
   ctx.stroke();
   ctx.restore();
+}
+
+/** Crops of the open lowland on wild palm isles: patches of fields in rows, some fallow. */
+const FIELD_CROPS: [RGB, RGB][] = [
+  [[214, 196, 92], [190, 170, 76]],
+  [[150, 204, 84], [118, 176, 68]],
+  [[196, 214, 120], [170, 190, 96]],
+  [[226, 170, 84], [200, 146, 70]],
+];
+function fieldColor(i: number, size: number, h: number): RGB | null {
+  if (h > 0.3) return null;
+  const x = i % size;
+  const y = (i - x) / size;
+  const bx = Math.floor(x / 5);
+  const by = Math.floor(y / 4);
+  const k = (Math.imul(bx, 73856093) ^ Math.imul(by, 19349663)) >>> 0;
+  if (k % 5 >= 3) return null;
+  const [a, b] = FIELD_CROPS[(k >>> 3) % FIELD_CROPS.length];
+  return ((k >>> 7) & 1 ? x : y) % 2 ? a : b;
 }

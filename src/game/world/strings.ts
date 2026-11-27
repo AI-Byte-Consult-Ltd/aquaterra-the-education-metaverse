@@ -50,6 +50,7 @@ const en = {
     blossom: "Blossom gardens",
     oceania: "Oceania islands",
     isles: "Northern isles",
+    palms: "Palm isles",
     woodland: "Great forest",
     dunes: "Great desert",
     industrial: "Industrial",
