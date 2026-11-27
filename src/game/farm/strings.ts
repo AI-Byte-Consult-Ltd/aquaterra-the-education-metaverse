@@ -13,6 +13,12 @@ function left(iso: string) {
   return h > 0 ? `${h} h ${m} min` : `${m} min`;
 }
 
+/** Name with icon of any good in the storehouse: crops, materials and Orbit goods (sky + resource). */
+export function goodName(t: { crops: Record<string, string>; icons: Record<string, string> }, k: string) {
+  if (!t.crops[k] && k.startsWith("sky")) return `🛰️ ${k.slice(3, 4).toUpperCase()}${k.slice(4)} (Orbit)`;
+  return `${t.icons[k] ?? ""} ${t.crops[k] ?? k}`;
+}
+
 const en = {
   n,
   tide,
@@ -29,16 +35,23 @@ const en = {
     strawberry: "Strawberries", grape: "Grapes", apple: "Apples", orange: "Oranges",
     carrot: "Carrots", potato: "Potatoes", tomato: "Tomatoes", pumpkin: "Pumpkins",
     wheat: "Wheat", tea: "Tea", coffee: "Coffee", mussel: "Mussels", shrimp: "Shrimp", fish: "Fish",
+    wood: "Timber", clay: "Clay", stone: "Stone", sand: "Sand", iron: "Iron ore", copper: "Copper ore", gold: "Gold", oil: "Crude oil",
+    bricks: "Bricks", steel: "Steel", glass: "Glass", concrete: "Concrete", materials: "Building materials",
   } as Record<string, string>,
   icons: {
     rose: "🌹", tulip: "🌷", sunflower: "🌻", lavender: "💜", strawberry: "🍓", grape: "🍇", apple: "🍎", orange: "🍊",
     carrot: "🥕", potato: "🥔", tomato: "🍅", pumpkin: "🎃", wheat: "🌾", tea: "🍵", coffee: "☕", mussel: "🦪", shrimp: "🦐", fish: "🐟",
+    wood: "🪵", clay: "🟫", stone: "🪨", sand: "⏳", iron: "⛏️", copper: "🟠", gold: "🥇", oil: "🛢️",
+    bricks: "🧱", steel: "🔩", glass: "🪟", concrete: "🏗️", materials: "📦",
   } as Record<string, string>,
-  groups: { flowers: "Flowers", fruit: "Fruit", vegetables: "Vegetables", grain: "Grain", plantation: "Plantations", sea: "Sea farm" } satisfies Record<CropGroup, string>,
+  groups: { flowers: "Flowers", fruit: "Fruit", vegetables: "Vegetables", grain: "Grain", plantation: "Plantations", sea: "Sea farm",
+    raw: "Raw resources", material: "Building materials", orbit: "From Orbit" } satisfies Record<CropGroup, string>,
   hours: (h: number) => (h >= 24 && h % 24 === 0 ? `${h / 24} ${h === 24 ? "day" : "days"}` : `${h} h`),
   myFields: "My fields",
   noPlots: "You have no land yet. Buy a plot in the world first.",
   blockLand: "Works stand here: nothing grows.",
+  blockWorks: "A company works here. Dismantle it in Industry to farm this land.",
+  sections: { farm: "Harvest", industry: "Resources and materials", orbit: "Orbit" } as Record<string, string>,
   blockBuilding: "You built a house here. Demolish it in the plot window to farm this land.",
   empty: "Ready to plant",
   choose: "Choose a crop",
@@ -94,6 +107,12 @@ const en = {
     buy: (c: string, u: number, t: number) => `Bought ${n(u)} ${c} for ${tide(t)}`,
     sell: (c: string, u: number, t: number) => `Sold ${n(u)} ${c} on the market, got ${tide(t)}`,
     barter: (c: string, u: number) => `Got ${n(u)} ${c} by barter`,
+    produce: (c: string, u: number) => `Collected ${n(u)} ${c} from a company`,
+    setup: (c: string, u: number, t: number) => `Set up a company for ${c} (${tide(t)})`,
+    dismantle: (c: string) => `Dismantled a company for ${c}`,
+    ship: (c: string, u: number) => `Shipped ${n(u)} ${c} down from Orbit`,
+    build: (c: string, u: number, t: number) => `Built with own materials, saved ${tide(t)}`,
+    salvage: (c: string, u: number) => `Got ${n(u)} units of materials back from a demolished building`,
   },
   close: "Close",
   errors: {
@@ -114,6 +133,7 @@ const en = {
     price: "Check the price (at least 0.01 TIDE).",
     too_many: "Too many open orders. Cancel one first.",
     place: "This does not grow here: sea farms are for water plots, crops for land.",
+    works: "A company works on this plot.",
     action: "Something went wrong.",
     network: "No connection to the farm office. Try again.",
   } satisfies Record<FarmError, string>,

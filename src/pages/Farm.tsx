@@ -11,7 +11,7 @@ import {
   cancelOrder, clearField, cropYield, fetchBook, fetchMarket, fetchMyFarm, harvest, placeOrder, plant, seedCost, sellToReserve,
   type Book, type Crop, type FarmError, type FarmPlot, type Market, type MyFarm, type Result,
 } from "@/game/farm/api";
-import { farmStrings, type FarmStrings } from "@/game/farm/strings";
+import { farmStrings, goodName, type FarmStrings } from "@/game/farm/strings";
 import Barter from "@/game/agency/Barter";
 
 const fmt = (v: number | null) => (v === null || v === undefined ? "–" : v.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 3 }));
@@ -20,12 +20,12 @@ function FieldCard({ p, crops, t, busy, highlight, onPlant, onHarvest, onClear }
   p: FarmPlot; crops: Crop[]; t: FarmStrings; busy: string | null; highlight: boolean;
   onPlant: (plotId: number, crop: string) => void; onHarvest: (plotId: number) => void; onClear: (plotId: number) => void;
 }) {
-  const fits = crops.filter((x) => !!x.water === !!p.water);
+  const fits = crops.filter((x) => (x.source ?? "farm") === "farm" && !!x.water === !!p.water);
   const [pick, setPick] = useState(fits[0]?.key ?? "wheat");
   const [arm, setArm] = useState(false);
   const c = fits.find((x) => x.key === pick) ?? fits[0];
   const f = p.field;
-  const name = (k: string) => `${t.icons[k] ?? ""} ${t.crops[k] ?? k}`;
+  const name = (k: string) => goodName(t, k);
   const now = Date.now();
   const ripe = f && new Date(f.readyAt).getTime() <= now;
   const wilted = f && new Date(f.wiltsAt).getTime() <= now;
@@ -38,6 +38,7 @@ function FieldCard({ p, crops, t, busy, highlight, onPlant, onHarvest, onClear }
       </div>
       {p.block === "land" && !f && <p className="mt-1 text-sm text-muted-foreground">{t.blockLand}</p>}
       {p.block === "building" && !f && <p className="mt-1 text-sm text-muted-foreground">{t.blockBuilding}</p>}
+      {p.block === "works" && !f && <p className="mt-1 text-sm text-muted-foreground">{t.blockWorks} <Link to={`/industry?plot=${p.plotId}`} className="text-primary underline">Industry</Link></p>}
       {f && (
         <div className="mt-2 space-y-2">
           <p className={`text-sm ${ripe ? "text-emerald-300" : ""}`}>
@@ -99,7 +100,8 @@ const Farm = () => {
 
   const view: Market | null = me ?? market;
   const crops = view?.crops ?? [];
-  const name = useCallback((k: string) => `${t.icons[k] ?? ""} ${t.crops[k] ?? k}`, [t]);
+  const name = useCallback((k: string) => goodName(t, k), [t]);
+  const [section, setSection] = useState(params.get("goods") === "industry" ? "industry" : "farm");
   const fail = useCallback((e: FarmError) => (e === "session" ? signOut() : toast.error(t.errors[e])), [signOut, t]);
 
   useEffect(() => {
@@ -181,10 +183,10 @@ const Farm = () => {
                         <span>{t.n(b.units)}</span>
                         <span className="text-muted-foreground">{t.worth(b.value)}</span>
                         <button type="button" className={btnSoft} disabled={b.value < 1 || busy !== null}
-                          onClick={() => void act("reserve:" + b.crop, () => sellToReserve(session, b.crop), (d) => t.sold(d.sold ?? 0, t.crops[b.crop] ?? b.crop, d.tide ?? 0))}>
+                          onClick={() => void act("reserve:" + b.crop, () => sellToReserve(session, b.crop), (d) => t.sold(d.sold ?? 0, name(b.crop), d.tide ?? 0))}>
                           {busy === "reserve:" + b.crop ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}{t.reserve}
                         </button>
-                        <button type="button" className={btnSoft} onClick={() => { setSel(b.crop); setSide("sell"); setQty(String(b.units)); document.getElementById("market")?.scrollIntoView({ behavior: "smooth" }); }}>
+                        <button type="button" className={btnSoft} onClick={() => { setSel(b.crop); setSection(crops.find((c) => c.key === b.crop)?.source ?? "farm"); setSide("sell"); setQty(String(b.units)); document.getElementById("market")?.scrollIntoView({ behavior: "smooth" }); }}>
                           <Store className="h-4 w-4" />{t.market}
                         </button>
                       </li>
@@ -198,13 +200,19 @@ const Farm = () => {
           <div id="market">
             <Panel title={t.market} icon={Store}>
               <p className="text-xs text-muted-foreground">{t.marketNote(view.laws.marketTaxPct)}</p>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(t.sections).filter(([k]) => crops.some((c) => (c.source ?? "farm") === k)).map(([k, label]) => (
+                  <button key={k} type="button" onClick={() => setSection(k)}
+                    className={`${btnSoft} ${section === k ? "border-emerald-300 text-emerald-200" : ""}`}>{label}</button>
+                ))}
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[520px] text-sm">
                   <thead className="text-left text-xs text-muted-foreground">
                     <tr><th className="py-1">{t.crop}</th><th>{t.reservePrice}</th><th>{t.bid}</th><th>{t.ask}</th><th>{t.last}</th><th>{t.volume}</th></tr>
                   </thead>
                   <tbody>
-                    {crops.map((c) => (
+                    {crops.filter((c) => (c.source ?? "farm") === section).map((c) => (
                       <tr key={c.key} onClick={() => setSel(c.key)} className={`cursor-pointer border-t border-border ${sel === c.key ? "bg-emerald-400/10" : "hover:bg-muted/40"}`}>
                         <td className="py-1.5 font-semibold">{name(c.key)}</td>
                         <td>{fmt(c.price)}</td><td className="text-emerald-300">{fmt(c.bid)}</td><td className="text-rose-300">{fmt(c.ask)}</td>
@@ -277,7 +285,7 @@ const Farm = () => {
                   <p className="text-sm font-semibold">{t.myOrders}</p>
                   {me.orders.map((o) => (
                     <p key={o.id} className="flex flex-wrap items-center gap-2 text-sm">
-                      <span className={o.side === "buy" ? "text-emerald-300" : "text-rose-300"}>{t.orderLine(o.side, o.left, o.qty, t.crops[o.crop] ?? o.crop, o.price)}</span>
+                      <span className={o.side === "buy" ? "text-emerald-300" : "text-rose-300"}>{t.orderLine(o.side, o.left, o.qty, name(o.crop), o.price)}</span>
                       <button type="button" className={btnSoft} disabled={busy !== null} onClick={() => void act("cancel:" + o.id, () => cancelOrder(session!, o.id), () => t.cancelled)}>
                         <X className="h-4 w-4" />{t.cancel}
                       </button>
@@ -296,7 +304,7 @@ const Farm = () => {
             <Panel title={t.history} icon={History}>
               <ul className="space-y-1 text-sm text-muted-foreground">
                 {me.log.map((l, i) => (
-                  <li key={i}>{new Date(l.at).toLocaleString("en")}: {t.log[l.kind](t.crops[l.crop] ?? l.crop, l.units, l.tide)}</li>
+                  <li key={i}>{new Date(l.at).toLocaleString("en")}: {t.log[l.kind](name(l.crop ?? ""), l.units, l.tide)}</li>
                 ))}
               </ul>
             </Panel>

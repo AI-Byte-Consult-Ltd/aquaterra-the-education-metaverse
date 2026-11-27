@@ -55,6 +55,10 @@ INSERT INTO aquaterra_crops (key, grp, hours, seed_per_tile, yield_per_tile, pri
   ('fish', 'sea', 24, 0.25, 1, 0.50, 62, true)
 ON CONFLICT (key) DO NOTHING;
 
+-- Industry (2026-11-27): building materials, ores and Orbit goods share the storehouse (barn), the Reserve
+-- and the market with crops. source: farm (can be planted) | industry | orbit. Rows live in server/industry/industry.sql.
+ALTER TABLE aquaterra_crops ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'farm';
+
 -- A water plot: its address is Water Plot x-y (the world generator names them so).
 CREATE OR REPLACE FUNCTION aquaterra_farm_water(pid int) RETURNS boolean LANGUAGE sql STABLE AS
 $fn$ SELECT COALESCE((SELECT address LIKE 'Water Plot %' FROM aquaterra_plots WHERE id = pid), false) $fn$;
@@ -141,16 +145,29 @@ $fn$ SELECT greatest(1, ceil(seed_per_tile * tiles * aquaterra_farm_law('farm_se
 CREATE OR REPLACE FUNCTION aquaterra_farm_yield(c text, tiles int) RETURNS bigint LANGUAGE sql STABLE AS
 $fn$ SELECT greatest(1, floor(yield_per_tile * tiles))::bigint FROM aquaterra_crops WHERE key = c $fn$;
 
+-- A company of server/industry/industry.sql stands on the plot (false while industry is not installed).
+CREATE OR REPLACE FUNCTION aquaterra_farm_works(pid int) RETURNS boolean LANGUAGE plpgsql STABLE AS $fn$
+BEGIN
+  IF to_regclass('aquaterra_works') IS NULL THEN RETURN false; END IF;
+  RETURN EXISTS (SELECT 1 FROM aquaterra_works w WHERE w.plot_id = pid);
+END $fn$;
+
 -- Why a plot cannot be farmed now: null (it can), land (water or not buildable), building (something stands).
 CREATE OR REPLACE FUNCTION aquaterra_farm_block(pid int) RETURNS text LANGUAGE plpgsql STABLE AS $fn$
 DECLARE site record; b record;
 BEGIN
-  IF aquaterra_farm_water(pid) THEN RETURN NULL; END IF;   -- sea farm
+  IF aquaterra_farm_water(pid) THEN
+    IF aquaterra_farm_works(pid) THEN RETURN 'works'; END IF;
+    RETURN NULL;   -- sea farm
+  END IF;
   SELECT * INTO site FROM aquaterra_build_sites WHERE plot_id = pid;
   IF site.plot_id IS NULL OR NOT site.buildable THEN RETURN 'land'; END IF;
   SELECT * INTO b FROM aquaterra_buildings WHERE plot_id = pid;
   -- The starter house of the map stays as the farmhouse; only a building put up by a resident blocks a field.
-  RETURN CASE WHEN b.plot_id IS NOT NULL AND b.kind <> 'empty' THEN 'building' END;
+  IF b.plot_id IS NOT NULL AND b.kind <> 'empty' THEN RETURN 'building'; END IF;
+  -- a company of server/industry/industry.sql stands on the plot
+  IF aquaterra_farm_works(pid) THEN RETURN 'works'; END IF;
+  RETURN NULL;
 END $fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_farm_put(who text, c text, n bigint) RETURNS void LANGUAGE sql AS $fn$
@@ -237,6 +254,8 @@ BEGIN
     SELECT s.email INTO me FROM aquaterra_sessions s
     WHERE s.token_hash = encode(sha256(convert_to(req->>'session', 'UTF8')), 'hex') AND s.expires_at > now();
   END IF;
+  -- Companies on plots, materials and Orbit shipments: server/industry/industry.sql, same webhook.
+  IF act IN ('works', 'setup', 'produce', 'dismantle', 'ship') THEN RETURN aquaterra_industry(req); END IF;
   IF act NOT IN ('market', 'book') AND me IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'error', 'session', 'status', 401);
   END IF;
@@ -259,7 +278,7 @@ BEGIN
       IF v_plot.id IS NULL THEN RAISE EXCEPTION 'not_found'; END IF;
       PERFORM 1 FROM aquaterra_plot_owners WHERE plot_id = pid AND owner = me FOR UPDATE;
       IF NOT FOUND THEN RAISE EXCEPTION 'not_owner'; END IF;
-      IF NOT EXISTS (SELECT 1 FROM aquaterra_crops WHERE key = v_crop) THEN RAISE EXCEPTION 'crop'; END IF;
+      IF NOT EXISTS (SELECT 1 FROM aquaterra_crops WHERE key = v_crop AND source = 'farm') THEN RAISE EXCEPTION 'crop'; END IF;
       v_txt := aquaterra_farm_block(pid);
       IF v_txt IS NOT NULL THEN RAISE EXCEPTION '%', v_txt; END IF;
       IF (SELECT water FROM aquaterra_crops WHERE key = v_crop) IS DISTINCT FROM aquaterra_farm_water(pid) THEN RAISE EXCEPTION 'place'; END IF;
@@ -368,7 +387,7 @@ BEGIN
 
     IF act IN ('market', 'me', 'plant', 'harvest', 'clear', 'reserve', 'order', 'cancel') THEN
       res := res || jsonb_build_object(
-        'crops', (SELECT jsonb_agg(jsonb_build_object('key', c.key, 'group', c.grp, 'water', c.water, 'hours', c.hours,
+        'crops', (SELECT jsonb_agg(jsonb_build_object('key', c.key, 'group', c.grp, 'water', c.water, 'source', c.source, 'hours', c.hours,
             'seedPerTile', round(c.seed_per_tile * aquaterra_farm_law('farm_seed_pct') / 100.0, 4), 'yieldPerTile', c.yield_per_tile,
             'price', aquaterra_farm_price(c.key),
             'bid', (SELECT max(price) FROM aquaterra_farm_orders WHERE crop = c.key AND side = 'buy' AND status = 'open'),
