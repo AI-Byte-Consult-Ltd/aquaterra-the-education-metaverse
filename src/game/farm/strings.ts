@@ -39,7 +39,7 @@ const en = {
   myFields: "My fields",
   noPlots: "You have no land yet. Buy a plot in the world first.",
   blockLand: "Water or works: nothing grows here.",
-  blockBuilding: "A building stands here. Clear it in the plot window to farm.",
+  blockBuilding: "You built a house here. Demolish it in the plot window to farm this land.",
   empty: "Ready to plant",
   choose: "Choose a crop",
   plantFor: (seed: number, units: number, crop: string, hours: string) => `Plant for ${tide(seed)} · ${n(units)} ${crop} in ${hours}`,

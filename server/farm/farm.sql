@@ -4,8 +4,8 @@
 -- n8n quirks: no double-dollar quotes (use $fn$), no positional parameters in the text,
 -- no dollar sign right before a quote, no apostrophes in comments.
 --
---  * An owner plants one crop on a whole land plot where nothing stands (water, works and houses
---    cannot be farmed; a starter house can be cleared in the plot window first).
+--  * An owner plants one crop on a whole land plot (water and works cannot be farmed). The starter
+--    house of the map stays as the farmhouse; a building put up by a resident blocks the field.
 --  * Seeds are bought from the AquaTerra Reserve (a sink), with free Tide only (welcome Tide is for land).
 --  * After the growing time the owner harvests: units go to the barn. A crop left more than
 --    farm_wilt_hours after it is ripe gives half.
@@ -135,8 +135,8 @@ BEGIN
   SELECT * INTO site FROM aquaterra_build_sites WHERE plot_id = pid;
   IF site.plot_id IS NULL OR NOT site.buildable THEN RETURN 'land'; END IF;
   SELECT * INTO b FROM aquaterra_buildings WHERE plot_id = pid;
-  RETURN CASE WHEN (CASE WHEN b.plot_id IS NOT NULL THEN b.kind <> 'empty' ELSE COALESCE(site.starter, 'none') <> 'none' END)
-    THEN 'building' END;
+  -- The starter house of the map stays as the farmhouse; only a building put up by a resident blocks a field.
+  RETURN CASE WHEN b.plot_id IS NOT NULL AND b.kind <> 'empty' THEN 'building' END;
 END $fn$;
 
 CREATE OR REPLACE FUNCTION aquaterra_farm_put(who text, c text, n bigint) RETURNS void LANGUAGE sql AS $fn$
@@ -372,7 +372,7 @@ BEGIN
             'block', aquaterra_farm_block(p.id),
             'field', CASE WHEN ff.plot_id IS NOT NULL AND ff.owner = me THEN jsonb_build_object('crop', ff.crop, 'units', ff.units, 'plantedAt', ff.planted_at,
               'readyAt', ff.ready_at, 'wiltsAt', ff.ready_at + make_interval(hours => aquaterra_farm_law('farm_wilt_hours')::int)) END)
-            ORDER BY (ff.plot_id IS NULL), ff.ready_at, p.id)
+            ORDER BY (ff.plot_id IS NULL), (aquaterra_farm_block(p.id) IS NOT NULL), ff.ready_at, p.id)
           FROM aquaterra_plot_owners o JOIN aquaterra_plots p ON p.id = o.plot_id LEFT JOIN aquaterra_farm_fields ff ON ff.plot_id = p.id
           WHERE o.owner = me), '[]'::jsonb),
         'barn', COALESCE((SELECT jsonb_agg(jsonb_build_object('crop', b.crop, 'units', b.units, 'price', aquaterra_farm_price(b.crop),
