@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { builtBuilding, buildingsFor, designTower, hasHouse, isCentre, LEVEL_FLOORS, starterKind, STYLES, TOWER_CHOICES, towerChoice, towerSite } from "./buildings";
+import { builtBuilding, buildingsFor, designTower, hasHouse, isCentre, LEVEL_FLOORS, starterKind, STYLES, TOWER_CHOICES, towerChoice, towerFootprint, TOWER_MAX_SIDE, towerSite } from "./buildings";
 import { DEFAULT_WORLD, generateWorld } from "./generator";
 import { worldStrings } from "./strings";
 import { cottageKey } from "./cottages";
@@ -42,12 +42,26 @@ describe("building preview", () => {
       const b = builtBuilding(world, plot, { kind: "tower", level, design: 3, readyAt: 0 }, now)!;
       expect(b.floors).toBe(LEVEL_FLOORS[level]);
       expect(Math.max(...b.tower!.heights)).toBe(LEVEL_FLOORS[level]);
-      expect(b.tower!.tiles).toEqual(plot.tiles);
+      expect(b.tower!.tiles).toEqual(towerFootprint(world, plot));
     }
     expect(builtBuilding(world, plot, { kind: "empty", level: 0, design: 0, readyAt: 0 }, now)).toBeNull();
     const c = builtBuilding(world, plot, { kind: "cottage", level: 0, design: 2, readyAt: 0 }, now)!;
     expect(c.cottage).toBeTruthy();
     expect([1, 2]).toContain(c.floors);
+  });
+
+  it("keeps every skyscraper inside its plot as a compact rectangle", () => {
+    const n = world.size;
+    for (const plot of world.plots.filter(towerSite)) {
+      const tiles = towerFootprint(world, plot);
+      const inside = new Set(plot.tiles);
+      expect(tiles.every((t) => inside.has(t)), `plot ${plot.id}`).toBe(true);
+      const xs = tiles.map((t) => t % n), ys = tiles.map((t) => Math.floor(t / n));
+      const w = Math.max(...xs) - Math.min(...xs) + 1, d = Math.max(...ys) - Math.min(...ys) + 1;
+      expect(w * d).toBe(tiles.length);
+      expect(Math.max(w, d)).toBeLessThanOrEqual(TOWER_MAX_SIDE);
+      expect(Math.max(w, d)).toBeLessThanOrEqual(2 * Math.min(w, d));
+    }
   });
 
   it("has an English name for every style", () => {
