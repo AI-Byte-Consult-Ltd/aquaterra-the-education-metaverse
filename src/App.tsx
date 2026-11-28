@@ -40,6 +40,7 @@ import Rich from "./pages/Rich";
 import Bank from "./pages/Bank";
 import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
+import VisitTracker from "@/game/visits/VisitTracker";
 
 /** Old /city links (plot and address search params) open the world. */
 const CityRedirect = () => {
@@ -58,6 +59,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <VisitTracker />
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
