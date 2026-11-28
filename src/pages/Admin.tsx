@@ -10,6 +10,7 @@ import { AdminTreasury } from "@/game/bank/ui";
 import AdminBuild from "@/game/build/AdminBuild";
 import AdminExchange from "@/game/exchange/AdminExchange";
 import AdminHeritage from "@/game/heritage/AdminHeritage";
+import AdminVisits from "@/game/visits/AdminVisits";
 
 /** Founder and admins: who has entered the world. The server checks the role too. */
 const Admin = () => {
@@ -100,6 +101,11 @@ const Admin = () => {
               </table>
             </div>
           </>
+        )}
+        {!denied && player && isStaff(player) && (
+          <section className="mt-10 border-t border-border pt-6">
+            <AdminVisits />
+          </section>
         )}
         {!denied && player && isStaff(player) && (
           <section className="mt-10 border-t border-border pt-6">
